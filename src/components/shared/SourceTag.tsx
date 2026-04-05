@@ -1,0 +1,31 @@
+import { Badge } from '@/components/ui/badge'
+
+interface SourceTagProps {
+  source: string
+  amended?: boolean
+}
+
+const SOURCE_COLOURS: Record<string, string> = {
+  SRD: 'bg-neutral-700 text-neutral-200',
+  PHB: 'bg-blue-900 text-blue-200',
+  TCoE: 'bg-purple-900 text-purple-200',
+  GGtR: 'bg-green-900 text-green-200',
+  ERftLW: 'bg-amber-900 text-amber-200',
+  Homebrew: 'bg-rose-900 text-rose-200',
+}
+
+export function SourceTag({ source, amended }: SourceTagProps) {
+  const colour = SOURCE_COLOURS[source] ?? 'bg-neutral-700 text-neutral-200'
+  return (
+    <span className="inline-flex items-center gap-1">
+      <Badge className={`text-xs font-mono px-1.5 py-0 ${colour} border-0`}>
+        {source}
+      </Badge>
+      {amended && (
+        <Badge className="text-xs px-1.5 py-0 bg-amber-800 text-amber-200 border-0">
+          amended
+        </Badge>
+      )}
+    </span>
+  )
+}
