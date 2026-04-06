@@ -116,6 +116,8 @@ export function SkillsCard({
               const isChosen = chosen.has(skill.key)
               const atLimit = chosen.size >= choiceCount && !isChosen
 
+              const isEligible = isChoosable && !(atLimit && !isChosen)
+
               return (
                 <button
                   key={skill.key}
@@ -123,16 +125,18 @@ export function SkillsCard({
                   onClick={() => toggleSkill(skill.key)}
                   disabled={!isChoosable || (atLimit && !isChosen)}
                   className={`flex items-center gap-2 text-sm text-left rounded px-1 py-0.5 w-full transition-colors
-                    ${isChoosable && !(atLimit && !isChosen) ? 'hover:bg-neutral-800 cursor-pointer' : 'cursor-default'}
+                    ${isEligible
+                      ? 'hover:bg-neutral-800 cursor-pointer ring-1 ring-neutral-700'
+                      : 'cursor-default'}
                   `}
                 >
                   <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
                     proficient
                       ? fromBg ? 'bg-blue-400' : 'bg-green-400'
-                      : 'bg-neutral-600'
+                      : isEligible ? 'bg-neutral-500' : 'bg-neutral-700'
                   }`} />
                   <span className="text-neutral-400 w-6 font-mono text-xs">{fmtMod(modifier)}</span>
-                  <span className={proficient ? 'text-neutral-200' : 'text-neutral-500'}>
+                  <span className={proficient ? 'text-neutral-200' : isEligible ? 'text-neutral-400' : 'text-neutral-600'}>
                     {skill.name}
                   </span>
                   <span className="text-neutral-600 text-xs ml-auto">{skill.ability.toUpperCase()}</span>
@@ -141,8 +145,8 @@ export function SkillsCard({
             })}
           </div>
           {canEdit && (
-            <p className="text-xs text-neutral-600 mt-2">
-              Green dot = class choice · Blue dot = background (locked)
+            <p className="text-xs text-neutral-500 mt-2">
+              Outlined rows are available to choose — click to select. Green dot = class choice · Blue dot = background (locked)
             </p>
           )}
         </div>
