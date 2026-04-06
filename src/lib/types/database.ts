@@ -64,6 +64,7 @@ export type StartingEquipmentItem = {
 
 export type User = {
   id: string
+  email: string
   display_name: string
   role: UserRole
   created_at: string
@@ -106,6 +107,8 @@ export type Species = {
   languages: string[]
   traits: string[]
   senses: Sense[]
+  damage_resistances: string[]
+  condition_immunities: string[]
   source: string
   amended: boolean
   amendment_note: string | null

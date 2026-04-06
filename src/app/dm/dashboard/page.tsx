@@ -86,6 +86,9 @@ export default async function DmDashboardPage() {
             <p className="text-sm text-neutral-400 mt-1">Welcome, {profile.display_name}</p>
           </div>
           <div className="flex gap-3">
+            <Button asChild size="sm" variant="outline" className="border-neutral-700 text-neutral-300 hover:bg-neutral-800">
+              <Link href="/dm/users">Users</Link>
+            </Button>
             <Button asChild size="sm">
               <Link href="/characters/new">+ New character</Link>
             </Button>

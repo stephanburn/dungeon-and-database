@@ -34,3 +34,11 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Supabase CLI temp files
+supabase/.temp/
+
+# Local notes / spec docs
+
+*.docx
+Github  \& Super base details.md

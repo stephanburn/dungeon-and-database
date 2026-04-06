@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { CampaignAllowlist } from '@/components/dm/CampaignAllowlist'
 import { CampaignSettingsForm } from '@/components/dm/CampaignSettingsForm'
+import { CampaignMembers } from '@/components/dm/CampaignMembers'
 
 export default async function CampaignSettingsPage({ params }: { params: { id: string } }) {
   const supabase = await createClient()
@@ -45,6 +46,7 @@ export default async function CampaignSettingsPage({ params }: { params: { id: s
           <p className="text-sm text-neutral-400 mt-1">Campaign settings</p>
         </div>
 
+        <CampaignMembers campaignId={params.id} dmId={campaign.dm_id} />
         <CampaignSettingsForm campaign={campaign} />
         <CampaignAllowlist campaignId={params.id} initialAllowlist={allowlist} />
       </div>

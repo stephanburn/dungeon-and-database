@@ -80,6 +80,8 @@ export function StatBlockView({ character, classNames = [] }: StatBlockViewProps
   const languages = character.species?.languages ?? []
   const speciesName = character.species?.name ?? null
   const derivedSenses = character.species?.senses ?? []
+  const damageResistances = character.species?.damage_resistances ?? []
+  const conditionImmunities = character.species?.condition_immunities ?? []
   const allSenses = derivedSenses.length > 0 ? formatSenses(derivedSenses as Sense[]) : ''
 
   const typeLineSpecies = speciesName ? ` (${speciesName})` : ''
@@ -93,6 +95,8 @@ export function StatBlockView({ character, classNames = [] }: StatBlockViewProps
     lines.push(`**Speed:** ${speed} ft.`)
     lines.push(`**Proficiency Bonus:** +${pb}`)
     if (allSenses) lines.push(`**Senses:** ${allSenses}`)
+    if (damageResistances.length > 0) lines.push(`**Damage Resistances:** ${damageResistances.join(', ')}`)
+    if (conditionImmunities.length > 0) lines.push(`**Condition Immunities:** ${conditionImmunities.join(', ')}`)
     lines.push('')
     lines.push('| STR | DEX | CON | INT | WIS | CHA |')
     lines.push('|---------|---------|---------|---------|---------|---------|')
@@ -165,6 +169,12 @@ export function StatBlockView({ character, classNames = [] }: StatBlockViewProps
               <p><span className="font-bold">Speed</span> {speed} ft.</p>
               <p><span className="font-bold">Proficiency Bonus</span> +{pb}</p>
               {allSenses && <p><span className="font-bold">Senses</span> {allSenses}</p>}
+              {damageResistances.length > 0 && (
+                <p><span className="font-bold">Damage Resistances</span> {damageResistances.join(', ')}</p>
+              )}
+              {conditionImmunities.length > 0 && (
+                <p><span className="font-bold">Condition Immunities</span> {conditionImmunities.join(', ')}</p>
+              )}
               {languages.length > 0 && (
                 <p><span className="font-bold">Languages</span> {languages.join(', ')}</p>
               )}

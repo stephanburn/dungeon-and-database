@@ -108,9 +108,15 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
                     <SelectValue placeholder="Select a campaign" />
                   </SelectTrigger>
                   <SelectContent className="bg-neutral-800 border-neutral-700">
-                    {campaigns.map((c) => (
-                      <SelectItem key={c.id} value={c.id} className="text-neutral-200">{c.name}</SelectItem>
-                    ))}
+                    {campaigns.length === 0 ? (
+                      <div className="px-3 py-2 text-sm text-neutral-500">
+                        No campaigns available — ask your DM to add you.
+                      </div>
+                    ) : (
+                      campaigns.map((c) => (
+                        <SelectItem key={c.id} value={c.id} className="text-neutral-200">{c.name}</SelectItem>
+                      ))
+                    )}
                   </SelectContent>
                 </Select>
               </div>

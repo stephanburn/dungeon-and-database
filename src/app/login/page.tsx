@@ -62,6 +62,7 @@ export default function LoginPage() {
                   placeholder="you@example.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.form?.requestSubmit() }}
                   required
                   disabled={state === 'loading'}
                   className="bg-neutral-800 border-neutral-700 text-neutral-100 placeholder:text-neutral-500"
