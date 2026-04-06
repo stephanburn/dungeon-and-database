@@ -55,7 +55,6 @@ export function StatBlockView({ character, classNames = [] }: StatBlockViewProps
     classNames,
   )
   const [acOverride, setAcOverride] = useState('')
-  const [extraSenses, setExtraSenses] = useState('')
   const [open, setOpen] = useState(false)
   const [copied, setCopied] = useState(false)
 
@@ -81,8 +80,7 @@ export function StatBlockView({ character, classNames = [] }: StatBlockViewProps
   const languages = character.species?.languages ?? []
   const speciesName = character.species?.name ?? null
   const derivedSenses = character.species?.senses ?? []
-  const derivedSensesStr = derivedSenses.length > 0 ? formatSenses(derivedSenses as Sense[]) : ''
-  const allSenses = [derivedSensesStr, extraSenses].filter(Boolean).join(', ')
+  const allSenses = derivedSenses.length > 0 ? formatSenses(derivedSenses as Sense[]) : ''
 
   const typeLineSpecies = speciesName ? ` (${speciesName})` : ''
 
@@ -135,7 +133,7 @@ export function StatBlockView({ character, classNames = [] }: StatBlockViewProps
       </Button>
 
       <div className={`space-y-4${open ? '' : ' hidden'}`}>
-        {/* Manual override / extra senses */}
+        {/* AC override */}
         <div className="flex gap-4 flex-wrap">
           <div className="space-y-1">
             <Label className="text-neutral-400 text-xs">AC override</Label>
@@ -146,20 +144,6 @@ export function StatBlockView({ character, classNames = [] }: StatBlockViewProps
               onChange={(e) => setAcOverride(e.target.value)}
               placeholder={`${computedAc} (unarmored)`}
               className="w-36 bg-neutral-800 border-neutral-700 text-neutral-100 h-8 text-sm"
-            />
-          </div>
-          <div className="space-y-1">
-            <Label className="text-neutral-400 text-xs">Senses</Label>
-            {derivedSensesStr && (
-              <p className="text-xs text-neutral-300">
-                {derivedSensesStr} <span className="text-neutral-500">(from species)</span>
-              </p>
-            )}
-            <Input
-              value={extraSenses}
-              onChange={(e) => setExtraSenses(e.target.value)}
-              placeholder={derivedSensesStr ? 'Additional senses…' : 'e.g. Darkvision 60 ft.'}
-              className="w-72 bg-neutral-800 border-neutral-700 text-neutral-100 h-8 text-sm"
             />
           </div>
         </div>
