@@ -85,8 +85,15 @@ async function seedSpecies() {
     }
 
     const senses = []
-    if (race.darkvision > 0) {
-      senses.push({ type: 'darkvision', range_ft: race.darkvision })
+    const darkvisionTrait = (race.traits ?? []).find(
+      (t: { index: string }) => t.index === 'darkvision'
+    )
+    if (darkvisionTrait) {
+      const traitData = await apiFetch(darkvisionTrait.url)
+      const desc: string = traitData.desc?.[0] ?? ''
+      const match = desc.match(/(\d+)\s*feet/i)
+      const range_ft = match ? parseInt(match[1], 10) : 60
+      senses.push({ type: 'darkvision', range_ft })
     }
 
     await supabase
