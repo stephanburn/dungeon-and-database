@@ -37,7 +37,7 @@ export default async function CharacterPage({ params }: { params: { id: string }
     redirect('/')
   }
 
-  const [speciesResult, backgroundResult, levelsResult, skillsResult] = await Promise.all([
+  const [speciesResult, backgroundResult, levelsResult, skillsResult, spellsResult] = await Promise.all([
     character.species_id
       ? supabase.from('species').select('*').eq('id', character.species_id).single()
       : Promise.resolve({ data: null }),
@@ -46,6 +46,8 @@ export default async function CharacterPage({ params }: { params: { id: string }
       : Promise.resolve({ data: null }),
     supabase.from('character_levels').select('*').eq('character_id', character.id),
     supabase.from('character_skill_proficiencies').select('skill').eq('character_id', character.id),
+    supabase.from('character_choices').select('choice_value')
+      .eq('character_id', character.id).eq('choice_type', 'spell_known'),
   ])
 
   const characterWithRelations: CharacterWithRelations = {
@@ -56,6 +58,9 @@ export default async function CharacterPage({ params }: { params: { id: string }
   }
 
   const initialSkillProficiencies = (skillsResult.data ?? []).map((r) => r.skill)
+  const initialSpellChoices = (spellsResult.data ?? [])
+    .map((r) => (r.choice_value as { spell_id: string }).spell_id)
+    .filter(Boolean)
 
   const isDm = profile?.role === 'dm'
   const isOwner = character.user_id === user.id
@@ -77,6 +82,7 @@ export default async function CharacterPage({ params }: { params: { id: string }
           character={characterWithRelations}
           campaignId={character.campaign_id}
           initialSkillProficiencies={initialSkillProficiencies}
+          initialSpellChoices={initialSpellChoices}
           readOnly={false}
           isDm={isDm}
         />

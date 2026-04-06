@@ -23,6 +23,8 @@ const updateCharacterSchema = z.object({
   dm_notes: z.string().max(2000).optional(),
   // Skill proficiencies: class-chosen skills (canonical keys)
   skill_proficiencies: z.array(z.string()).optional(),
+  // Spell choices: full replacement of spell_known choices
+  spell_choices: z.array(z.string().uuid()).optional(),
   // Levels: full replacement of the character's class levels
   levels: z.array(z.object({
     class_id: z.string().uuid(),
@@ -86,7 +88,7 @@ export async function PUT(
   const parsed = updateCharacterSchema.safeParse(body)
   if (!parsed.success) return jsonError(parsed.error.message, 400)
 
-  const { levels, stat_rolls, skill_proficiencies, character_type, dm_notes, ...characterFields } = parsed.data
+  const { levels, stat_rolls, skill_proficiencies, spell_choices, character_type, dm_notes, ...characterFields } = parsed.data
 
   // DM-only fields
   if (profile.role === 'dm') {
@@ -147,6 +149,23 @@ export async function PUT(
     if (skill_proficiencies.length > 0) {
       const rows = skill_proficiencies.map((skill) => ({ character_id: params.id, skill, expertise: false }))
       const { error } = await supabase.from('character_skill_proficiencies').insert(rows)
+      if (error) return jsonError(error.message, 500)
+    }
+  }
+
+  // Replace spell choices if provided
+  if (spell_choices !== undefined) {
+    await supabase.from('character_choices').delete()
+      .eq('character_id', params.id).eq('choice_type', 'spell_known')
+
+    if (spell_choices.length > 0) {
+      const rows = spell_choices.map((spell_id) => ({
+        character_id: params.id,
+        character_level_id: null,
+        choice_type: 'spell_known' as const,
+        choice_value: { spell_id },
+      }))
+      const { error } = await supabase.from('character_choices').insert(rows)
       if (error) return jsonError(error.message, 500)
     }
   }

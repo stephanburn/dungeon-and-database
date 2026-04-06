@@ -20,6 +20,7 @@ import { Badge } from '@/components/ui/badge'
 import { StatBlock } from './StatBlock'
 import { StatBlockView } from './StatBlockView'
 import { SkillsCard } from './SkillsCard'
+import { SpellsCard } from './SpellsCard'
 import { LegalityBadge, LegalitySummaryBadge } from './LegalityBadge'
 import { SourceTag } from '@/components/shared/SourceTag'
 import { useToast } from '@/hooks/use-toast'
@@ -57,6 +58,7 @@ interface CharacterSheetProps {
   character: CharacterWithRelations
   campaignId: string
   initialSkillProficiencies?: string[]
+  initialSpellChoices?: string[]
   readOnly?: boolean
   isDm?: boolean
 }
@@ -67,6 +69,7 @@ export function CharacterSheet({
   character: initial,
   campaignId,
   initialSkillProficiencies = [],
+  initialSpellChoices = [],
   readOnly = false,
   isDm = false,
 }: CharacterSheetProps) {
@@ -95,6 +98,7 @@ export function CharacterSheet({
   const [subclassMap, setSubclassMap] = useState<Record<string, Subclass[]>>({})
 
   const [skillProficiencies, setSkillProficiencies] = useState<string[]>(initialSkillProficiencies)
+  const [spellChoices, setSpellChoices] = useState<string[]>(initialSpellChoices)
 
   // UI state
   const [saving, setSaving] = useState(false)
@@ -177,6 +181,7 @@ export function CharacterSheet({
           background_id: backgroundId || null,
           levels,
           skill_proficiencies: skillProficiencies,
+          spell_choices: spellChoices,
           ...(isDm ? { dm_notes: dmNotes } : {}),
         }),
       })
@@ -510,6 +515,49 @@ export function CharacterSheet({
         canEdit={canEdit}
         onChange={setSkillProficiencies}
       />
+
+      {/* Spells — only for spellcasting classes */}
+      {selectedClass?.is_spellcaster && (
+        <SpellsCard
+          classId={firstClassId}
+          campaignId={campaignId}
+          spellChoices={spellChoices}
+          canEdit={canEdit}
+          onChange={setSpellChoices}
+        />
+      )}
+
+      {/* Quick Stats */}
+      {(() => {
+        const mod = (base: number, racial: number) => Math.floor((base + racial - 10) / 2)
+        const profBonus = totalLevel > 0 ? Math.floor((totalLevel - 1) / 4) + 2 : 2
+        const dexMod = mod(stats.dex, racialBonuses['dex'] ?? 0)
+        const wisMod = mod(stats.wis, racialBonuses['wis'] ?? 0)
+        const perceptionProf = skillProficiencies.includes('perception')
+        const passivePerception = 10 + wisMod + (perceptionProf ? profBonus : 0)
+        const speed = selectedSpecies?.speed ?? null
+        const fmt = (n: number) => n >= 0 ? `+${n}` : `${n}`
+        return (
+          <Card className="bg-neutral-900 border-neutral-800">
+            <CardContent className="pt-4">
+              <div className="flex gap-8 flex-wrap">
+                <div>
+                  <p className="text-xs text-neutral-500 uppercase tracking-wide">Initiative</p>
+                  <p className="text-xl font-bold text-neutral-100">{fmt(dexMod)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-neutral-500 uppercase tracking-wide">Speed</p>
+                  <p className="text-xl font-bold text-neutral-100">{speed !== null ? `${speed} ft` : '—'}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-neutral-500 uppercase tracking-wide">Passive Perception</p>
+                  <p className="text-xl font-bold text-neutral-100">{passivePerception}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )
+      })()}
 
       {/* Hit Points */}
       <Card className="bg-neutral-900 border-neutral-800">

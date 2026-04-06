@@ -136,6 +136,7 @@ export type Class = {
   multiclass_prereqs: MulticlassPrereq[]
   multiclass_proficiencies: Record<string, unknown>
   spellcasting_type: SpellcastingType | null
+  is_spellcaster: boolean
   source: string
   amended: boolean
   amendment_note: string | null
@@ -277,7 +278,7 @@ export type CharacterSnapshot = {
 export type CharacterChoice = {
   id: string
   character_id: string
-  character_level_id: string
+  character_level_id: string | null
   choice_type: ChoiceType
   choice_value: Record<string, unknown>
 }

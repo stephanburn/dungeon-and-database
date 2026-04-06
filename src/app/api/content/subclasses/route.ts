@@ -1,19 +1,15 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { requireAuth, requireDm, jsonError } from '@/lib/api-helpers'
-import { getAllowedSources } from '@/lib/content-helpers'
 
 export async function GET(request: NextRequest) {
   const auth = await requireAuth()
   if (auth instanceof NextResponse) return auth
   const { supabase } = auth
 
-  const campaignId = request.nextUrl.searchParams.get('campaign_id')
-  const allowedSources = await getAllowedSources(supabase, campaignId)
+  const classId = request.nextUrl.searchParams.get('class_id')
 
-  let query = supabase.from('species').select('*').order('name')
-  if (allowedSources) {
-    query = query.in('source', Array.from(allowedSources))
-  }
+  let query = supabase.from('subclasses').select('*').order('name')
+  if (classId) query = query.eq('class_id', classId)
 
   const { data, error } = await query
   if (error) return jsonError(error.message, 500)
@@ -26,20 +22,16 @@ export async function POST(request: NextRequest) {
   const { supabase } = auth
 
   const body = await request.json()
-  if (!body.name || !body.source) return jsonError('name and source are required', 400)
+  if (!body.name || !body.class_id || !body.source) {
+    return jsonError('name, class_id, and source are required', 400)
+  }
 
   const { data, error } = await supabase
-    .from('species')
+    .from('subclasses')
     .insert({
       name: body.name,
-      size: body.size ?? 'medium',
-      speed: body.speed ?? 30,
-      ability_score_bonuses: body.ability_score_bonuses ?? [],
-      languages: body.languages ?? [],
-      traits: [],
-      senses: body.senses ?? [],
-      damage_resistances: [],
-      condition_immunities: [],
+      class_id: body.class_id,
+      choice_level: body.choice_level ?? 3,
       source: body.source,
       amended: false,
       amendment_note: null,
@@ -61,7 +53,7 @@ export async function PUT(request: NextRequest) {
 
   const { id, ...fields } = body
   const { data, error } = await supabase
-    .from('species')
+    .from('subclasses')
     .update(fields)
     .eq('id', id)
     .select()
@@ -79,7 +71,7 @@ export async function DELETE(request: NextRequest) {
   const id = request.nextUrl.searchParams.get('id')
   if (!id) return jsonError('id is required', 400)
 
-  const { error } = await supabase.from('species').delete().eq('id', id)
+  const { error } = await supabase.from('subclasses').delete().eq('id', id)
   if (error) return jsonError(error.message, 500)
   return new NextResponse(null, { status: 204 })
 }

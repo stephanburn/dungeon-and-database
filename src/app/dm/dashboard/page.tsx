@@ -89,6 +89,9 @@ export default async function DmDashboardPage() {
             <Button asChild size="sm" variant="outline" className="border-neutral-700 text-neutral-300 hover:bg-neutral-800">
               <Link href="/dm/users">Users</Link>
             </Button>
+            <Button asChild size="sm" variant="outline" className="border-neutral-700 text-neutral-300 hover:bg-neutral-800">
+              <Link href="/dm/content">Content</Link>
+            </Button>
             <Button asChild size="sm">
               <Link href="/characters/new">+ New character</Link>
             </Button>

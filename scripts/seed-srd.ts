@@ -206,6 +206,7 @@ async function seedClasses() {
           multiclass_prereqs: [],
           multiclass_proficiencies: {},
           spellcasting_type: spellcastingType,
+          is_spellcaster: spellcastingType !== null,
           source: 'SRD',
           amended: false,
         },
