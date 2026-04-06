@@ -1,7 +1,7 @@
 'use client'
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { SKILLS, SKILL_BY_KEY, SAVING_THROW_NAMES, normalizeSkillKey } from '@/lib/skills'
+import { SKILLS, SAVING_THROW_NAMES, normalizeSkillKey } from '@/lib/skills'
 import type { AbilityKey, SkillKey } from '@/lib/skills'
 import type { Class, Background } from '@/lib/types/database'
 
