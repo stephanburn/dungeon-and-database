@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { Database, CampaignSettings } from '@/lib/types/database'
+import type { Database, CampaignSettings, SkillChoices } from '@/lib/types/database'
 import type { LegalityInput } from './engine'
+import { normalizeSkillKey } from '@/lib/skills'
 
 /**
  * Builds a LegalityInput from a character ID by querying the database.
@@ -63,13 +64,18 @@ export async function buildLegalityInput(
     .map((l) => l.subclass_id)
     .filter((id): id is string => id !== null)
 
-  const [classSourcesResult, subclassSourcesResult] = await Promise.all([
+  const [classSourcesResult, subclassSourcesResult, classChoicesResult, skillProfResult] = await Promise.all([
     classIds.length > 0
-      ? supabase.from('classes').select('source').in('id', classIds)
+      ? supabase.from('classes').select('source, skill_choices, saving_throw_proficiencies').in('id', classIds)
       : Promise.resolve({ data: [] }),
     subclassIds.length > 0
       ? supabase.from('subclasses').select('source').in('id', subclassIds)
       : Promise.resolve({ data: [] }),
+    // Only use first class for skill choices in Phase 1
+    classIds.length > 0
+      ? supabase.from('classes').select('skill_choices').eq('id', classIds[0]).single()
+      : Promise.resolve({ data: null }),
+    supabase.from('character_skill_proficiencies').select('skill').eq('character_id', characterId),
   ])
 
   // Fetch spell and feat sources from character_choices
@@ -100,6 +106,14 @@ export async function buildLegalityInput(
       : Promise.resolve({ data: [] }),
   ])
 
+  const rawSkillChoices = classChoicesResult.data?.skill_choices as SkillChoices | null
+  const classSkillChoices = rawSkillChoices
+    ? {
+        count: rawSkillChoices.count,
+        from: (rawSkillChoices.from ?? []).map(normalizeSkillKey),
+      }
+    : { count: 0, from: [] }
+
   return {
     allowedSources,
     campaignSettings,
@@ -115,7 +129,7 @@ export async function buildLegalityInput(
     totalLevel: levels.length,
     speciesSource: speciesResult.data?.source ?? null,
     backgroundSource: backgroundResult.data?.source ?? null,
-    classSources: (classSourcesResult.data ?? []).map((r) => r.source),
+    classSources: (classSourcesResult.data ?? []).map((r) => (r as { source: string }).source),
     subclassSources: (subclassSourcesResult.data ?? []).map((r) => r.source),
     spellSources: (spellSourcesResult.data ?? []).map((r) => r.source),
     featSources: (featSourcesResult.data ?? []).map((r) => r.source),
@@ -123,5 +137,7 @@ export async function buildLegalityInput(
       assigned_to: r.assigned_to,
       roll_set: r.roll_set,
     })),
+    classSkillChoices,
+    skillProficiencies: (skillProfResult.data ?? []).map((r) => r.skill),
   }
 }

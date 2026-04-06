@@ -4,7 +4,9 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import type { Character, Species, Background, CharacterLevel, Sense } from '@/lib/types/database'
+import type { Character, Species, Background, CharacterLevel, Sense, Class } from '@/lib/types/database'
+import { SKILLS, normalizeSkillKey } from '@/lib/skills'
+import type { AbilityKey } from '@/lib/skills'
 
 interface CharacterWithRelations extends Character {
   species: Species | null
@@ -14,8 +16,9 @@ interface CharacterWithRelations extends Character {
 
 interface StatBlockViewProps {
   character: CharacterWithRelations
-  // Class names parallel to character_levels, for unarmored AC computation
   classNames?: string[]
+  selectedClass?: Class | null
+  skillProficiencies?: string[]
 }
 
 function mod(score: number): number {
@@ -25,6 +28,10 @@ function mod(score: number): number {
 function modStr(score: number): string {
   const m = mod(score)
   return m >= 0 ? `+${m}` : `${m}`
+}
+
+function fmtMod(n: number): string {
+  return n >= 0 ? `+${n}` : `${n}`
 }
 
 function proficiencyBonus(totalLevel: number): number {
@@ -47,7 +54,7 @@ function formatSenses(senses: Sense[]): string {
     .join(', ')
 }
 
-export function StatBlockView({ character, classNames = [] }: StatBlockViewProps) {
+export function StatBlockView({ character, classNames = [], selectedClass = null, skillProficiencies = [] }: StatBlockViewProps) {
   const computedAc = computeUnarmoredAc(
     character.base_dex,
     character.base_con,
@@ -75,6 +82,28 @@ export function StatBlockView({ character, classNames = [] }: StatBlockViewProps
     { abbr: 'CHA', value: character.base_cha },
   ]
 
+  // Saving throws with proficiency bonus
+  const savingThrowProfs = new Set(
+    (selectedClass?.saving_throw_proficiencies ?? []).map((s) => s.toLowerCase() as AbilityKey)
+  )
+  const abilityKeys: AbilityKey[] = ['str', 'dex', 'con', 'int', 'wis', 'cha']
+  const abilityScores: Record<AbilityKey, number> = {
+    str: character.base_str, dex: character.base_dex, con: character.base_con,
+    int: character.base_int, wis: character.base_wis, cha: character.base_cha,
+  }
+  const proficientSaves = abilityKeys
+    .filter((a) => savingThrowProfs.has(a))
+    .map((a) => `${a.charAt(0).toUpperCase() + a.slice(1)} ${fmtMod(mod(abilityScores[a]) + pb)}`)
+
+  // Skills with proficiency
+  const bgSkillKeys = new Set(
+    (character.background?.skill_proficiencies ?? []).map(normalizeSkillKey)
+  )
+  const classSkillKeys = new Set(skillProficiencies)
+  const proficientSkills = SKILLS
+    .filter((s) => bgSkillKeys.has(s.key) || classSkillKeys.has(s.key))
+    .map((s) => `${s.name} ${fmtMod(mod(abilityScores[s.ability]) + pb)}`)
+
   const size = character.species?.size ?? 'medium'
   const speed = character.species?.speed ?? 30
   const languages = character.species?.languages ?? []
@@ -95,6 +124,8 @@ export function StatBlockView({ character, classNames = [] }: StatBlockViewProps
     lines.push(`**Speed:** ${speed} ft.`)
     lines.push(`**Proficiency Bonus:** +${pb}`)
     if (allSenses) lines.push(`**Senses:** ${allSenses}`)
+    if (proficientSaves.length > 0) lines.push(`**Saving Throws:** ${proficientSaves.join(', ')}`)
+    if (proficientSkills.length > 0) lines.push(`**Skills:** ${proficientSkills.join(', ')}`)
     if (damageResistances.length > 0) lines.push(`**Damage Resistances:** ${damageResistances.join(', ')}`)
     if (conditionImmunities.length > 0) lines.push(`**Condition Immunities:** ${conditionImmunities.join(', ')}`)
     lines.push('')
@@ -168,6 +199,12 @@ export function StatBlockView({ character, classNames = [] }: StatBlockViewProps
               <p><span className="font-bold">Hit Points</span> {character.hp_max}</p>
               <p><span className="font-bold">Speed</span> {speed} ft.</p>
               <p><span className="font-bold">Proficiency Bonus</span> +{pb}</p>
+              {proficientSaves.length > 0 && (
+                <p><span className="font-bold">Saving Throws</span> {proficientSaves.join(', ')}</p>
+              )}
+              {proficientSkills.length > 0 && (
+                <p><span className="font-bold">Skills</span> {proficientSkills.join(', ')}</p>
+              )}
               {allSenses && <p><span className="font-bold">Senses</span> {allSenses}</p>}
               {damageResistances.length > 0 && (
                 <p><span className="font-bold">Damage Resistances</span> {damageResistances.join(', ')}</p>

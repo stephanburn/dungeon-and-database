@@ -37,7 +37,7 @@ export default async function CharacterPage({ params }: { params: { id: string }
     redirect('/')
   }
 
-  const [speciesResult, backgroundResult, levelsResult] = await Promise.all([
+  const [speciesResult, backgroundResult, levelsResult, skillsResult] = await Promise.all([
     character.species_id
       ? supabase.from('species').select('*').eq('id', character.species_id).single()
       : Promise.resolve({ data: null }),
@@ -45,6 +45,7 @@ export default async function CharacterPage({ params }: { params: { id: string }
       ? supabase.from('backgrounds').select('*').eq('id', character.background_id).single()
       : Promise.resolve({ data: null }),
     supabase.from('character_levels').select('*').eq('character_id', character.id),
+    supabase.from('character_skill_proficiencies').select('skill').eq('character_id', character.id),
   ])
 
   const characterWithRelations: CharacterWithRelations = {
@@ -53,6 +54,8 @@ export default async function CharacterPage({ params }: { params: { id: string }
     background: backgroundResult.data ?? null,
     character_levels: levelsResult.data ?? [],
   }
+
+  const initialSkillProficiencies = (skillsResult.data ?? []).map((r) => r.skill)
 
   const isDm = profile?.role === 'dm'
   const isOwner = character.user_id === user.id
@@ -73,6 +76,7 @@ export default async function CharacterPage({ params }: { params: { id: string }
         <CharacterSheet
           character={characterWithRelations}
           campaignId={character.campaign_id}
+          initialSkillProficiencies={initialSkillProficiencies}
           readOnly={false}
           isDm={isDm}
         />

@@ -282,6 +282,12 @@ export type CharacterChoice = {
   choice_value: Record<string, unknown>
 }
 
+export type CharacterSkillProficiency = {
+  character_id: string
+  skill: string
+  expertise: boolean
+}
+
 // ── Supabase Database shape (for createClient generics) ────
 // Every table requires Relationships: [] as of @supabase/supabase-js v2.101+
 
@@ -311,6 +317,7 @@ export type Database = {
       character_stat_rolls: { Row: CharacterStatRoll; Insert: Omit<CharacterStatRoll, 'id' | 'rolled_at'>; Update: Partial<Omit<CharacterStatRoll, 'id'>>; Relationships: R }
       character_snapshots: { Row: CharacterSnapshot; Insert: Omit<CharacterSnapshot, 'id' | 'created_at'>; Update: Partial<Omit<CharacterSnapshot, 'id'>>; Relationships: R }
       character_choices: { Row: CharacterChoice; Insert: Omit<CharacterChoice, 'id'>; Update: Partial<Omit<CharacterChoice, 'id'>>; Relationships: R }
+      character_skill_proficiencies: { Row: CharacterSkillProficiency; Insert: CharacterSkillProficiency; Update: Partial<CharacterSkillProficiency>; Relationships: R }
     }
     Views: Record<string, never>
     Functions: {

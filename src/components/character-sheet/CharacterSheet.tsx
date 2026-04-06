@@ -19,6 +19,7 @@ import { Separator } from '@/components/ui/separator'
 import { Badge } from '@/components/ui/badge'
 import { StatBlock } from './StatBlock'
 import { StatBlockView } from './StatBlockView'
+import { SkillsCard } from './SkillsCard'
 import { LegalityBadge, LegalitySummaryBadge } from './LegalityBadge'
 import { SourceTag } from '@/components/shared/SourceTag'
 import { useToast } from '@/hooks/use-toast'
@@ -55,6 +56,7 @@ interface CharacterWithRelations extends Character {
 interface CharacterSheetProps {
   character: CharacterWithRelations
   campaignId: string
+  initialSkillProficiencies?: string[]
   readOnly?: boolean
   isDm?: boolean
 }
@@ -64,6 +66,7 @@ interface CharacterSheetProps {
 export function CharacterSheet({
   character: initial,
   campaignId,
+  initialSkillProficiencies = [],
   readOnly = false,
   isDm = false,
 }: CharacterSheetProps) {
@@ -90,6 +93,8 @@ export function CharacterSheet({
   const [backgroundList, setBackgroundList] = useState<Background[]>([])
   const [classList, setClassList] = useState<Class[]>([])
   const [subclassMap, setSubclassMap] = useState<Record<string, Subclass[]>>({})
+
+  const [skillProficiencies, setSkillProficiencies] = useState<string[]>(initialSkillProficiencies)
 
   // UI state
   const [saving, setSaving] = useState(false)
@@ -171,6 +176,7 @@ export function CharacterSheet({
           species_id: speciesId || null,
           background_id: backgroundId || null,
           levels,
+          skill_proficiencies: skillProficiencies,
         }),
       })
 
@@ -223,6 +229,10 @@ export function CharacterSheet({
       racialBonuses[ability] = (racialBonuses[ability] ?? 0) + bonus
     })
   }
+  // First class (used for skill choices and saving throws)
+  const firstClassId = levels[0]?.class_id
+  const selectedClass = classList.find((c) => c.id === firstClassId) ?? null
+
   const failedChecks = legalityResult?.checks.filter((c) => !c.passed) ?? []
   const canEdit = !readOnly && (status === 'draft' || status === 'changes_requested' || isDm)
   const canSubmit = !readOnly && (status === 'draft' || status === 'changes_requested')
@@ -489,6 +499,17 @@ export function CharacterSheet({
         </CardContent>
       </Card>
 
+      {/* Skills & Proficiencies */}
+      <SkillsCard
+        stats={stats}
+        totalLevel={totalLevel}
+        selectedClass={selectedClass}
+        background={backgroundList.find((b) => b.id === backgroundId) ?? initial.background}
+        skillProficiencies={skillProficiencies}
+        canEdit={canEdit}
+        onChange={setSkillProficiencies}
+      />
+
       {/* Hit Points */}
       <Card className="bg-neutral-900 border-neutral-800">
         <CardHeader>
@@ -542,6 +563,8 @@ export function CharacterSheet({
             character_levels: levels.map((l) => ({ ...l, id: '', character_id: initial.id, hp_roll: null, taken_at: '' })),
           }}
           classNames={levels.map((l) => classList.find((c) => c.id === l.class_id)?.name ?? '')}
+          selectedClass={selectedClass}
+          skillProficiencies={skillProficiencies}
         />
       )}
 

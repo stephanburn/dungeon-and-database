@@ -45,6 +45,10 @@ export interface LegalityInput {
     assigned_to: string
     roll_set: number[]
   }>
+
+  // Skills (Phase 1: first class only)
+  classSkillChoices: { count: number; from: string[] }
+  skillProficiencies: string[]  // class-chosen canonical skill keys
 }
 
 // ── Point buy constants ────────────────────────────────────
@@ -207,6 +211,40 @@ function checkStatMethodConsistency(input: LegalityInput): LegalityCheck {
   }
 }
 
+function checkSkillProficiencies(input: LegalityInput): LegalityCheck {
+  const { classSkillChoices, skillProficiencies } = input
+  if (classSkillChoices.count === 0) {
+    return { key: 'skill_proficiencies', passed: true, message: 'No class skill choices required.', severity: 'error' }
+  }
+
+  const allowed = new Set(classSkillChoices.from)
+  const invalid = skillProficiencies.filter((s) => !allowed.has(s))
+  if (invalid.length > 0) {
+    return {
+      key: 'skill_proficiencies',
+      passed: false,
+      message: `Skill(s) not available to this class: ${invalid.join(', ')}.`,
+      severity: 'error',
+    }
+  }
+
+  if (skillProficiencies.length > classSkillChoices.count) {
+    return {
+      key: 'skill_proficiencies',
+      passed: false,
+      message: `Too many class skill choices: selected ${skillProficiencies.length}, maximum is ${classSkillChoices.count}.`,
+      severity: 'error',
+    }
+  }
+
+  return {
+    key: 'skill_proficiencies',
+    passed: true,
+    message: `Skill choices valid (${skillProficiencies.length}/${classSkillChoices.count}).`,
+    severity: 'error',
+  }
+}
+
 // ── Main engine ────────────────────────────────────────────
 
 export function runLegalityChecks(input: LegalityInput): LegalityResult {
@@ -215,6 +253,7 @@ export function runLegalityChecks(input: LegalityInput): LegalityResult {
     checkStatMethodConsistency(input),
     checkStatMethod(input),
     checkLevelCap(input),
+    checkSkillProficiencies(input),
   ]
 
   const passed = checks

@@ -20,6 +20,8 @@ const updateCharacterSchema = z.object({
   base_cha: z.number().int().min(1).max(30).optional(),
   hp_max: z.number().int().min(0).optional(),
   character_type: z.enum(['pc', 'npc', 'test']).optional(),
+  // Skill proficiencies: class-chosen skills (canonical keys)
+  skill_proficiencies: z.array(z.string()).optional(),
   // Levels: full replacement of the character's class levels
   levels: z.array(z.object({
     class_id: z.string().uuid(),
@@ -83,7 +85,7 @@ export async function PUT(
   const parsed = updateCharacterSchema.safeParse(body)
   if (!parsed.success) return jsonError(parsed.error.message, 400)
 
-  const { levels, stat_rolls, character_type, ...characterFields } = parsed.data
+  const { levels, stat_rolls, skill_proficiencies, character_type, ...characterFields } = parsed.data
 
   // character_type may only be changed by a DM
   if (character_type !== undefined && profile.role === 'dm') {
@@ -133,6 +135,16 @@ export async function PUT(
         roll_set: r.roll_set,
       }))
       const { error } = await supabase.from('character_stat_rolls').insert(rows)
+      if (error) return jsonError(error.message, 500)
+    }
+  }
+
+  // Replace skill proficiencies if provided
+  if (skill_proficiencies !== undefined) {
+    await supabase.from('character_skill_proficiencies').delete().eq('character_id', params.id)
+    if (skill_proficiencies.length > 0) {
+      const rows = skill_proficiencies.map((skill) => ({ character_id: params.id, skill, expertise: false }))
+      const { error } = await supabase.from('character_skill_proficiencies').insert(rows)
       if (error) return jsonError(error.message, 500)
     }
   }
