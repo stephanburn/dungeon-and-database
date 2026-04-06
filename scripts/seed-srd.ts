@@ -131,8 +131,8 @@ async function seedBackgrounds() {
     const toolProfs: string[] = []
 
     for (const prof of bg.starting_proficiencies ?? []) {
-      if (prof.type === 'Skills') {
-        skillProfs.push(prof.name.replace('Skill: ', ''))
+      if ((prof.index ?? '').startsWith('skill-') || (prof.name ?? '').startsWith('Skill: ')) {
+        skillProfs.push((prof.name as string).replace('Skill: ', ''))
       } else {
         toolProfs.push(prof.name)
       }

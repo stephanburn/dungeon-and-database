@@ -35,9 +35,9 @@ export const SKILLS: SkillDef[] = [
 
 export const SKILL_BY_KEY = Object.fromEntries(SKILLS.map((s) => [s.key, s])) as Record<SkillKey, SkillDef>
 
-/** Normalises API kebab-case or title-case strings to a canonical SkillKey. */
+/** Normalises API kebab-case, title-case, or "skill-*" prefixed strings to a canonical SkillKey. */
 export function normalizeSkillKey(raw: string): SkillKey {
-  return raw.toLowerCase().replace(/[\s-]/g, '_') as SkillKey
+  return raw.toLowerCase().replace(/^skill[-_]/, '').replace(/[\s-]/g, '_') as SkillKey
 }
 
 export const SAVING_THROW_NAMES: Record<AbilityKey, string> = {
