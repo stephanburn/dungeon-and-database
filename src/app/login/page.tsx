@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -8,32 +9,56 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 
-type State = 'idle' | 'loading' | 'sent' | 'error'
+type Mode = 'magic' | 'password'
+type State = 'idle' | 'loading' | 'sent' | 'reset-sent' | 'error'
 
 export default function LoginPage() {
+  const router = useRouter()
+  const [mode, setMode] = useState<Mode>('password')
   const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [state, setState] = useState<State>('idle')
   const [errorMessage, setErrorMessage] = useState('')
 
-  async function handleSubmit(e: React.FormEvent) {
+  function switchMode(m: Mode) {
+    setMode(m)
+    setState('idle')
+    setErrorMessage('')
+  }
+
+  async function handleMagicLink(e: React.FormEvent) {
     e.preventDefault()
     setState('loading')
     setErrorMessage('')
-
     const supabase = createClient()
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
-      },
+      options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
     })
+    if (error) { setErrorMessage(error.message); setState('error') }
+    else setState('sent')
+  }
 
-    if (error) {
-      setErrorMessage(error.message)
-      setState('error')
-    } else {
-      setState('sent')
-    }
+  async function handlePassword(e: React.FormEvent) {
+    e.preventDefault()
+    setState('loading')
+    setErrorMessage('')
+    const supabase = createClient()
+    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    if (error) { setErrorMessage(error.message); setState('error') }
+    else router.push('/')
+  }
+
+  async function handleForgotPassword() {
+    if (!email) { setErrorMessage('Enter your email address first.'); setState('error'); return }
+    setState('loading')
+    setErrorMessage('')
+    const supabase = createClient()
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/auth/callback?next=/auth/reset-password`,
+    })
+    if (error) { setErrorMessage(error.message); setState('error') }
+    else setState('reset-sent')
   }
 
   return (
@@ -41,19 +66,45 @@ export default function LoginPage() {
       <Card className="w-full max-w-sm bg-neutral-900 border-neutral-800">
         <CardHeader className="space-y-1">
           <CardTitle className="text-2xl text-neutral-100">Dungeon &amp; Database</CardTitle>
-          <CardDescription className="text-neutral-400">
-            Enter your email to receive a magic link.
-          </CardDescription>
+          <CardDescription className="text-neutral-400">Sign in to continue.</CardDescription>
         </CardHeader>
-        <CardContent>
-          {state === 'sent' ? (
+        <CardContent className="space-y-4">
+          {/* Mode toggle */}
+          <div className="flex rounded-md overflow-hidden border border-neutral-700 text-sm">
+            <button
+              type="button"
+              onClick={() => switchMode('password')}
+              className={`flex-1 py-1.5 transition-colors ${mode === 'password' ? 'bg-neutral-700 text-neutral-100' : 'text-neutral-400 hover:text-neutral-200'}`}
+            >
+              Password
+            </button>
+            <button
+              type="button"
+              onClick={() => switchMode('magic')}
+              className={`flex-1 py-1.5 transition-colors ${mode === 'magic' ? 'bg-neutral-700 text-neutral-100' : 'text-neutral-400 hover:text-neutral-200'}`}
+            >
+              Magic link
+            </button>
+          </div>
+
+          {state === 'sent' && (
             <Alert className="border-neutral-700 bg-neutral-800">
               <AlertDescription className="text-neutral-200">
-                Check your email — a magic link is on its way to <strong>{email}</strong>.
+                Magic link sent to <strong>{email}</strong> — check your inbox.
               </AlertDescription>
             </Alert>
-          ) : (
-            <form onSubmit={handleSubmit} className="space-y-4">
+          )}
+
+          {state === 'reset-sent' && (
+            <Alert className="border-neutral-700 bg-neutral-800">
+              <AlertDescription className="text-neutral-200">
+                Password reset email sent to <strong>{email}</strong>.
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {state !== 'sent' && state !== 'reset-sent' && mode === 'magic' && (
+            <form onSubmit={handleMagicLink} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="email" className="text-neutral-200">Email</Label>
                 <Input
@@ -68,20 +119,53 @@ export default function LoginPage() {
                   className="bg-neutral-800 border-neutral-700 text-neutral-100 placeholder:text-neutral-500"
                 />
               </div>
-
-              {state === 'error' && (
-                <Alert variant="destructive">
-                  <AlertDescription>{errorMessage}</AlertDescription>
-                </Alert>
-              )}
-
-              <Button
-                type="submit"
-                className="w-full"
-                disabled={state === 'loading'}
-              >
+              {state === 'error' && <Alert variant="destructive"><AlertDescription>{errorMessage}</AlertDescription></Alert>}
+              <Button type="submit" className="w-full" disabled={state === 'loading'}>
                 {state === 'loading' ? 'Sending…' : 'Send magic link'}
               </Button>
+            </form>
+          )}
+
+          {state !== 'sent' && state !== 'reset-sent' && mode === 'password' && (
+            <form onSubmit={handlePassword} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="email-pw" className="text-neutral-200">Email</Label>
+                <Input
+                  id="email-pw"
+                  type="email"
+                  placeholder="you@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  disabled={state === 'loading'}
+                  className="bg-neutral-800 border-neutral-700 text-neutral-100 placeholder:text-neutral-500"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="password" className="text-neutral-200">Password</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  disabled={state === 'loading'}
+                  className="bg-neutral-800 border-neutral-700 text-neutral-100 placeholder:text-neutral-500"
+                />
+              </div>
+              {state === 'error' && <Alert variant="destructive"><AlertDescription>{errorMessage}</AlertDescription></Alert>}
+              <Button type="submit" className="w-full" disabled={state === 'loading'}>
+                {state === 'loading' ? 'Signing in…' : 'Sign in'}
+              </Button>
+              <button
+                type="button"
+                onClick={handleForgotPassword}
+                disabled={state === 'loading'}
+                className="w-full text-xs text-neutral-500 hover:text-neutral-300 transition-colors"
+              >
+                Forgot password / set a password for the first time
+              </button>
             </form>
           )}
         </CardContent>
