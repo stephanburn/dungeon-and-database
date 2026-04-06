@@ -90,6 +90,11 @@ export async function PUT(
     (characterFields as Record<string, unknown>).character_type = character_type
   }
 
+  // Saving an approved character returns it to draft
+  if (existing.status === 'approved') {
+    (characterFields as Record<string, unknown>).status = 'draft'
+  }
+
   // Update character fields
   if (Object.keys(characterFields).length > 0) {
     const { error } = await supabase
