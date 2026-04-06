@@ -188,6 +188,14 @@ function checkStatMethod(input: LegalityInput): LegalityCheck {
 
 function checkLevelCap(input: LegalityInput): LegalityCheck {
   const { totalLevel, campaignSettings } = input
+  if (totalLevel === 0) {
+    return {
+      key: 'level_cap',
+      passed: false,
+      message: 'Character must have at least one class level.',
+      severity: 'error',
+    }
+  }
   const passed = totalLevel <= campaignSettings.max_level
   return {
     key: 'level_cap',

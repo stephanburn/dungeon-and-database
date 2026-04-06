@@ -35,7 +35,7 @@ export async function buildLegalityInput(
       .eq('campaign_id', character.campaign_id),
     supabase
       .from('character_levels')
-      .select('class_id, subclass_id')
+      .select('class_id, level, subclass_id')
       .eq('character_id', characterId),
     supabase
       .from('character_stat_rolls')
@@ -126,7 +126,7 @@ export async function buildLegalityInput(
       wis: character.base_wis,
       cha: character.base_cha,
     },
-    totalLevel: levels.length,
+    totalLevel: levels.reduce((sum, l) => sum + (l.level ?? 0), 0),
     speciesSource: speciesResult.data?.source ?? null,
     backgroundSource: backgroundResult.data?.source ?? null,
     classSources: (classSourcesResult.data ?? []).map((r) => (r as { source: string }).source),

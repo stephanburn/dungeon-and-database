@@ -177,6 +177,7 @@ export function CharacterSheet({
           background_id: backgroundId || null,
           levels,
           skill_proficiencies: skillProficiencies,
+          ...(isDm ? { dm_notes: dmNotes } : {}),
         }),
       })
 

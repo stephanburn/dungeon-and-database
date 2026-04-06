@@ -20,6 +20,7 @@ const updateCharacterSchema = z.object({
   base_cha: z.number().int().min(1).max(30).optional(),
   hp_max: z.number().int().min(0).optional(),
   character_type: z.enum(['pc', 'npc', 'test']).optional(),
+  dm_notes: z.string().max(2000).optional(),
   // Skill proficiencies: class-chosen skills (canonical keys)
   skill_proficiencies: z.array(z.string()).optional(),
   // Levels: full replacement of the character's class levels
@@ -85,11 +86,12 @@ export async function PUT(
   const parsed = updateCharacterSchema.safeParse(body)
   if (!parsed.success) return jsonError(parsed.error.message, 400)
 
-  const { levels, stat_rolls, skill_proficiencies, character_type, ...characterFields } = parsed.data
+  const { levels, stat_rolls, skill_proficiencies, character_type, dm_notes, ...characterFields } = parsed.data
 
-  // character_type may only be changed by a DM
-  if (character_type !== undefined && profile.role === 'dm') {
-    (characterFields as Record<string, unknown>).character_type = character_type
+  // DM-only fields
+  if (profile.role === 'dm') {
+    if (character_type !== undefined) (characterFields as Record<string, unknown>).character_type = character_type
+    if (dm_notes !== undefined) (characterFields as Record<string, unknown>).dm_notes = dm_notes
   }
 
   // Saving an approved character returns it to draft
