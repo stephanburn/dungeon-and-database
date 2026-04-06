@@ -41,9 +41,9 @@ function itemToForm(tab: string, item: ContentItem): FormState {
   if (tab === 'backgrounds') {
     return {
       name: item.name as string,
-      skill_proficiencies: (item.skill_proficiencies as string[]).join(', '),
-      tool_proficiencies: (item.tool_proficiencies as string[]).join(', '),
-      languages: (item.languages as string[]).join(', '),
+      skill_proficiencies: ((item.skill_proficiencies as string[]) ?? []).join(', '),
+      tool_proficiencies: ((item.tool_proficiencies as string[]) ?? []).join(', '),
+      languages: ((item.languages as string[]) ?? []).join(', '),
       source: item.source as string,
     }
   }
@@ -59,7 +59,7 @@ function itemToForm(tab: string, item: ContentItem): FormState {
       asb_str: asbMap['str'] ?? 0, asb_dex: asbMap['dex'] ?? 0, asb_con: asbMap['con'] ?? 0,
       asb_int: asbMap['int'] ?? 0, asb_wis: asbMap['wis'] ?? 0, asb_cha: asbMap['cha'] ?? 0,
       darkvision_range: darkvision,
-      languages: (item.languages as string[]).join(', '),
+      languages: ((item.languages as string[]) ?? []).join(', '),
       source: item.source as string,
     }
   }
@@ -82,7 +82,7 @@ function itemToForm(tab: string, item: ContentItem): FormState {
       comp_verbal: (comps.verbal as boolean) ?? false,
       comp_somatic: (comps.somatic as boolean) ?? false,
       comp_material: (comps.material as boolean) ?? false,
-      comp_materials: ((comps.materials_needed as string[]) ?? []).join(', '),
+      comp_materials: ((comps.materials_needed as string[] | undefined) ?? []).join(', '),
       duration: item.duration as string,
       concentration: item.concentration as boolean,
       ritual: item.ritual as boolean,
@@ -181,7 +181,7 @@ function renderTableHead(tab: string) {
 }
 
 function renderTableCells(tab: string, item: ContentItem, classes: ClassRow[]) {
-  if (tab === 'backgrounds') return <><TableCell className="font-medium">{item.name as string}</TableCell><TableCell className="text-neutral-400 text-sm">{(item.skill_proficiencies as string[]).join(', ') || '—'}</TableCell><TableCell className="text-neutral-400 text-sm">{item.source as string}</TableCell></>
+  if (tab === 'backgrounds') return <><TableCell className="font-medium">{item.name as string}</TableCell><TableCell className="text-neutral-400 text-sm">{((item.skill_proficiencies as string[]) ?? []).join(', ') || '—'}</TableCell><TableCell className="text-neutral-400 text-sm">{item.source as string}</TableCell></>
   if (tab === 'species') return <><TableCell className="font-medium">{item.name as string}</TableCell><TableCell className="text-neutral-400 text-sm capitalize">{item.size as string}</TableCell><TableCell className="text-neutral-400 text-sm">{item.speed as number} ft</TableCell><TableCell className="text-neutral-400 text-sm">{item.source as string}</TableCell></>
   if (tab === 'subclasses') {
     const cls = classes.find(c => c.id === item.class_id)
