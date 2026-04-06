@@ -10,12 +10,18 @@ export type SizeCategory = 'tiny' | 'small' | 'medium' | 'large'
 export type SpellcastingType = 'full' | 'half' | 'third' | 'pact' | 'none'
 export type ChoiceType = 'asi' | 'feat' | 'spell_known' | 'skill' | 'fighting_style' | 'other'
 export type CheckSeverity = 'error' | 'warning'
+export type CharacterType = 'pc' | 'npc' | 'test'
 
 // ── JSON shapes ────────────────────────────────────────────
 
 export type AbilityScoreBonus = {
   ability: 'str' | 'dex' | 'con' | 'int' | 'wis' | 'cha'
   bonus: number
+}
+
+export type Sense = {
+  type: string   // e.g. 'darkvision', 'blindsight', 'tremorsense'
+  range_ft: number
 }
 
 export type SpellComponents = {
@@ -99,6 +105,7 @@ export type Species = {
   ability_score_bonuses: AbilityScoreBonus[]
   languages: string[]
   traits: string[]
+  senses: Sense[]
   source: string
   amended: boolean
   amendment_note: string | null
@@ -232,6 +239,7 @@ export type Character = {
   base_wis: number
   base_cha: number
   hp_max: number
+  character_type: CharacterType
   dm_notes: string | null
   created_at: string
   updated_at: string
@@ -295,7 +303,7 @@ export type Database = {
       spells: { Row: Spell; Insert: Omit<Spell, 'id'>; Update: Partial<Omit<Spell, 'id'>>; Relationships: R }
       feats: { Row: Feat; Insert: Omit<Feat, 'id'>; Update: Partial<Omit<Feat, 'id'>>; Relationships: R }
       backgrounds: { Row: Background; Insert: Omit<Background, 'id'>; Update: Partial<Omit<Background, 'id'>>; Relationships: R }
-      characters: { Row: Character; Insert: { user_id: string; campaign_id: string; name: string; stat_method?: StatMethod; status?: CharacterStatus; species_id?: string | null; background_id?: string | null; alignment?: Alignment | null; experience_points?: number; base_str?: number; base_dex?: number; base_con?: number; base_int?: number; base_wis?: number; base_cha?: number; hp_max?: number; dm_notes?: string | null }; Update: Partial<Omit<Character, 'id' | 'created_at'>>; Relationships: R }
+      characters: { Row: Character; Insert: { user_id: string; campaign_id: string; name: string; character_type?: CharacterType; stat_method?: StatMethod; status?: CharacterStatus; species_id?: string | null; background_id?: string | null; alignment?: Alignment | null; experience_points?: number; base_str?: number; base_dex?: number; base_con?: number; base_int?: number; base_wis?: number; base_cha?: number; hp_max?: number; dm_notes?: string | null }; Update: Partial<Omit<Character, 'id' | 'created_at'>>; Relationships: R }
       character_levels: { Row: CharacterLevel; Insert: Omit<CharacterLevel, 'id' | 'taken_at'>; Update: Partial<Omit<CharacterLevel, 'id'>>; Relationships: R }
       character_stat_rolls: { Row: CharacterStatRoll; Insert: Omit<CharacterStatRoll, 'id' | 'rolled_at'>; Update: Partial<Omit<CharacterStatRoll, 'id'>>; Relationships: R }
       character_snapshots: { Row: CharacterSnapshot; Insert: Omit<CharacterSnapshot, 'id' | 'created_at'>; Update: Partial<Omit<CharacterSnapshot, 'id'>>; Relationships: R }
@@ -315,6 +323,7 @@ export type Database = {
       spellcasting_type: SpellcastingType
       choice_type: ChoiceType
       check_severity: CheckSeverity
+      character_type: CharacterType
     }
   }
 }

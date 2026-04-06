@@ -84,6 +84,11 @@ async function seedSpecies() {
       Small: 'small', Medium: 'medium', Large: 'large', Tiny: 'tiny',
     }
 
+    const senses = []
+    if (race.darkvision > 0) {
+      senses.push({ type: 'darkvision', range_ft: race.darkvision })
+    }
+
     await supabase
       .from('species')
       .upsert(
@@ -94,6 +99,7 @@ async function seedSpecies() {
           ability_score_bonuses: abilityScoreBonuses,
           languages: (race.languages ?? []).map((l: { name: string }) => l.name),
           traits: traitUuids,
+          senses,
           source: 'SRD',
           amended: false,
         },

@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -19,12 +18,13 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Separator } from '@/components/ui/separator'
 import { Badge } from '@/components/ui/badge'
 import { StatBlock } from './StatBlock'
+import { StatBlockView } from './StatBlockView'
 import { LegalityBadge, LegalitySummaryBadge } from './LegalityBadge'
 import { SourceTag } from '@/components/shared/SourceTag'
 import { useToast } from '@/hooks/use-toast'
 import type {
   Character, CharacterLevel, Species, Background,
-  Class, Subclass, Alignment, StatMethod,
+  Class, Subclass, Alignment, StatMethod, AbilityScoreBonus,
 } from '@/lib/types/database'
 import type { LegalityResult } from '@/lib/legality/engine'
 
@@ -69,7 +69,6 @@ export function CharacterSheet({
 }: CharacterSheetProps) {
   const router = useRouter()
   const { toast } = useToast()
-  const supabase = createClient()
 
   // Form state
   const [name, setName] = useState(initial.name)
@@ -211,8 +210,19 @@ export function CharacterSheet({
     }
   }
 
-  const totalLevel = levels.length
+  const totalLevel = levels.reduce((sum, l) => sum + l.level, 0)
   const statusInfo = STATUS_LABELS[status] ?? STATUS_LABELS.draft
+
+  // Racial bonuses from the currently selected species
+  const selectedSpecies =
+    speciesList.find((s) => s.id === speciesId) ??
+    (initial.species?.id === speciesId ? initial.species : null)
+  const racialBonuses: Partial<Record<string, number>> = {}
+  if (selectedSpecies?.ability_score_bonuses) {
+    ;(selectedSpecies.ability_score_bonuses as AbilityScoreBonus[]).forEach(({ ability, bonus }) => {
+      racialBonuses[ability] = (racialBonuses[ability] ?? 0) + bonus
+    })
+  }
   const failedChecks = legalityResult?.checks.filter((c) => !c.passed) ?? []
   const canEdit = !readOnly && (status === 'draft' || status === 'changes_requested' || isDm)
   const canSubmit = !readOnly && (status === 'draft' || status === 'changes_requested')
@@ -409,16 +419,16 @@ export function CharacterSheet({
                       className="w-16 bg-neutral-800 border-neutral-700 text-neutral-100 text-center"
                     />
 
-                    {subclasses.length > 0 && (
+                    {subclasses.length > 0 && l.level >= subclasses[0].choice_level && (
                       <Select
-                        value={l.subclass_id ?? ''}
-                        onValueChange={(v) => updateLevel(i, 'subclass_id', v || null)}
+                        value={l.subclass_id ?? 'none'}
+                        onValueChange={(v) => updateLevel(i, 'subclass_id', v === 'none' ? null : v)}
                       >
                         <SelectTrigger className="w-44 bg-neutral-800 border-neutral-700 text-neutral-100">
                           <SelectValue placeholder="Subclass (optional)" />
                         </SelectTrigger>
                         <SelectContent className="bg-neutral-800 border-neutral-700">
-                          <SelectItem value="" className="text-neutral-400">None</SelectItem>
+                          <SelectItem value="none" className="text-neutral-400">None</SelectItem>
                           {subclasses.map((sc) => (
                             <SelectItem key={sc.id} value={sc.id} className="text-neutral-200">
                               <span className="flex items-center gap-2">
@@ -473,6 +483,8 @@ export function CharacterSheet({
             values={stats}
             onChange={canEdit ? handleStatChange : undefined}
             readOnly={!canEdit}
+            statMethod={statMethod}
+            racialBonuses={racialBonuses}
           />
         </CardContent>
       </Card>
@@ -513,6 +525,24 @@ export function CharacterSheet({
             />
           </CardContent>
         </Card>
+      )}
+
+      {/* Stat Block — DM only, built from live form state */}
+      {isDm && (
+        <StatBlockView
+          character={{
+            ...initial,
+            name,
+            alignment: alignment || null,
+            base_str: stats.str, base_dex: stats.dex, base_con: stats.con,
+            base_int: stats.int, base_wis: stats.wis, base_cha: stats.cha,
+            hp_max: hpMax,
+            species: speciesList.find((s) => s.id === speciesId) ?? initial.species,
+            background: backgroundList.find((b) => b.id === backgroundId) ?? initial.background,
+            character_levels: levels.map((l) => ({ ...l, id: '', character_id: initial.id, hp_roll: null, taken_at: '' })),
+          }}
+          classNames={levels.map((l) => classList.find((c) => c.id === l.class_id)?.name ?? '')}
+        />
       )}
 
       <Separator className="bg-neutral-800" />

@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { CharacterSheet } from '@/components/character-sheet/CharacterSheet'
 import { DmReviewPanel } from '@/components/dm/DmReviewPanel'
+import { DeleteCharacterButton } from './DeleteCharacterButton'
 import type { Character, CharacterLevel, Species, Background } from '@/lib/types/database'
 
 interface CharacterWithRelations extends Character {
@@ -54,14 +55,20 @@ export default async function CharacterPage({ params }: { params: { id: string }
   }
 
   const isDm = profile?.role === 'dm'
+  const isOwner = character.user_id === user.id
   const backHref = isDm ? '/dm/dashboard' : '/'
 
   return (
     <div className="min-h-screen bg-neutral-950 p-6">
       <div className="max-w-4xl mx-auto space-y-6">
-        <Button variant="ghost" asChild className="text-neutral-400 hover:text-neutral-200 -ml-2">
-          <Link href={backHref}>← Back</Link>
-        </Button>
+        <div className="flex items-center justify-between">
+          <Button variant="ghost" asChild className="text-neutral-400 hover:text-neutral-200 -ml-2">
+            <Link href={backHref}>← Back</Link>
+          </Button>
+          {(isDm || isOwner) && (
+            <DeleteCharacterButton characterId={character.id} backHref={backHref} />
+          )}
+        </div>
 
         <CharacterSheet
           character={characterWithRelations}

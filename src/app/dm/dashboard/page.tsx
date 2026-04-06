@@ -26,6 +26,16 @@ const STATUS_LABEL: Record<string, string> = {
   approved: 'Approved', changes_requested: 'Changes Requested',
 }
 
+const TYPE_STYLE: Record<string, string> = {
+  pc:   '',
+  npc:  'bg-purple-800 text-purple-200 border-0 text-xs',
+  test: 'bg-neutral-700 text-neutral-400 border-0 text-xs',
+}
+
+const TYPE_LABEL: Record<string, string> = {
+  pc: 'PC', npc: 'NPC', test: 'Test',
+}
+
 interface CharacterRow extends Character {
   owner: Pick<User, 'display_name'> | null
   campaign: Pick<Campaign, 'id' | 'name'> | null
@@ -63,7 +73,8 @@ export default async function DmDashboardPage() {
   const characters = (charactersResult.data ?? []) as unknown as CharacterRow[]
   const campaigns = campaignsResult.data ?? []
 
-  const submitted = characters.filter((c) => c.status === 'submitted')
+  const rosterCharacters = characters.filter((c) => c.character_type !== 'test')
+  const submitted = rosterCharacters.filter((c) => c.status === 'submitted')
 
   return (
     <div className="min-h-screen bg-neutral-950 p-6">
@@ -75,6 +86,9 @@ export default async function DmDashboardPage() {
             <p className="text-sm text-neutral-400 mt-1">Welcome, {profile.display_name}</p>
           </div>
           <div className="flex gap-3">
+            <Button asChild size="sm">
+              <Link href="/characters/new">+ New character</Link>
+            </Button>
             <form action="/api/auth/logout" method="POST">
               <Button variant="ghost" type="submit" className="text-neutral-400 hover:text-neutral-200">
                 Sign out
@@ -125,7 +139,12 @@ export default async function DmDashboardPage() {
 
         {/* Character roster */}
         <div>
-          <h2 className="text-lg font-semibold text-neutral-200 mb-4">All Characters</h2>
+          <h2 className="text-lg font-semibold text-neutral-200 mb-4">
+            All Characters
+            <span className="text-neutral-500 font-normal text-sm ml-2">
+              ({rosterCharacters.length} active{characters.length > rosterCharacters.length ? `, ${characters.length - rosterCharacters.length} test` : ''})
+            </span>
+          </h2>
           {characters.length === 0 ? (
             <p className="text-neutral-500 text-sm">No characters yet.</p>
           ) : (
@@ -144,12 +163,19 @@ export default async function DmDashboardPage() {
                   {characters.map((char) => (
                     <TableRow
                       key={char.id}
-                      className="border-neutral-800 hover:bg-neutral-800/50 cursor-pointer"
+                      className={`border-neutral-800 hover:bg-neutral-800/50 cursor-pointer${char.character_type === 'test' ? ' opacity-50' : ''}`}
                     >
                       <TableCell>
-                        <Link href={`/characters/${char.id}`} className="text-neutral-100 hover:text-white font-medium">
-                          {char.name}
-                        </Link>
+                        <div className="flex items-center gap-2">
+                          <Link href={`/characters/${char.id}`} className="text-neutral-100 hover:text-white font-medium">
+                            {char.name}
+                          </Link>
+                          {char.character_type !== 'pc' && (
+                            <Badge className={TYPE_STYLE[char.character_type]}>
+                              {TYPE_LABEL[char.character_type]}
+                            </Badge>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell className="text-neutral-400">
                         {char.owner?.display_name ?? '—'}

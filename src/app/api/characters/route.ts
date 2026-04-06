@@ -6,6 +6,7 @@ const createCharacterSchema = z.object({
   campaign_id: z.string().uuid(),
   name: z.string().min(1).max(100),
   stat_method: z.enum(['point_buy', 'standard_array', 'rolled']).optional(),
+  character_type: z.enum(['pc', 'npc', 'test']).optional(),
 })
 
 export async function GET(request: NextRequest) {
@@ -55,6 +56,9 @@ export async function POST(request: NextRequest) {
       name: parsed.data.name,
       stat_method: parsed.data.stat_method ?? 'point_buy',
       status: 'draft',
+      ...(profile.role === 'dm' && parsed.data.character_type
+        ? { character_type: parsed.data.character_type }
+        : {}),
     })
     .select()
     .single()

@@ -33,6 +33,8 @@ CREATE TYPE choice_type AS ENUM (
 
 CREATE TYPE check_severity AS ENUM ('error', 'warning');
 
+CREATE TYPE character_type AS ENUM ('pc', 'npc', 'test');
+
 -- ────────────────────────────────────────────────────────────
 -- AUTH & USERS
 -- ────────────────────────────────────────────────────────────
@@ -136,7 +138,8 @@ CREATE TABLE public.species_traits (
   description    text NOT NULL DEFAULT '',
   source         text NOT NULL,
   amended        boolean NOT NULL DEFAULT false,
-  amendment_note text
+  amendment_note text,
+  UNIQUE (name, source)
 );
 
 CREATE TABLE public.species (
@@ -147,9 +150,11 @@ CREATE TABLE public.species (
   ability_score_bonuses jsonb        NOT NULL DEFAULT '[]'::jsonb,
   languages             text[]       NOT NULL DEFAULT '{}',
   traits                uuid[]       NOT NULL DEFAULT '{}',
+  senses                jsonb        NOT NULL DEFAULT '[]'::jsonb,
   source                text         NOT NULL,
   amended               boolean      NOT NULL DEFAULT false,
-  amendment_note        text
+  amendment_note        text,
+  UNIQUE (name, source)
 );
 
 CREATE TABLE public.class_features (
@@ -158,7 +163,8 @@ CREATE TABLE public.class_features (
   description    text NOT NULL DEFAULT '',
   source         text NOT NULL,
   amended        boolean NOT NULL DEFAULT false,
-  amendment_note text
+  amendment_note text,
+  UNIQUE (name, source)
 );
 
 CREATE TABLE public.classes (
@@ -176,7 +182,8 @@ CREATE TABLE public.classes (
   spellcasting_type          spellcasting_type,
   source                     text              NOT NULL,
   amended                    boolean           NOT NULL DEFAULT false,
-  amendment_note             text
+  amendment_note             text,
+  UNIQUE (name, source)
 );
 
 CREATE TABLE public.class_feature_progression (
@@ -209,7 +216,8 @@ CREATE TABLE public.subclasses (
   choice_level   int  NOT NULL,
   source         text NOT NULL,
   amended        boolean NOT NULL DEFAULT false,
-  amendment_note text
+  amendment_note text,
+  UNIQUE (name, class_id, source)
 );
 
 CREATE TABLE public.subclass_features (
@@ -220,7 +228,8 @@ CREATE TABLE public.subclass_features (
   description    text NOT NULL DEFAULT '',
   source         text NOT NULL,
   amended        boolean NOT NULL DEFAULT false,
-  amendment_note text
+  amendment_note text,
+  UNIQUE (subclass_id, name, level)
 );
 
 CREATE TABLE public.spells (
@@ -238,7 +247,8 @@ CREATE TABLE public.spells (
   classes          uuid[]  NOT NULL DEFAULT '{}',
   source           text    NOT NULL,
   amended          boolean NOT NULL DEFAULT false,
-  amendment_note   text
+  amendment_note   text,
+  UNIQUE (name, source)
 );
 
 CREATE TABLE public.feats (
@@ -249,7 +259,8 @@ CREATE TABLE public.feats (
   benefits       jsonb NOT NULL DEFAULT '{}'::jsonb,
   source         text NOT NULL,
   amended        boolean NOT NULL DEFAULT false,
-  amendment_note text
+  amendment_note text,
+  UNIQUE (name, source)
 );
 
 CREATE TABLE public.backgrounds (
@@ -261,7 +272,8 @@ CREATE TABLE public.backgrounds (
   starting_equipment  jsonb    NOT NULL DEFAULT '[]'::jsonb,
   source              text     NOT NULL,
   amended             boolean  NOT NULL DEFAULT false,
-  amendment_note      text
+  amendment_note      text,
+  UNIQUE (name, source)
 );
 
 -- ────────────────────────────────────────────────────────────
@@ -286,6 +298,7 @@ CREATE TABLE public.characters (
   base_wis          int              NOT NULL DEFAULT 8 CHECK (base_wis BETWEEN 1 AND 30),
   base_cha          int              NOT NULL DEFAULT 8 CHECK (base_cha BETWEEN 1 AND 30),
   hp_max            int              NOT NULL DEFAULT 0,
+  character_type    character_type   NOT NULL DEFAULT 'pc',
   dm_notes          text,
   created_at        timestamptz      NOT NULL DEFAULT now(),
   updated_at        timestamptz      NOT NULL DEFAULT now()
@@ -432,23 +445,28 @@ CREATE POLICY "allowlist_delete_dm" ON public.campaign_source_allowlist
   FOR DELETE USING (public.is_dm());
 
 -- ── characters ───────────────────────────────────────────────
+-- npc and test rows are DM-visible only; pc rows are visible to owner or DM
 CREATE POLICY "characters_select" ON public.characters
   FOR SELECT USING (
-    user_id = auth.uid()
-    OR public.is_dm()
+    public.is_dm()
+    OR (user_id = auth.uid() AND character_type = 'pc')
   );
 
+-- Players may only create pc-type characters
 CREATE POLICY "characters_insert_own" ON public.characters
-  FOR INSERT WITH CHECK (user_id = auth.uid());
+  FOR INSERT WITH CHECK (
+    public.is_dm()
+    OR (user_id = auth.uid() AND character_type = 'pc')
+  );
 
 CREATE POLICY "characters_update_own" ON public.characters
   FOR UPDATE USING (
-    user_id = auth.uid()
-    OR public.is_dm()
+    public.is_dm()
+    OR (user_id = auth.uid() AND character_type = 'pc')
   );
 
 CREATE POLICY "characters_delete_own" ON public.characters
-  FOR DELETE USING (user_id = auth.uid() OR public.is_dm());
+  FOR DELETE USING (public.is_dm() OR (user_id = auth.uid() AND character_type = 'pc'));
 
 -- ── character_levels ─────────────────────────────────────────
 CREATE POLICY "char_levels_select" ON public.character_levels

@@ -19,6 +19,7 @@ const updateCharacterSchema = z.object({
   base_wis: z.number().int().min(1).max(30).optional(),
   base_cha: z.number().int().min(1).max(30).optional(),
   hp_max: z.number().int().min(0).optional(),
+  character_type: z.enum(['pc', 'npc', 'test']).optional(),
   // Levels: full replacement of the character's class levels
   levels: z.array(z.object({
     class_id: z.string().uuid(),
@@ -82,7 +83,12 @@ export async function PUT(
   const parsed = updateCharacterSchema.safeParse(body)
   if (!parsed.success) return jsonError(parsed.error.message, 400)
 
-  const { levels, stat_rolls, ...characterFields } = parsed.data
+  const { levels, stat_rolls, character_type, ...characterFields } = parsed.data
+
+  // character_type may only be changed by a DM
+  if (character_type !== undefined && profile.role === 'dm') {
+    (characterFields as Record<string, unknown>).character_type = character_type
+  }
 
   // Update character fields
   if (Object.keys(characterFields).length > 0) {
