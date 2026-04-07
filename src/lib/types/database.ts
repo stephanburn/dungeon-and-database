@@ -89,6 +89,12 @@ export type CampaignSourceAllowlist = {
   source_key: string
 }
 
+export type Source = {
+  key: string
+  full_name: string
+  is_srd: boolean
+}
+
 export type SpeciesTrait = {
   id: string
   name: string
@@ -301,6 +307,7 @@ export type Database = {
       campaigns: { Row: Campaign; Insert: Omit<Campaign, 'id' | 'created_at'>; Update: Partial<Omit<Campaign, 'id'>>; Relationships: R }
       campaign_members: { Row: CampaignMember; Insert: Omit<CampaignMember, 'joined_at'>; Update: Partial<CampaignMember>; Relationships: R }
       campaign_source_allowlist: { Row: CampaignSourceAllowlist; Insert: CampaignSourceAllowlist; Update: Partial<CampaignSourceAllowlist>; Relationships: R }
+      sources: { Row: Source; Insert: Source; Update: Partial<Source>; Relationships: R }
       species_traits: { Row: SpeciesTrait; Insert: Omit<SpeciesTrait, 'id'>; Update: Partial<Omit<SpeciesTrait, 'id'>>; Relationships: R }
       species: { Row: Species; Insert: Omit<Species, 'id'>; Update: Partial<Omit<Species, 'id'>>; Relationships: R }
       class_features: { Row: ClassFeature; Insert: Omit<ClassFeature, 'id'>; Update: Partial<Omit<ClassFeature, 'id'>>; Relationships: R }

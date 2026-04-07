@@ -16,6 +16,7 @@ type ContentItem = Record<string, unknown>
 type FormState = Record<string, string | number | boolean | string[]>
 
 interface ClassRow { id: string; name: string }
+interface SourceRow { key: string; full_name: string; is_srd: boolean }
 
 const STAT_KEYS = ['str', 'dex', 'con', 'int', 'wis', 'cha'] as const
 const STAT_LABELS: Record<string, string> = {
@@ -25,15 +26,23 @@ const LEVEL_LABELS: Record<number, string> = {
   0: 'Cantrip', 1: '1st', 2: '2nd', 3: '3rd', 4: '4th',
   5: '5th', 6: '6th', 7: '7th', 8: '8th', 9: '9th',
 }
+const HIT_DICE = [6, 8, 10, 12] as const
+const SPELLCASTING_TYPES = ['', 'full', 'half', 'third', 'pact', 'none'] as const
 
 // ── Defaults & conversions ─────────────────────────────────
 
 function defaultForm(tab: string, classes: ClassRow[]): FormState {
   if (tab === 'backgrounds') return { name: '', skill_proficiencies: '', tool_proficiencies: '', languages: '', source: '' }
   if (tab === 'species') return { name: '', size: 'medium', speed: 30, asb_str: 0, asb_dex: 0, asb_con: 0, asb_int: 0, asb_wis: 0, asb_cha: 0, darkvision_range: 0, languages: '', source: '' }
+  if (tab === 'classes') return {
+    name: '', hit_die: 8, primary_ability: '',
+    save_str: false, save_dex: false, save_con: false, save_int: false, save_wis: false, save_cha: false,
+    is_spellcaster: false, spellcasting_type: '', source: '',
+  }
   if (tab === 'subclasses') return { name: '', class_id: classes[0]?.id ?? '', choice_level: 3, source: '' }
   if (tab === 'spells') return { name: '', level: 0, school: '', casting_time: '1 action', range: '', comp_verbal: false, comp_somatic: false, comp_material: false, comp_materials: '', duration: 'Instantaneous', concentration: false, ritual: false, description: '', classes: [] as string[], source: '' }
   if (tab === 'feats') return { name: '', description: '', source: '' }
+  if (tab === 'sources') return { key: '', full_name: '' }
   return {}
 }
 
@@ -60,6 +69,19 @@ function itemToForm(tab: string, item: ContentItem): FormState {
       asb_int: asbMap['int'] ?? 0, asb_wis: asbMap['wis'] ?? 0, asb_cha: asbMap['cha'] ?? 0,
       darkvision_range: darkvision,
       languages: ((item.languages as string[]) ?? []).join(', '),
+      source: item.source as string,
+    }
+  }
+  if (tab === 'classes') {
+    const saves = (item.saving_throw_proficiencies as string[]) ?? []
+    return {
+      name: item.name as string,
+      hit_die: item.hit_die as number,
+      primary_ability: ((item.primary_ability as string[]) ?? []).join(', '),
+      save_str: saves.includes('str'), save_dex: saves.includes('dex'), save_con: saves.includes('con'),
+      save_int: saves.includes('int'), save_wis: saves.includes('wis'), save_cha: saves.includes('cha'),
+      is_spellcaster: (item.is_spellcaster as boolean) ?? false,
+      spellcasting_type: (item.spellcasting_type as string) ?? '',
       source: item.source as string,
     }
   }
@@ -134,6 +156,24 @@ function formToPayload(tab: string, form: FormState): ContentItem {
       source: form.source,
     }
   }
+  if (tab === 'classes') {
+    const saves = STAT_KEYS.filter(k => form[`save_${k}`] as boolean)
+    return {
+      name: form.name,
+      hit_die: Number(form.hit_die),
+      primary_ability: splitComma(form.primary_ability as string),
+      saving_throw_proficiencies: saves,
+      armor_proficiencies: [],
+      weapon_proficiencies: [],
+      tool_proficiencies: {},
+      skill_choices: { count: 0, from: [] },
+      multiclass_prereqs: [],
+      multiclass_proficiencies: {},
+      is_spellcaster: form.is_spellcaster,
+      spellcasting_type: (form.spellcasting_type as string) || null,
+      source: form.source,
+    }
+  }
   if (tab === 'subclasses') {
     return {
       name: form.name,
@@ -166,6 +206,9 @@ function formToPayload(tab: string, form: FormState): ContentItem {
   if (tab === 'feats') {
     return { name: form.name, description: form.description, source: form.source }
   }
+  if (tab === 'sources') {
+    return { key: form.key, full_name: form.full_name }
+  }
   return {}
 }
 
@@ -174,21 +217,25 @@ function formToPayload(tab: string, form: FormState): ContentItem {
 function renderTableHead(tab: string) {
   if (tab === 'backgrounds') return <><TableHead>Name</TableHead><TableHead>Skills</TableHead><TableHead>Source</TableHead></>
   if (tab === 'species') return <><TableHead>Name</TableHead><TableHead>Size</TableHead><TableHead>Speed</TableHead><TableHead>Source</TableHead></>
+  if (tab === 'classes') return <><TableHead>Name</TableHead><TableHead>Hit Die</TableHead><TableHead>Spellcaster</TableHead><TableHead>Source</TableHead></>
   if (tab === 'subclasses') return <><TableHead>Name</TableHead><TableHead>Class</TableHead><TableHead>Level</TableHead><TableHead>Source</TableHead></>
   if (tab === 'spells') return <><TableHead>Name</TableHead><TableHead>Level</TableHead><TableHead>School</TableHead><TableHead>Source</TableHead></>
   if (tab === 'feats') return <><TableHead>Name</TableHead><TableHead>Source</TableHead></>
+  if (tab === 'sources') return <><TableHead>Key</TableHead><TableHead>Full Name</TableHead></>
   return null
 }
 
 function renderTableCells(tab: string, item: ContentItem, classes: ClassRow[]) {
   if (tab === 'backgrounds') return <><TableCell className="font-medium">{item.name as string}</TableCell><TableCell className="text-neutral-400 text-sm">{((item.skill_proficiencies as string[]) ?? []).join(', ') || '—'}</TableCell><TableCell className="text-neutral-400 text-sm">{item.source as string}</TableCell></>
   if (tab === 'species') return <><TableCell className="font-medium">{item.name as string}</TableCell><TableCell className="text-neutral-400 text-sm capitalize">{item.size as string}</TableCell><TableCell className="text-neutral-400 text-sm">{item.speed as number} ft</TableCell><TableCell className="text-neutral-400 text-sm">{item.source as string}</TableCell></>
+  if (tab === 'classes') return <><TableCell className="font-medium">{item.name as string}</TableCell><TableCell className="text-neutral-400 text-sm">d{item.hit_die as number}</TableCell><TableCell className="text-neutral-400 text-sm">{(item.is_spellcaster as boolean) ? ((item.spellcasting_type as string) ?? 'yes') : '—'}</TableCell><TableCell className="text-neutral-400 text-sm">{item.source as string}</TableCell></>
   if (tab === 'subclasses') {
     const cls = classes.find(c => c.id === item.class_id)
     return <><TableCell className="font-medium">{item.name as string}</TableCell><TableCell className="text-neutral-400 text-sm">{cls?.name ?? '—'}</TableCell><TableCell className="text-neutral-400 text-sm">{item.choice_level as number}</TableCell><TableCell className="text-neutral-400 text-sm">{item.source as string}</TableCell></>
   }
   if (tab === 'spells') return <><TableCell className="font-medium">{item.name as string}</TableCell><TableCell className="text-neutral-400 text-sm">{LEVEL_LABELS[item.level as number]}</TableCell><TableCell className="text-neutral-400 text-sm">{item.school as string}</TableCell><TableCell className="text-neutral-400 text-sm">{item.source as string}</TableCell></>
   if (tab === 'feats') return <><TableCell className="font-medium">{item.name as string}</TableCell><TableCell className="text-neutral-400 text-sm">{item.source as string}</TableCell></>
+  if (tab === 'sources') return <><TableCell className="font-medium font-mono">{item.key as string}{(item.is_srd as boolean) && <span className="ml-2 text-xs text-neutral-500">SRD</span>}</TableCell><TableCell className="text-neutral-400 text-sm">{item.full_name as string}</TableCell></>
   return null
 }
 
@@ -199,9 +246,10 @@ interface FormProps {
   form: FormState
   setField: (key: string, value: string | number | boolean | string[]) => void
   classes: ClassRow[]
+  sources: SourceRow[]
 }
 
-function ContentForm({ tab, form, setField, classes }: FormProps) {
+function ContentForm({ tab, form, setField, classes, sources }: FormProps) {
   const field = (label: string, key: string, type: 'text' | 'number' = 'text', placeholder?: string) => (
     <div>
       <Label className="text-neutral-400 text-xs mb-1 block">{label}</Label>
@@ -227,12 +275,26 @@ function ContentForm({ tab, form, setField, classes }: FormProps) {
     </label>
   )
 
-  const sourceField = field('Source (e.g. PHB, XGtE, homebrew)', 'source', 'text', 'PHB')
+  const sourceSelect = (
+    <div>
+      <Label className="text-neutral-400 text-xs mb-1 block">Source</Label>
+      <select
+        value={form.source as string}
+        onChange={e => setField('source', e.target.value)}
+        className="w-full bg-neutral-800 border border-neutral-700 text-neutral-100 rounded-md px-3 py-2 text-sm"
+      >
+        <option value="">— select source —</option>
+        {sources.map(s => (
+          <option key={s.key} value={s.key}>{s.full_name} ({s.key})</option>
+        ))}
+      </select>
+    </div>
+  )
 
   if (tab === 'backgrounds') return (
     <div className="grid grid-cols-2 gap-4">
       {field('Name', 'name')}
-      {sourceField}
+      {sourceSelect}
       {field('Skill Proficiencies (comma-separated)', 'skill_proficiencies', 'text', 'Insight, Religion')}
       {field('Tool Proficiencies (comma-separated)', 'tool_proficiencies', 'text', 'Thieves\' Tools')}
       {field('Languages (comma-separated)', 'languages', 'text', 'Any two languages')}
@@ -243,7 +305,7 @@ function ContentForm({ tab, form, setField, classes }: FormProps) {
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-4">
         {field('Name', 'name')}
-        {sourceField}
+        {sourceSelect}
       </div>
       <div className="grid grid-cols-3 gap-4">
         <div>
@@ -279,10 +341,49 @@ function ContentForm({ tab, form, setField, classes }: FormProps) {
     </div>
   )
 
+  if (tab === 'classes') return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-4">
+        {field('Name', 'name')}
+        {sourceSelect}
+      </div>
+      <div className="grid grid-cols-3 gap-4">
+        <div>
+          <Label className="text-neutral-400 text-xs mb-1 block">Hit Die</Label>
+          <select
+            value={form.hit_die as number}
+            onChange={e => setField('hit_die', Number(e.target.value))}
+            className="w-full bg-neutral-800 border border-neutral-700 text-neutral-100 rounded-md px-3 py-2 text-sm"
+          >
+            {HIT_DICE.map(d => <option key={d} value={d}>d{d}</option>)}
+          </select>
+        </div>
+        {field('Primary Ability (comma-separated)', 'primary_ability', 'text', 'INT')}
+        <div>
+          <Label className="text-neutral-400 text-xs mb-1 block">Spellcasting Type</Label>
+          <select
+            value={form.spellcasting_type as string}
+            onChange={e => setField('spellcasting_type', e.target.value)}
+            className="w-full bg-neutral-800 border border-neutral-700 text-neutral-100 rounded-md px-3 py-2 text-sm"
+          >
+            {SPELLCASTING_TYPES.map(t => <option key={t} value={t}>{t || '— none —'}</option>)}
+          </select>
+        </div>
+      </div>
+      <div>
+        <Label className="text-neutral-400 text-xs mb-2 block">Saving Throw Proficiencies</Label>
+        <div className="flex gap-4">
+          {STAT_KEYS.map(k => check(STAT_LABELS[k], `save_${k}`))}
+        </div>
+      </div>
+      {check('Spellcaster', 'is_spellcaster')}
+    </div>
+  )
+
   if (tab === 'subclasses') return (
     <div className="grid grid-cols-2 gap-4">
       {field('Name', 'name')}
-      {sourceField}
+      {sourceSelect}
       <div>
         <Label className="text-neutral-400 text-xs mb-1 block">Class</Label>
         <select
@@ -301,7 +402,7 @@ function ContentForm({ tab, form, setField, classes }: FormProps) {
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-4">
         {field('Name', 'name')}
-        {sourceField}
+        {sourceSelect}
       </div>
       <div className="grid grid-cols-4 gap-4">
         <div>
@@ -372,7 +473,7 @@ function ContentForm({ tab, form, setField, classes }: FormProps) {
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-4">
         {field('Name', 'name')}
-        {sourceField}
+        {sourceSelect}
       </div>
       <div>
         <Label className="text-neutral-400 text-xs mb-1 block">Description</Label>
@@ -386,18 +487,26 @@ function ContentForm({ tab, form, setField, classes }: FormProps) {
     </div>
   )
 
+  if (tab === 'sources') return (
+    <div className="grid grid-cols-2 gap-4">
+      {field('Key (abbreviation)', 'key', 'text', 'XGtE')}
+      {field('Full Name', 'full_name', 'text', "Xanathar's Guide to Everything")}
+    </div>
+  )
+
   return null
 }
 
 // ── Main component ─────────────────────────────────────────
 
-const TABS = ['backgrounds', 'species', 'subclasses', 'spells', 'feats'] as const
+const TABS = ['backgrounds', 'species', 'classes', 'subclasses', 'spells', 'feats', 'sources'] as const
 type Tab = typeof TABS[number]
 
 export default function ContentAdmin() {
   const [activeTab, setActiveTab] = useState<Tab>('backgrounds')
   const [items, setItems] = useState<ContentItem[]>([])
   const [classes, setClasses] = useState<ClassRow[]>([])
+  const [sources, setSources] = useState<SourceRow[]>([])
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [form, setForm] = useState<FormState>({})
@@ -414,9 +523,18 @@ export default function ContentAdmin() {
     setItems(Array.isArray(data) ? data : [])
   }, [apiUrl])
 
-  useEffect(() => {
+  const fetchClasses = useCallback(() => {
     fetch('/api/content/classes').then(r => r.json()).then(d => setClasses(Array.isArray(d) ? d : []))
   }, [])
+
+  const fetchSources = useCallback(() => {
+    fetch('/api/content/sources').then(r => r.json()).then(d => setSources(Array.isArray(d) ? d : []))
+  }, [])
+
+  useEffect(() => {
+    fetchClasses()
+    fetchSources()
+  }, [fetchClasses, fetchSources])
 
   useEffect(() => {
     fetchItems(activeTab)
@@ -464,6 +582,8 @@ export default function ContentAdmin() {
         if (!res.ok) throw new Error((await res.json()).error ?? 'Save failed')
       }
       await fetchItems(activeTab)
+      if (activeTab === 'classes') fetchClasses()
+      if (activeTab === 'sources') fetchSources()
       cancel()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Save failed')
@@ -472,12 +592,18 @@ export default function ContentAdmin() {
     }
   }
 
-  async function deleteItem(id: string) {
+  async function deleteItem(itemKey: string) {
     if (!confirm('Delete this item? This cannot be undone.')) return
-    const res = await fetch(`${apiUrl(activeTab)}?id=${id}`, { method: 'DELETE' })
+    const param = activeTab === 'sources' ? `key=${itemKey}` : `id=${itemKey}`
+    const res = await fetch(`${apiUrl(activeTab)}?${param}`, { method: 'DELETE' })
     if (res.ok) {
       await fetchItems(activeTab)
-      if (editingId === id) cancel()
+      if (activeTab === 'classes') fetchClasses()
+      if (activeTab === 'sources') fetchSources()
+      if (editingId === itemKey) cancel()
+    } else {
+      const json = await res.json().catch(() => ({}))
+      setError((json as { error?: string }).error ?? 'Delete failed')
     }
   }
 
@@ -498,13 +624,12 @@ export default function ContentAdmin() {
 
       {TABS.map(tab => (
         <TabsContent key={tab} value={tab} className="mt-0 space-y-4">
-          {/* Form */}
           {showForm && activeTab === tab && (
             <div className="bg-neutral-900 border border-neutral-700 rounded-lg p-4 space-y-4">
               <h3 className="text-sm font-semibold text-neutral-300">
-                {editingId ? 'Edit' : 'Add'} {tab.slice(0, -1)}
+                {editingId ? 'Edit' : 'Add'} {tab === 'classes' ? 'class' : tab.slice(0, -1)}
               </h3>
-              <ContentForm tab={tab} form={form} setField={setField} classes={classes} />
+              <ContentForm tab={tab} form={form} setField={setField} classes={classes} sources={sources} />
               {error && <p className="text-red-400 text-sm">{error}</p>}
               <div className="flex gap-2">
                 <Button size="sm" onClick={save} disabled={saving}>
@@ -517,7 +642,6 @@ export default function ContentAdmin() {
             </div>
           )}
 
-          {/* Table */}
           {items.length === 0 ? (
             <p className="text-neutral-500 text-sm">No {tab} yet.</p>
           ) : (
@@ -530,21 +654,26 @@ export default function ContentAdmin() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {items.map(item => (
-                    <TableRow key={item.id as string} className="border-neutral-800 hover:bg-neutral-900/50">
-                      {renderTableCells(tab, item, classes)}
-                      <TableCell>
-                        <div className="flex gap-1 justify-end">
-                          <Button size="sm" variant="ghost" onClick={() => startEdit(item)} className="text-neutral-400 hover:text-neutral-100 h-7 px-2 text-xs">
-                            Edit
-                          </Button>
-                          <Button size="sm" variant="ghost" onClick={() => deleteItem(item.id as string)} className="text-red-500 hover:text-red-400 h-7 px-2 text-xs">
-                            Delete
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {items.map(item => {
+                    const itemKey = tab === 'sources' ? item.key as string : item.id as string
+                    return (
+                      <TableRow key={itemKey} className="border-neutral-800 hover:bg-neutral-900/50">
+                        {renderTableCells(tab, item, classes)}
+                        <TableCell>
+                          <div className="flex gap-1 justify-end">
+                            {tab !== 'sources' && (
+                              <Button size="sm" variant="ghost" onClick={() => startEdit(item)} className="text-neutral-400 hover:text-neutral-100 h-7 px-2 text-xs">
+                                Edit
+                              </Button>
+                            )}
+                            <Button size="sm" variant="ghost" onClick={() => deleteItem(itemKey)} className="text-red-500 hover:text-red-400 h-7 px-2 text-xs">
+                              Delete
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
                 </TableBody>
               </Table>
             </div>

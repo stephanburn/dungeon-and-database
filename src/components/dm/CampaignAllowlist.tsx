@@ -1,18 +1,14 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useToast } from '@/hooks/use-toast'
 
-const ALL_SOURCES = [
-  { key: 'SRD',       label: 'SRD (Systems Reference Document)' },
-  { key: 'PHB',       label: 'Player\'s Handbook (PHB)' },
-  { key: 'TCoE',      label: 'Tasha\'s Cauldron of Everything (TCoE)' },
-  { key: 'GGtR',      label: 'Guildmasters\' Guide to Ravnica (GGtR)' },
-  { key: 'ERftLW',    label: 'Eberron: Rising from the Last War (ERftLW)' },
-  { key: 'Homebrew',  label: 'Homebrew' },
-]
+interface SourceRow {
+  key: string
+  full_name: string
+}
 
 interface CampaignAllowlistProps {
   campaignId: string
@@ -23,6 +19,13 @@ export function CampaignAllowlist({ campaignId, initialAllowlist }: CampaignAllo
   const { toast } = useToast()
   const [selected, setSelected] = useState<Set<string>>(new Set(initialAllowlist))
   const [saving, setSaving] = useState(false)
+  const [allSources, setAllSources] = useState<SourceRow[]>([])
+
+  useEffect(() => {
+    fetch('/api/content/sources')
+      .then(r => r.json())
+      .then(d => setAllSources(Array.isArray(d) ? d : []))
+  }, [])
 
   function toggle(key: string) {
     setSelected((prev) => {
@@ -65,7 +68,7 @@ export function CampaignAllowlist({ campaignId, initialAllowlist }: CampaignAllo
           Only content from allowed sources will be available to players when building characters.
         </p>
         <div className="space-y-2">
-          {ALL_SOURCES.map(({ key, label }) => (
+          {allSources.map(({ key, full_name }) => (
             <label
               key={key}
               className="flex items-center gap-3 cursor-pointer group"
@@ -77,7 +80,7 @@ export function CampaignAllowlist({ campaignId, initialAllowlist }: CampaignAllo
                 className="w-4 h-4 rounded accent-blue-500"
               />
               <span className="text-neutral-200 group-hover:text-white transition-colors">
-                {label}
+                {full_name}
               </span>
               <code className="text-xs text-neutral-500 font-mono">{key}</code>
             </label>
