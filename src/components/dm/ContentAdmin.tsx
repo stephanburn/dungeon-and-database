@@ -38,7 +38,7 @@ function defaultForm(tab: string, classes: ClassRow[]): FormState {
     name: '', hit_die: 8, primary_ability: '',
     save_str: false, save_dex: false, save_con: false, save_int: false, save_wis: false, save_cha: false,
     skill_choice_count: 2, skill_choice_from: '',
-    is_spellcaster: false, spellcasting_type: '', source: '',
+    spellcasting_type: '', source: '',
   }
   if (tab === 'subclasses') return { name: '', class_id: classes[0]?.id ?? '', choice_level: 3, source: '' }
   if (tab === 'spells') return { name: '', level: 0, school: '', casting_time: '1 action', range: '', comp_verbal: false, comp_somatic: false, comp_material: false, comp_materials: '', duration: 'Instantaneous', concentration: false, ritual: false, description: '', classes: [] as string[], source: '' }
@@ -84,7 +84,6 @@ function itemToForm(tab: string, item: ContentItem): FormState {
       save_int: saves.includes('int'), save_wis: saves.includes('wis'), save_cha: saves.includes('cha'),
       skill_choice_count: sc.count,
       skill_choice_from: sc.from.join(', '),
-      is_spellcaster: (item.is_spellcaster as boolean) ?? false,
       spellcasting_type: (item.spellcasting_type as string) ?? '',
       source: item.source as string,
     }
@@ -173,8 +172,8 @@ function formToPayload(tab: string, form: FormState): ContentItem {
       skill_choices: { count: Number(form.skill_choice_count), from: splitComma(form.skill_choice_from as string) },
       multiclass_prereqs: [],
       multiclass_proficiencies: {},
-      is_spellcaster: form.is_spellcaster,
       spellcasting_type: (form.spellcasting_type as string) || null,
+      is_spellcaster: !!(form.spellcasting_type && form.spellcasting_type !== 'none'),
       source: form.source,
     }
   }
@@ -232,7 +231,7 @@ function renderTableHead(tab: string) {
 function renderTableCells(tab: string, item: ContentItem, classes: ClassRow[]) {
   if (tab === 'backgrounds') return <><TableCell className="font-medium">{item.name as string}</TableCell><TableCell className="text-neutral-400 text-sm">{((item.skill_proficiencies as string[]) ?? []).join(', ') || '—'}</TableCell><TableCell className="text-neutral-400 text-sm">{item.source as string}</TableCell></>
   if (tab === 'species') return <><TableCell className="font-medium">{item.name as string}</TableCell><TableCell className="text-neutral-400 text-sm capitalize">{item.size as string}</TableCell><TableCell className="text-neutral-400 text-sm">{item.speed as number} ft</TableCell><TableCell className="text-neutral-400 text-sm">{item.source as string}</TableCell></>
-  if (tab === 'classes') return <><TableCell className="font-medium">{item.name as string}</TableCell><TableCell className="text-neutral-400 text-sm">d{item.hit_die as number}</TableCell><TableCell className="text-neutral-400 text-sm">{(item.is_spellcaster as boolean) ? ((item.spellcasting_type as string) ?? 'yes') : '—'}</TableCell><TableCell className="text-neutral-400 text-sm">{item.source as string}</TableCell></>
+  if (tab === 'classes') { const st = item.spellcasting_type as string | null; return <><TableCell className="font-medium">{item.name as string}</TableCell><TableCell className="text-neutral-400 text-sm">d{item.hit_die as number}</TableCell><TableCell className="text-neutral-400 text-sm">{st && st !== 'none' ? st : '—'}</TableCell><TableCell className="text-neutral-400 text-sm">{item.source as string}</TableCell></> }
   if (tab === 'subclasses') {
     const cls = classes.find(c => c.id === item.class_id)
     return <><TableCell className="font-medium">{item.name as string}</TableCell><TableCell className="text-neutral-400 text-sm">{cls?.name ?? '—'}</TableCell><TableCell className="text-neutral-400 text-sm">{item.choice_level as number}</TableCell><TableCell className="text-neutral-400 text-sm">{item.source as string}</TableCell></>
@@ -384,7 +383,6 @@ function ContentForm({ tab, form, setField, classes, sources }: FormProps) {
         {field('Skill Choices (count)', 'skill_choice_count', 'number')}
         {field('Choose From (comma-separated)', 'skill_choice_from', 'text', 'Arcana, History, Insight')}
       </div>
-      {check('Spellcaster', 'is_spellcaster')}
     </div>
   )
 
