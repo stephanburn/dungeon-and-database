@@ -235,7 +235,7 @@ function renderTableCells(tab: string, item: ContentItem, classes: ClassRow[]) {
   }
   if (tab === 'spells') return <><TableCell className="font-medium">{item.name as string}</TableCell><TableCell className="text-neutral-400 text-sm">{LEVEL_LABELS[item.level as number]}</TableCell><TableCell className="text-neutral-400 text-sm">{item.school as string}</TableCell><TableCell className="text-neutral-400 text-sm">{item.source as string}</TableCell></>
   if (tab === 'feats') return <><TableCell className="font-medium">{item.name as string}</TableCell><TableCell className="text-neutral-400 text-sm">{item.source as string}</TableCell></>
-  if (tab === 'sources') return <><TableCell className="font-medium font-mono">{item.key as string}{(item.is_srd as boolean) && <span className="ml-2 text-xs text-neutral-500">SRD</span>}</TableCell><TableCell className="text-neutral-400 text-sm">{item.full_name as string}</TableCell></>
+  if (tab === 'sources') return <><TableCell className="font-medium font-mono">{item.key as string}</TableCell><TableCell className="text-neutral-400 text-sm">{item.full_name as string}</TableCell></>
   return null
 }
 
