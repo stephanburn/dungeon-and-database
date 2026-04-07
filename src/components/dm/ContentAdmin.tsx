@@ -37,6 +37,7 @@ function defaultForm(tab: string, classes: ClassRow[]): FormState {
   if (tab === 'classes') return {
     name: '', hit_die: 8, primary_ability: '',
     save_str: false, save_dex: false, save_con: false, save_int: false, save_wis: false, save_cha: false,
+    skill_choice_count: 2, skill_choice_from: '',
     is_spellcaster: false, spellcasting_type: '', source: '',
   }
   if (tab === 'subclasses') return { name: '', class_id: classes[0]?.id ?? '', choice_level: 3, source: '' }
@@ -74,12 +75,15 @@ function itemToForm(tab: string, item: ContentItem): FormState {
   }
   if (tab === 'classes') {
     const saves = (item.saving_throw_proficiencies as string[]) ?? []
+    const sc = (item.skill_choices as { count: number; from: string[] }) ?? { count: 2, from: [] }
     return {
       name: item.name as string,
       hit_die: item.hit_die as number,
       primary_ability: ((item.primary_ability as string[]) ?? []).join(', '),
       save_str: saves.includes('str'), save_dex: saves.includes('dex'), save_con: saves.includes('con'),
       save_int: saves.includes('int'), save_wis: saves.includes('wis'), save_cha: saves.includes('cha'),
+      skill_choice_count: sc.count,
+      skill_choice_from: sc.from.join(', '),
       is_spellcaster: (item.is_spellcaster as boolean) ?? false,
       spellcasting_type: (item.spellcasting_type as string) ?? '',
       source: item.source as string,
@@ -166,7 +170,7 @@ function formToPayload(tab: string, form: FormState): ContentItem {
       armor_proficiencies: [],
       weapon_proficiencies: [],
       tool_proficiencies: {},
-      skill_choices: { count: 0, from: [] },
+      skill_choices: { count: Number(form.skill_choice_count), from: splitComma(form.skill_choice_from as string) },
       multiclass_prereqs: [],
       multiclass_proficiencies: {},
       is_spellcaster: form.is_spellcaster,
@@ -375,6 +379,10 @@ function ContentForm({ tab, form, setField, classes, sources }: FormProps) {
         <div className="flex gap-4">
           {STAT_KEYS.map(k => check(STAT_LABELS[k], `save_${k}`))}
         </div>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        {field('Skill Choices (count)', 'skill_choice_count', 'number')}
+        {field('Choose From (comma-separated)', 'skill_choice_from', 'text', 'Arcana, History, Insight')}
       </div>
       {check('Spellcaster', 'is_spellcaster')}
     </div>
