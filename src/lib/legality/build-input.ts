@@ -28,7 +28,7 @@ export async function buildLegalityInput(
     speciesResult,
     backgroundResult,
   ] = await Promise.all([
-    supabase.from('campaigns').select('settings').eq('id', character.campaign_id).single(),
+    supabase.from('campaigns').select('settings, rule_set').eq('id', character.campaign_id).single(),
     supabase
       .from('campaign_source_allowlist')
       .select('source_key')
@@ -97,13 +97,14 @@ export async function buildLegalityInput(
     }
   }
 
-  const [spellSourcesResult, featSourcesResult] = await Promise.all([
+  const [spellSourcesResult, featSourcesResult, allSourcesResult] = await Promise.all([
     spellIds.length > 0
       ? supabase.from('spells').select('source').in('id', spellIds)
       : Promise.resolve({ data: [] }),
     featIds.length > 0
       ? supabase.from('feats').select('source').in('id', featIds)
       : Promise.resolve({ data: [] }),
+    supabase.from('sources').select('key, rule_set'),
   ])
 
   const rawSkillChoices = classChoicesResult.data?.skill_choices as SkillChoices | null
@@ -114,9 +115,15 @@ export async function buildLegalityInput(
       }
     : { count: 0, from: [] }
 
+  const allSourceRuleSets = Object.fromEntries(
+    (allSourcesResult.data ?? []).map((s) => [s.key, s.rule_set as '2014' | '2024'])
+  )
+
   return {
     allowedSources,
     campaignSettings,
+    campaignRuleSet: (campaignResult.data?.rule_set ?? '2014') as '2014' | '2024',
+    allSourceRuleSets,
     statMethod: character.stat_method,
     baseStats: {
       str: character.base_str,
@@ -127,6 +134,7 @@ export async function buildLegalityInput(
       cha: character.base_cha,
     },
     totalLevel: levels.reduce((sum, l) => sum + (l.level ?? 0), 0),
+    classCount: classIds.length,
     speciesSource: speciesResult.data?.source ?? null,
     backgroundSource: backgroundResult.data?.source ?? null,
     classSources: (classSourcesResult.data ?? []).map((r) => (r as { source: string }).source),

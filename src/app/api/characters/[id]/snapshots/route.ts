@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { requireAuth, jsonError } from '@/lib/api-helpers'
+import { assertCharacterInDmCampaign } from '@/lib/auth/ownership'
 
 export async function GET(
   _request: NextRequest,
@@ -7,7 +8,22 @@ export async function GET(
 ) {
   const auth = await requireAuth()
   if (auth instanceof NextResponse) return auth
-  const { supabase } = auth
+  const { profile, supabase } = auth
+
+  if (profile.role === 'dm') {
+    const character = await assertCharacterInDmCampaign(supabase, params.id, profile.id)
+    if (!character) return jsonError('Forbidden', 403)
+  } else {
+    const { data: character, error: characterError } = await supabase
+      .from('characters')
+      .select('id')
+      .eq('id', params.id)
+      .eq('user_id', profile.id)
+      .maybeSingle()
+
+    if (characterError) return jsonError(characterError.message, 500)
+    if (!character) return jsonError('Forbidden', 403)
+  }
 
   const { data, error } = await supabase
     .from('character_snapshots')

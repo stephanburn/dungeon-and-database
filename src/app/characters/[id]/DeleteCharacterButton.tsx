@@ -1,7 +1,7 @@
 'use client'
 
 import { useTransition } from 'react'
-import { Button } from '@/components/ui/button'
+import { ConfirmActionButton } from '@/components/shared/ConfirmActionButton'
 import { deleteCharacter } from './actions'
 
 interface DeleteCharacterButtonProps {
@@ -12,20 +12,21 @@ interface DeleteCharacterButtonProps {
 export function DeleteCharacterButton({ characterId, backHref }: DeleteCharacterButtonProps) {
   const [isPending, startTransition] = useTransition()
 
-  function handleClick() {
-    if (!confirm('Delete this character? This cannot be undone.')) return
+  function handleConfirm() {
     startTransition(() => deleteCharacter(characterId, backHref))
   }
 
   return (
-    <Button
+    <ConfirmActionButton
+      title="Delete character?"
+      description="This permanently removes the character and its related level data. This action cannot be undone."
+      triggerLabel={isPending ? 'Deleting…' : 'Delete character'}
+      confirmLabel="Delete character"
+      pendingLabel="Deleting…"
+      onConfirm={handleConfirm}
       variant="ghost"
       size="sm"
-      onClick={handleClick}
-      disabled={isPending}
       className="text-red-500 hover:text-red-400 hover:bg-red-950/30"
-    >
-      {isPending ? 'Deleting…' : 'Delete character'}
-    </Button>
+    />
   )
 }

@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { requireDm, jsonError } from '@/lib/api-helpers'
+import { assertCampaignOwnedByDm } from '@/lib/auth/ownership'
 import { z } from 'zod'
 
 const addSchema = z.object({
@@ -11,12 +12,15 @@ const removeSchema = z.object({ user_id: z.string().uuid() })
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
   const auth = await requireDm()
   if (auth instanceof NextResponse) return auth
-  const { supabase } = auth
+  const { profile, supabase } = auth
+
+  const ownedCampaign = await assertCampaignOwnedByDm(supabase, params.id, profile.id)
+  if (!ownedCampaign) return jsonError('Forbidden', 403)
 
   const { data: rows, error } = await supabase
     .from('campaign_members')
     .select('user_id')
-    .eq('campaign_id', params.id)
+    .eq('campaign_id', ownedCampaign.id)
 
   if (error) return jsonError(error.message, 500)
 
@@ -35,7 +39,10 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   const auth = await requireDm()
   if (auth instanceof NextResponse) return auth
-  const { supabase } = auth
+  const { profile, supabase } = auth
+
+  const ownedCampaign = await assertCampaignOwnedByDm(supabase, params.id, profile.id)
+  if (!ownedCampaign) return jsonError('Forbidden', 403)
 
   const body = await request.json()
   const parsed = addSchema.safeParse(body)
@@ -52,7 +59,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
   const { error } = await supabase
     .from('campaign_members')
-    .upsert({ campaign_id: params.id, user_id: user.id }, { onConflict: 'campaign_id,user_id', ignoreDuplicates: true })
+    .upsert({ campaign_id: ownedCampaign.id, user_id: user.id }, { onConflict: 'campaign_id,user_id', ignoreDuplicates: true })
 
   if (error) return jsonError(error.message, 500)
   return NextResponse.json({ id: user.id, display_name: user.display_name }, { status: 201 })
@@ -61,7 +68,10 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
   const auth = await requireDm()
   if (auth instanceof NextResponse) return auth
-  const { supabase } = auth
+  const { profile, supabase } = auth
+
+  const ownedCampaign = await assertCampaignOwnedByDm(supabase, params.id, profile.id)
+  if (!ownedCampaign) return jsonError('Forbidden', 403)
 
   const body = await request.json()
   const parsed = removeSchema.safeParse(body)
@@ -71,7 +81,7 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
   const { data: campaign } = await supabase
     .from('campaigns')
     .select('dm_id')
-    .eq('id', params.id)
+    .eq('id', ownedCampaign.id)
     .single()
 
   if (campaign?.dm_id === parsed.data.user_id) {
@@ -81,7 +91,7 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
   const { error } = await supabase
     .from('campaign_members')
     .delete()
-    .eq('campaign_id', params.id)
+    .eq('campaign_id', ownedCampaign.id)
     .eq('user_id', parsed.data.user_id)
 
   if (error) return jsonError(error.message, 500)

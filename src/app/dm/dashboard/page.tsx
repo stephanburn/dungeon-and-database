@@ -54,74 +54,127 @@ export default async function DmDashboardPage() {
 
   if (profile?.role !== 'dm') redirect('/')
 
-  const [charactersResult, campaignsResult] = await Promise.all([
-    supabase
-      .from('characters')
-      .select(`
-        *,
-        owner:user_id(display_name),
-        campaign:campaign_id(id, name)
-      `)
-      .order('updated_at', { ascending: false }),
-    supabase
-      .from('campaigns')
-      .select('*')
-      .eq('dm_id', user.id)
-      .order('created_at'),
-  ])
+  const { data: campaignsData } = await supabase
+    .from('campaigns')
+    .select('*')
+    .eq('dm_id', user.id)
+    .order('created_at')
 
-  const characters = (charactersResult.data ?? []) as unknown as CharacterRow[]
-  const campaigns = campaignsResult.data ?? []
+  const campaigns = campaignsData ?? []
+  const campaignIds = campaigns.map((campaign) => campaign.id)
+
+  const { data: charactersResult = [] } = campaignIds.length > 0
+    ? await supabase
+        .from('characters')
+        .select(`
+          *,
+          owner:user_id(display_name),
+          campaign:campaign_id(id, name)
+        `)
+        .in('campaign_id', campaignIds)
+        .order('updated_at', { ascending: false })
+    : { data: [] }
+
+  const characters = charactersResult as unknown as CharacterRow[]
 
   const rosterCharacters = characters.filter((c) => c.character_type !== 'test')
   const submitted = rosterCharacters.filter((c) => c.status === 'submitted')
+  const recentSubmitted = submitted.slice(0, 5)
 
   return (
     <div className="min-h-screen bg-neutral-950 p-6">
       <div className="max-w-6xl mx-auto space-y-8">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
             <h1 className="text-2xl font-bold text-neutral-100">DM Dashboard</h1>
             <p className="text-sm text-neutral-400 mt-1">Welcome, {profile.display_name}</p>
           </div>
-          <div className="flex gap-3">
-            <Button asChild size="sm" variant="outline" className="border-neutral-700 text-neutral-300 hover:bg-neutral-800">
-              <Link href="/dm/users">Users</Link>
-            </Button>
-            <Button asChild size="sm" variant="outline" className="border-neutral-700 text-neutral-300 hover:bg-neutral-800">
-              <Link href="/dm/content">Content</Link>
-            </Button>
+          <div className="flex items-center gap-3">
             <Button asChild size="sm">
               <Link href="/characters/new">+ New character</Link>
             </Button>
-            <form action="/api/auth/logout" method="POST">
-              <Button variant="ghost" type="submit" className="text-neutral-400 hover:text-neutral-200">
-                Sign out
-              </Button>
-            </form>
+            <details className="relative">
+              <summary className="list-none">
+                <Button variant="ghost" size="sm" className="text-neutral-400 hover:text-neutral-200">
+                  Account
+                </Button>
+              </summary>
+              <div className="absolute right-0 mt-2 w-44 rounded-xl border border-neutral-800 bg-neutral-900 p-2 shadow-xl">
+                <form action="/api/auth/logout" method="POST">
+                  <Button
+                    variant="ghost"
+                    type="submit"
+                    className="w-full justify-start text-neutral-300 hover:bg-neutral-800 hover:text-white"
+                  >
+                    Sign out
+                  </Button>
+                </form>
+              </div>
+            </details>
           </div>
         </div>
 
-        {/* Pending review banner */}
+        {/* Pending review hero */}
         {submitted.length > 0 && (
-          <Card className="border-blue-700 bg-blue-950/30">
-            <CardContent className="py-3 flex items-center gap-2">
-              <Badge className="bg-blue-800 text-blue-200 border-0">{submitted.length}</Badge>
-              <span className="text-blue-200 text-sm">
-                {submitted.length === 1 ? 'character awaits' : 'characters await'} review
-              </span>
+          <Card className="border-blue-700 bg-gradient-to-br from-blue-950/60 to-neutral-900">
+            <CardContent className="py-6 space-y-4">
+              <div className="flex items-center justify-between gap-4 flex-wrap">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Badge className="bg-blue-800 text-blue-200 border-0">{submitted.length}</Badge>
+                    <span className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-300">Review Queue</span>
+                  </div>
+                  <h2 className="text-2xl font-semibold text-neutral-100">
+                    {submitted.length === 1 ? '1 character needs review' : `${submitted.length} characters need review`}
+                  </h2>
+                  <p className="text-sm text-neutral-400">
+                    Review the latest submitted sheets first so players are not blocked.
+                  </p>
+                </div>
+                {recentSubmitted[0] && (
+                  <Button asChild className="bg-blue-700 text-white hover:bg-blue-600">
+                    <Link href={`/characters/${recentSubmitted[0].id}`}>Open next review</Link>
+                  </Button>
+                )}
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {recentSubmitted.map((char) => (
+                  <Link key={char.id} href={`/characters/${char.id}`}>
+                    <div className="rounded-xl border border-blue-900/70 bg-neutral-950/50 p-4 transition-colors hover:border-blue-600">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="font-medium text-neutral-100">{char.name}</p>
+                          <p className="text-sm text-neutral-400">{char.owner?.display_name ?? 'Unknown player'}</p>
+                        </div>
+                        <Badge className="bg-blue-900/70 text-blue-200 border-0">Submitted</Badge>
+                      </div>
+                      <p className="mt-3 text-sm text-neutral-500">{char.campaign?.name ?? 'No campaign'}</p>
+                    </div>
+                  </Link>
+                ))}
+              </div>
             </CardContent>
           </Card>
         )}
+
+        <div className="flex gap-3 flex-wrap">
+          <Button asChild size="sm" variant="outline" className="border-neutral-700 text-neutral-300 hover:bg-neutral-800">
+            <Link href="/dm/users">Users</Link>
+          </Button>
+          <Button asChild size="sm" variant="outline" className="border-neutral-700 text-neutral-300 hover:bg-neutral-800">
+            <Link href="/dm/content">Content</Link>
+          </Button>
+          <Button asChild size="sm" variant="outline" className="border-neutral-700 text-neutral-300 hover:bg-neutral-800">
+            <Link href="/dm/campaigns/new">+ New campaign</Link>
+          </Button>
+        </div>
 
         {/* Campaigns */}
         <div>
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-neutral-200">Campaigns</h2>
-            <Button asChild size="sm" variant="outline" className="border-neutral-700 text-neutral-300 hover:bg-neutral-800">
-              <Link href="/dm/campaigns/new">+ New campaign</Link>
-            </Button>
           </div>
           {campaigns.length === 0 ? (
             <p className="text-neutral-500 text-sm">No campaigns yet. Create one from the settings page.</p>

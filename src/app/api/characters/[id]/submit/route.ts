@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { requireAuth, jsonError } from '@/lib/api-helpers'
 import { buildLegalityInput } from '@/lib/legality/build-input'
 import { runLegalityChecks } from '@/lib/legality/engine'
+import { captureSnapshot } from '@/lib/snapshots'
 
 export async function POST(
   _request: NextRequest,
@@ -23,16 +24,9 @@ export async function POST(
     return jsonError(`Cannot submit a character with status "${character.status}"`, 400)
   }
 
-  // Run legality check — errors block submission, warnings do not
+  // Legality is advisory only in this phase.
   const legalityInput = await buildLegalityInput(supabase, params.id)
   const legalityResult = legalityInput ? runLegalityChecks(legalityInput) : null
-
-  if (legalityResult && !legalityResult.passed) {
-    return NextResponse.json(
-      { error: 'Character has legality errors and cannot be submitted.', legality: legalityResult },
-      { status: 422 }
-    )
-  }
 
   const { data, error } = await supabase
     .from('characters')
@@ -42,5 +36,7 @@ export async function POST(
     .single()
 
   if (error) return jsonError(error.message, 500)
+
+  await captureSnapshot(supabase, params.id)
   return NextResponse.json({ character: data, legality: legalityResult })
 }

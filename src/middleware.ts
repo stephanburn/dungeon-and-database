@@ -42,6 +42,10 @@ export async function middleware(request: NextRequest) {
         .eq('id', user.id)
         .single()
 
+      if (!profile) {
+        return supabaseResponse
+      }
+
       const destination =
         profile?.role === 'dm' ? '/dm/dashboard' : '/'
       return NextResponse.redirect(new URL(destination, request.url))
@@ -54,14 +58,18 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
+  const { data: profile } = await supabase
+    .from('users')
+    .select('role')
+    .eq('id', user.id)
+    .single()
+
+  if (!profile) {
+    return NextResponse.redirect(new URL('/login', request.url))
+  }
+
   // DM-only routes
   if (pathname.startsWith('/dm')) {
-    const { data: profile } = await supabase
-      .from('users')
-      .select('role')
-      .eq('id', user.id)
-      .single()
-
     if (profile?.role !== 'dm') {
       return NextResponse.redirect(new URL('/', request.url))
     }

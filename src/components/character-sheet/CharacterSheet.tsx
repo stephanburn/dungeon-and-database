@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -21,12 +21,14 @@ import { StatBlock } from './StatBlock'
 import { StatBlockView } from './StatBlockView'
 import { SkillsCard } from './SkillsCard'
 import { SpellsCard } from './SpellsCard'
+import { FeatsCard } from './FeatsCard'
+import { CharacterSheetHeader } from './CharacterSheetHeader'
 import { LegalityBadge, LegalitySummaryBadge } from './LegalityBadge'
 import { SourceTag } from '@/components/shared/SourceTag'
 import { useToast } from '@/hooks/use-toast'
 import type {
   Character, CharacterLevel, Species, Background,
-  Class, Subclass, Alignment, StatMethod, AbilityScoreBonus,
+  Class, Subclass, Feat, Alignment, StatMethod, AbilityScoreBonus,
 } from '@/lib/types/database'
 import type { LegalityResult } from '@/lib/legality/engine'
 
@@ -59,17 +61,63 @@ interface CharacterSheetProps {
   campaignId: string
   initialSkillProficiencies?: string[]
   initialSpellChoices?: string[]
+  initialFeatChoices?: string[]
   readOnly?: boolean
   isDm?: boolean
 }
 
-// ── Component ───────────────────────────────────────────��──
+type SectionId = 'identity-class' | 'stats-skills' | 'spells-feats' | 'hp-notes'
+
+function CollapsibleSection({
+  id,
+  title,
+  subtitle,
+  defaultOpen = true,
+  highlighted,
+  children,
+}: {
+  id: SectionId
+  title: string
+  subtitle?: string
+  defaultOpen?: boolean
+  highlighted?: boolean
+  children: React.ReactNode
+}) {
+  const [open, setOpen] = useState(defaultOpen)
+
+  return (
+    <section
+      id={id}
+      className={`rounded-2xl border transition-all ${
+        highlighted
+          ? 'border-blue-500 ring-2 ring-blue-500/40'
+          : 'border-neutral-800'
+      }`}
+    >
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        className="flex w-full items-center justify-between gap-4 rounded-2xl bg-neutral-900 px-5 py-4 text-left"
+      >
+        <div>
+          <h2 className="text-lg font-semibold text-neutral-100">{title}</h2>
+          {subtitle && <p className="text-sm text-neutral-400 mt-1">{subtitle}</p>}
+        </div>
+        <span className="text-sm text-neutral-500">{open ? 'Hide' : 'Show'}</span>
+      </button>
+      {open && <div className="space-y-4 bg-neutral-950 p-4">{children}</div>}
+    </section>
+  )
+}
+
+// ── Component ─────────────────────────────────────────────
 
 export function CharacterSheet({
   character: initial,
   campaignId,
   initialSkillProficiencies = [],
   initialSpellChoices = [],
+  initialFeatChoices = [],
   readOnly = false,
   isDm = false,
 }: CharacterSheetProps) {
@@ -96,9 +144,11 @@ export function CharacterSheet({
   const [backgroundList, setBackgroundList] = useState<Background[]>([])
   const [classList, setClassList] = useState<Class[]>([])
   const [subclassMap, setSubclassMap] = useState<Record<string, Subclass[]>>({})
+  const [featList, setFeatList] = useState<Feat[]>([])
 
   const [skillProficiencies, setSkillProficiencies] = useState<string[]>(initialSkillProficiencies)
   const [spellChoices, setSpellChoices] = useState<string[]>(initialSpellChoices)
+  const [featChoices, setFeatChoices] = useState<string[]>(initialFeatChoices)
 
   // UI state
   const [saving, setSaving] = useState(false)
@@ -106,6 +156,8 @@ export function CharacterSheet({
   const [legalityResult, setLegalityResult] = useState<LegalityResult | null>(null)
   const [status, setStatus] = useState(initial.status)
   const [dmNotes, setDmNotes] = useState(initial.dm_notes ?? '')
+  const [highlightedSection, setHighlightedSection] = useState<SectionId | null>(null)
+  const highlightTimerRef = useRef<number | null>(null)
 
   // Load content options filtered by campaign allowlist
   useEffect(() => {
@@ -114,10 +166,12 @@ export function CharacterSheet({
       fetch(`/api/content/species${qs}`).then((r) => r.json()),
       fetch(`/api/content/backgrounds${qs}`).then((r) => r.json()),
       fetch(`/api/content/classes${qs}`).then((r) => r.json()),
-    ]).then(([s, b, c]) => {
+      fetch(`/api/content/feats${qs}`).then((r) => r.json()),
+    ]).then(([s, b, c, f]) => {
       setSpeciesList(s)
       setBackgroundList(b)
       setClassList(c)
+      setFeatList(Array.isArray(f) ? f : [])
     })
   }, [campaignId])
 
@@ -182,6 +236,7 @@ export function CharacterSheet({
           levels,
           skill_proficiencies: skillProficiencies,
           spell_choices: spellChoices,
+          feat_choices: featChoices,
           ...(isDm ? { dm_notes: dmNotes } : {}),
         }),
       })
@@ -242,25 +297,68 @@ export function CharacterSheet({
   const failedChecks = legalityResult?.checks.filter((c) => !c.passed) ?? []
   const canEdit = !readOnly && (status === 'draft' || status === 'changes_requested' || isDm)
   const canSubmit = !readOnly && (status === 'draft' || status === 'changes_requested')
+  const errorCount = failedChecks.filter((c) => c.severity === 'error').length
+
+  const mod = (base: number, racial: number) => Math.floor((base + racial - 10) / 2)
+  const profBonus = totalLevel > 0 ? Math.floor((totalLevel - 1) / 4) + 2 : 2
+  const dexMod = mod(stats.dex, racialBonuses['dex'] ?? 0)
+  const wisMod = mod(stats.wis, racialBonuses['wis'] ?? 0)
+  const perceptionProf = skillProficiencies.includes('perception')
+  const passivePerception = 10 + wisMod + (perceptionProf ? profBonus : 0)
+  const speed = selectedSpecies?.speed ?? null
+  const fmt = (n: number) => (n >= 0 ? `+${n}` : `${n}`)
+
+  const checkSectionMap: Record<string, SectionId> = {
+    source_allowlist: 'identity-class',
+    rule_set_consistency: 'identity-class',
+    stat_method_consistency: 'stats-skills',
+    stat_method: 'stats-skills',
+    level_cap: 'identity-class',
+    multiclass_skill_validation: 'stats-skills',
+    skill_proficiencies: 'stats-skills',
+  }
+
+  function jumpToCheck(key: string) {
+    const sectionId = checkSectionMap[key]
+    if (!sectionId) return
+
+    const element = document.getElementById(sectionId)
+    if (!element) return
+
+    element.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    setHighlightedSection(sectionId)
+
+    if (highlightTimerRef.current) {
+      window.clearTimeout(highlightTimerRef.current)
+    }
+
+    highlightTimerRef.current = window.setTimeout(() => {
+      setHighlightedSection(null)
+      highlightTimerRef.current = null
+    }, 2200)
+  }
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-bold text-neutral-100">{name || 'Unnamed Character'}</h1>
-          <p className="text-sm text-neutral-400 mt-1">Level {totalLevel} · {campaignId}</p>
-        </div>
-        <div className="flex items-center gap-3 flex-wrap">
-          <Badge className={`${statusInfo.colour} border-0 text-sm`}>{statusInfo.label}</Badge>
-          {legalityResult && (
-            <LegalitySummaryBadge
-              passed={legalityResult.passed}
-              errorCount={failedChecks.filter((c) => c.severity === 'error').length}
-            />
-          )}
-        </div>
-      </div>
+      <CharacterSheetHeader
+        name={name}
+        totalLevel={totalLevel}
+        campaignId={campaignId}
+        statusLabel={statusInfo.label}
+        statusClassName={statusInfo.colour}
+        legalityPassed={legalityResult?.passed ?? null}
+        legalityErrorCount={errorCount}
+        hpMax={hpMax}
+        initiative={fmt(dexMod)}
+        speed={speed !== null ? `${speed} ft` : '—'}
+        passivePerception={passivePerception}
+        canEdit={canEdit}
+        canSubmit={canSubmit}
+        saving={saving}
+        submitting={submitting}
+        onSave={handleSave}
+        onSubmit={handleSubmit}
+      />
 
       {/* DM notes banner */}
       {status === 'changes_requested' && initial.dm_notes && (
@@ -275,17 +373,29 @@ export function CharacterSheet({
       {legalityResult && failedChecks.length > 0 && (
         <Card className="border-red-800 bg-red-950/30">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-red-300">Legality issues</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-1">
-            {failedChecks.map((check) => (
-              <LegalityBadge key={check.key} check={check} />
-            ))}
-          </CardContent>
-        </Card>
+          <CardTitle className="text-sm text-red-300">Legality issues</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-1">
+          {failedChecks.map((check) => (
+            <button
+              key={check.key}
+              type="button"
+              onClick={() => jumpToCheck(check.key)}
+              className="block text-left"
+            >
+              <LegalityBadge check={check} />
+            </button>
+          ))}
+        </CardContent>
+      </Card>
       )}
 
-      {/* Identity */}
+      <CollapsibleSection
+        id="identity-class"
+        title="Identity + Class"
+        subtitle="Core identity, campaign-facing selections, and level structure."
+        highlighted={highlightedSection === 'identity-class'}
+      >
       <Card className="bg-neutral-900 border-neutral-800">
         <CardHeader>
           <CardTitle className="text-neutral-200">Identity</CardTitle>
@@ -374,6 +484,18 @@ export function CharacterSheet({
             )}
           </div>
 
+          {/* Background feature */}
+          {(() => {
+            const selectedBg = backgroundList.find((b) => b.id === backgroundId) ?? initial.background
+            if (!selectedBg?.feature) return null
+            return (
+              <div className="space-y-1 col-span-2">
+                <Label className="text-neutral-300">Background Feature</Label>
+                <p className="text-sm text-neutral-400 leading-relaxed">{selectedBg.feature}</p>
+              </div>
+            )
+          })()}
+
           <div className="space-y-2">
             <Label className="text-neutral-300">Experience Points</Label>
             {canEdit ? (
@@ -391,7 +513,6 @@ export function CharacterSheet({
         </CardContent>
       </Card>
 
-      {/* Class Levels */}
       <Card className="bg-neutral-900 border-neutral-800">
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-neutral-200">Class &amp; Level</CardTitle>
@@ -435,7 +556,7 @@ export function CharacterSheet({
                       className="w-16 bg-neutral-800 border-neutral-700 text-neutral-100 text-center"
                     />
 
-                    {subclasses.length > 0 && l.level >= subclasses[0].choice_level && (
+                    {subclasses.length > 0 && l.level >= (cls?.subclass_choice_level ?? subclasses[0].choice_level) && (
                       <Select
                         value={l.subclass_id ?? 'none'}
                         onValueChange={(v) => updateLevel(i, 'subclass_id', v === 'none' ? null : v)}
@@ -476,8 +597,14 @@ export function CharacterSheet({
           <div className="text-sm text-neutral-400 pt-1">Total level: {totalLevel}</div>
         </CardContent>
       </Card>
+      </CollapsibleSection>
 
-      {/* Ability Scores */}
+      <CollapsibleSection
+        id="stats-skills"
+        title="Stats + Skills + Saves"
+        subtitle="Ability scores, saving throws, and skill choices."
+        highlighted={highlightedSection === 'stats-skills'}
+      >
       <Card className="bg-neutral-900 border-neutral-800">
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-neutral-200">Ability Scores</CardTitle>
@@ -515,51 +642,50 @@ export function CharacterSheet({
         canEdit={canEdit}
         onChange={setSkillProficiencies}
       />
+      </CollapsibleSection>
 
-      {/* Spells — only for spellcasting classes */}
-      {selectedClass?.is_spellcaster && (
-        <SpellsCard
-          classId={firstClassId}
-          campaignId={campaignId}
-          spellChoices={spellChoices}
-          canEdit={canEdit}
-          onChange={setSpellChoices}
-        />
-      )}
+      <CollapsibleSection
+        id="spells-feats"
+        title="Spells + Feats"
+        subtitle="Spell list and feat progression for the current build."
+        defaultOpen={selectedClass?.spellcasting_type != null && selectedClass.spellcasting_type !== 'none'}
+        highlighted={highlightedSection === 'spells-feats'}
+      >
+        {selectedClass?.spellcasting_type != null && selectedClass.spellcasting_type !== 'none' && (
+          <SpellsCard
+            classId={firstClassId}
+            campaignId={campaignId}
+            spellChoices={spellChoices}
+            canEdit={canEdit}
+            onChange={setSpellChoices}
+          />
+        )}
 
-      {/* Quick Stats */}
-      {(() => {
-        const mod = (base: number, racial: number) => Math.floor((base + racial - 10) / 2)
-        const profBonus = totalLevel > 0 ? Math.floor((totalLevel - 1) / 4) + 2 : 2
-        const dexMod = mod(stats.dex, racialBonuses['dex'] ?? 0)
-        const wisMod = mod(stats.wis, racialBonuses['wis'] ?? 0)
-        const perceptionProf = skillProficiencies.includes('perception')
-        const passivePerception = 10 + wisMod + (perceptionProf ? profBonus : 0)
-        const speed = selectedSpecies?.speed ?? null
-        const fmt = (n: number) => n >= 0 ? `+${n}` : `${n}`
-        return (
-          <Card className="bg-neutral-900 border-neutral-800">
-            <CardContent className="pt-4">
-              <div className="flex gap-8 flex-wrap">
-                <div>
-                  <p className="text-xs text-neutral-500 uppercase tracking-wide">Initiative</p>
-                  <p className="text-xl font-bold text-neutral-100">{fmt(dexMod)}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-neutral-500 uppercase tracking-wide">Speed</p>
-                  <p className="text-xl font-bold text-neutral-100">{speed !== null ? `${speed} ft` : '—'}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-neutral-500 uppercase tracking-wide">Passive Perception</p>
-                  <p className="text-xl font-bold text-neutral-100">{passivePerception}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )
-      })()}
+        {(() => {
+          const selectedBg = backgroundList.find((b) => b.id === backgroundId) ?? initial.background
+          const backgroundFeat = selectedBg?.background_feat_id
+            ? (featList.find((f) => f.id === selectedBg.background_feat_id) ?? null)
+            : null
+          return (
+            <FeatsCard
+              background={selectedBg ?? null}
+              backgroundFeat={backgroundFeat}
+              availableFeats={featList}
+              featChoices={featChoices}
+              totalLevel={totalLevel}
+              canEdit={canEdit}
+              onChange={setFeatChoices}
+            />
+          )
+        })()}
+      </CollapsibleSection>
 
-      {/* Hit Points */}
+      <CollapsibleSection
+        id="hp-notes"
+        title="HP + Notes"
+        subtitle="Durability, DM notes, and stat block output."
+        highlighted={highlightedSection === 'hp-notes'}
+      >
       <Card className="bg-neutral-900 border-neutral-800">
         <CardHeader>
           <CardTitle className="text-neutral-200">Hit Points</CardTitle>
@@ -614,31 +740,19 @@ export function CharacterSheet({
           classNames={levels.map((l) => classList.find((c) => c.id === l.class_id)?.name ?? '')}
           selectedClass={selectedClass}
           skillProficiencies={skillProficiencies}
+          feats={[
+            ...featChoices.map((id) => featList.find((f) => f.id === id)).filter(Boolean) as Feat[],
+            ...(() => {
+              const bg = backgroundList.find((b) => b.id === backgroundId) ?? initial.background
+              const bgFeat = bg?.background_feat_id ? featList.find((f) => f.id === bg.background_feat_id) : null
+              return bgFeat ? [bgFeat] : []
+            })(),
+          ]}
         />
       )}
+      </CollapsibleSection>
 
       <Separator className="bg-neutral-800" />
-
-      {/* Actions */}
-      {!readOnly && (
-        <div className="flex items-center gap-3 flex-wrap">
-          {canEdit && (
-            <Button onClick={handleSave} disabled={saving}>
-              {saving ? 'Saving…' : 'Save'}
-            </Button>
-          )}
-          {canSubmit && (
-            <Button
-              variant="outline"
-              onClick={handleSubmit}
-              disabled={submitting}
-              className="border-blue-700 text-blue-300 hover:bg-blue-900/30"
-            >
-              {submitting ? 'Submitting…' : 'Submit for review'}
-            </Button>
-          )}
-        </div>
-      )}
     </div>
   )
 }
