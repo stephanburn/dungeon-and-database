@@ -2,10 +2,18 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
@@ -15,8 +23,9 @@ import {
 type ContentItem = Record<string, unknown>
 type FormState = Record<string, string | number | boolean | string[]>
 
-interface ClassRow { id: string; name: string }
-interface SourceRow { key: string; full_name: string; is_srd: boolean }
+interface ClassRow { id: string; name: string; subclass_choice_level: number }
+interface SourceRow { key: string; full_name: string; is_srd: boolean; rule_set: '2014' | '2024' }
+interface FeatRow { id: string; name: string }
 
 const STAT_KEYS = ['str', 'dex', 'con', 'int', 'wis', 'cha'] as const
 const STAT_LABELS: Record<string, string> = {
@@ -32,18 +41,20 @@ const SPELLCASTING_TYPES = ['', 'full', 'half', 'third', 'pact', 'none'] as cons
 // ── Defaults & conversions ─────────────────────────────────
 
 function defaultForm(tab: string, classes: ClassRow[]): FormState {
-  if (tab === 'backgrounds') return { name: '', skill_proficiencies: '', tool_proficiencies: '', languages: '', source: '' }
+  if (tab === 'backgrounds') return { name: '', skill_proficiencies: '', skill_choice_count: 0, skill_choice_from: '', tool_proficiencies: '', languages: '', feature: '', background_feat_id: '', source: '' }
   if (tab === 'species') return { name: '', size: 'medium', speed: 30, asb_str: 0, asb_dex: 0, asb_con: 0, asb_int: 0, asb_wis: 0, asb_cha: 0, darkvision_range: 0, languages: '', source: '' }
   if (tab === 'classes') return {
     name: '', hit_die: 8, primary_ability: '',
     save_str: false, save_dex: false, save_con: false, save_int: false, save_wis: false, save_cha: false,
+    armor_proficiencies: '', weapon_proficiencies: '', tool_proficiencies: '',
+    multiclass_prereqs: '',
     skill_choice_count: 2, skill_choice_from: '',
-    spellcasting_type: '', source: '',
+    spellcasting_type: '', subclass_choice_level: 3, source: '',
   }
-  if (tab === 'subclasses') return { name: '', class_id: classes[0]?.id ?? '', choice_level: 3, source: '' }
+  if (tab === 'subclasses') return { name: '', class_id: classes[0]?.id ?? '', source: '' }
   if (tab === 'spells') return { name: '', level: 0, school: '', casting_time: '1 action', range: '', comp_verbal: false, comp_somatic: false, comp_material: false, comp_materials: '', duration: 'Instantaneous', concentration: false, ritual: false, description: '', classes: [] as string[], source: '' }
   if (tab === 'feats') return { name: '', description: '', source: '' }
-  if (tab === 'sources') return { key: '', full_name: '' }
+  if (tab === 'sources') return { key: '', full_name: '', rule_set: '2014' }
   return {}
 }
 
@@ -52,8 +63,12 @@ function itemToForm(tab: string, item: ContentItem): FormState {
     return {
       name: item.name as string,
       skill_proficiencies: ((item.skill_proficiencies as string[]) ?? []).join(', '),
+      skill_choice_count: (item.skill_choice_count as number) ?? 0,
+      skill_choice_from: ((item.skill_choice_from as string[]) ?? []).join(', '),
       tool_proficiencies: ((item.tool_proficiencies as string[]) ?? []).join(', '),
       languages: ((item.languages as string[]) ?? []).join(', '),
+      feature: (item.feature as string) ?? '',
+      background_feat_id: (item.background_feat_id as string) ?? '',
       source: item.source as string,
     }
   }
@@ -76,15 +91,23 @@ function itemToForm(tab: string, item: ContentItem): FormState {
   if (tab === 'classes') {
     const saves = (item.saving_throw_proficiencies as string[]) ?? []
     const sc = (item.skill_choices as { count: number; from: string[] }) ?? { count: 2, from: [] }
+    const prereqs = (item.multiclass_prereqs as { ability: string; min: number }[]) ?? []
     return {
       name: item.name as string,
       hit_die: item.hit_die as number,
       primary_ability: ((item.primary_ability as string[]) ?? []).join(', '),
       save_str: saves.includes('str'), save_dex: saves.includes('dex'), save_con: saves.includes('con'),
       save_int: saves.includes('int'), save_wis: saves.includes('wis'), save_cha: saves.includes('cha'),
+      armor_proficiencies: ((item.armor_proficiencies as string[]) ?? []).join(', '),
+      weapon_proficiencies: ((item.weapon_proficiencies as string[]) ?? []).join(', '),
+      tool_proficiencies: Array.isArray(item.tool_proficiencies)
+        ? (item.tool_proficiencies as string[]).join(', ')
+        : Object.keys(item.tool_proficiencies as Record<string, unknown>).join(', '),
+      multiclass_prereqs: prereqs.map((p) => `${p.ability.toUpperCase()} ${p.min}`).join(', '),
       skill_choice_count: sc.count,
       skill_choice_from: sc.from.join(', '),
       spellcasting_type: (item.spellcasting_type as string) ?? '',
+      subclass_choice_level: (item.subclass_choice_level as number) ?? 3,
       source: item.source as string,
     }
   }
@@ -92,7 +115,6 @@ function itemToForm(tab: string, item: ContentItem): FormState {
     return {
       name: item.name as string,
       class_id: item.class_id as string,
-      choice_level: item.choice_level as number,
       source: item.source as string,
     }
   }
@@ -130,14 +152,18 @@ function splitComma(val: string): string[] {
   return val.split(',').map(s => s.trim()).filter(Boolean)
 }
 
-function formToPayload(tab: string, form: FormState): ContentItem {
+function formToPayload(tab: string, form: FormState, classes: ClassRow[] = []): ContentItem {
   if (tab === 'backgrounds') {
     return {
       name: form.name,
       skill_proficiencies: splitComma(form.skill_proficiencies as string),
+      skill_choice_count: Number(form.skill_choice_count),
+      skill_choice_from: splitComma(form.skill_choice_from as string),
       tool_proficiencies: splitComma(form.tool_proficiencies as string),
       languages: splitComma(form.languages as string),
       starting_equipment: [],
+      feature: form.feature,
+      background_feat_id: (form.background_feat_id as string) || null,
       source: form.source,
     }
   }
@@ -161,27 +187,31 @@ function formToPayload(tab: string, form: FormState): ContentItem {
   }
   if (tab === 'classes') {
     const saves = STAT_KEYS.filter(k => form[`save_${k}`] as boolean)
+    const prereqs = splitComma(form.multiclass_prereqs as string)
+      .map(s => { const [ability, min] = s.trim().split(/\s+/); return { ability: ability?.toLowerCase() ?? '', min: Number(min) || 13 } })
+      .filter(p => p.ability)
     return {
       name: form.name,
       hit_die: Number(form.hit_die),
       primary_ability: splitComma(form.primary_ability as string),
       saving_throw_proficiencies: saves,
-      armor_proficiencies: [],
-      weapon_proficiencies: [],
-      tool_proficiencies: {},
+      armor_proficiencies: splitComma(form.armor_proficiencies as string),
+      weapon_proficiencies: splitComma(form.weapon_proficiencies as string),
+      tool_proficiencies: splitComma(form.tool_proficiencies as string),
       skill_choices: { count: Number(form.skill_choice_count), from: splitComma(form.skill_choice_from as string) },
-      multiclass_prereqs: [],
+      multiclass_prereqs: prereqs,
       multiclass_proficiencies: {},
       spellcasting_type: (form.spellcasting_type as string) || null,
-      is_spellcaster: !!(form.spellcasting_type && form.spellcasting_type !== 'none'),
+      subclass_choice_level: Number(form.subclass_choice_level),
       source: form.source,
     }
   }
   if (tab === 'subclasses') {
+    const parentClass = classes.find(c => c.id === form.class_id)
     return {
       name: form.name,
       class_id: form.class_id,
-      choice_level: Number(form.choice_level),
+      choice_level: parentClass?.subclass_choice_level ?? 3,
       source: form.source,
     }
   }
@@ -210,7 +240,7 @@ function formToPayload(tab: string, form: FormState): ContentItem {
     return { name: form.name, description: form.description, source: form.source }
   }
   if (tab === 'sources') {
-    return { key: form.key, full_name: form.full_name }
+    return { key: form.key, full_name: form.full_name, rule_set: form.rule_set }
   }
   return {}
 }
@@ -224,7 +254,7 @@ function renderTableHead(tab: string) {
   if (tab === 'subclasses') return <><TableHead>Name</TableHead><TableHead>Class</TableHead><TableHead>Level</TableHead><TableHead>Source</TableHead></>
   if (tab === 'spells') return <><TableHead>Name</TableHead><TableHead>Level</TableHead><TableHead>School</TableHead><TableHead>Source</TableHead></>
   if (tab === 'feats') return <><TableHead>Name</TableHead><TableHead>Source</TableHead></>
-  if (tab === 'sources') return <><TableHead>Key</TableHead><TableHead>Full Name</TableHead></>
+  if (tab === 'sources') return <><TableHead>Key</TableHead><TableHead>Full Name</TableHead><TableHead>Rule Set</TableHead></>
   return null
 }
 
@@ -234,11 +264,11 @@ function renderTableCells(tab: string, item: ContentItem, classes: ClassRow[]) {
   if (tab === 'classes') { const st = item.spellcasting_type as string | null; return <><TableCell className="font-medium">{item.name as string}</TableCell><TableCell className="text-neutral-400 text-sm">d{item.hit_die as number}</TableCell><TableCell className="text-neutral-400 text-sm">{st && st !== 'none' ? st : '—'}</TableCell><TableCell className="text-neutral-400 text-sm">{item.source as string}</TableCell></> }
   if (tab === 'subclasses') {
     const cls = classes.find(c => c.id === item.class_id)
-    return <><TableCell className="font-medium">{item.name as string}</TableCell><TableCell className="text-neutral-400 text-sm">{cls?.name ?? '—'}</TableCell><TableCell className="text-neutral-400 text-sm">{item.choice_level as number}</TableCell><TableCell className="text-neutral-400 text-sm">{item.source as string}</TableCell></>
+    return <><TableCell className="font-medium">{item.name as string}</TableCell><TableCell className="text-neutral-400 text-sm">{cls?.name ?? '—'}</TableCell><TableCell className="text-neutral-400 text-sm">{cls?.subclass_choice_level ?? '—'}</TableCell><TableCell className="text-neutral-400 text-sm">{item.source as string}</TableCell></>
   }
   if (tab === 'spells') return <><TableCell className="font-medium">{item.name as string}</TableCell><TableCell className="text-neutral-400 text-sm">{LEVEL_LABELS[item.level as number]}</TableCell><TableCell className="text-neutral-400 text-sm">{item.school as string}</TableCell><TableCell className="text-neutral-400 text-sm">{item.source as string}</TableCell></>
   if (tab === 'feats') return <><TableCell className="font-medium">{item.name as string}</TableCell><TableCell className="text-neutral-400 text-sm">{item.source as string}</TableCell></>
-  if (tab === 'sources') return <><TableCell className="font-medium font-mono">{item.key as string}</TableCell><TableCell className="text-neutral-400 text-sm">{item.full_name as string}</TableCell></>
+  if (tab === 'sources') return <><TableCell className="font-medium font-mono">{item.key as string}</TableCell><TableCell className="text-neutral-400 text-sm">{item.full_name as string}</TableCell><TableCell className="text-neutral-400 text-sm">{item.rule_set as string}</TableCell></>
   return null
 }
 
@@ -250,29 +280,36 @@ interface FormProps {
   setField: (key: string, value: string | number | boolean | string[]) => void
   classes: ClassRow[]
   sources: SourceRow[]
+  feats: FeatRow[]
+  autoFocusFirst?: boolean
 }
 
-function ContentForm({ tab, form, setField, classes, sources }: FormProps) {
-  const field = (label: string, key: string, type: 'text' | 'number' = 'text', placeholder?: string) => (
-    <div>
-      <Label className="text-neutral-400 text-xs mb-1 block">{label}</Label>
-      <Input
-        type={type}
-        value={form[key] as string | number}
-        onChange={e => setField(key, type === 'number' ? Number(e.target.value) : e.target.value)}
-        placeholder={placeholder}
-        className="bg-neutral-800 border-neutral-700 text-neutral-100"
-      />
-    </div>
-  )
+function ContentForm({ tab, form, setField, classes, sources, feats, autoFocusFirst }: FormProps) {
+  let firstFieldRendered = false
+
+  const field = (label: string, key: string, type: 'text' | 'number' = 'text', placeholder?: string) => {
+    const isFirst = !firstFieldRendered
+    if (isFirst) firstFieldRendered = true
+    return (
+      <div>
+        <Label className="text-neutral-400 text-xs mb-1 block">{label}</Label>
+        <Input
+          type={type}
+          value={form[key] as string | number}
+          onChange={e => setField(key, type === 'number' ? Number(e.target.value) : e.target.value)}
+          placeholder={placeholder}
+          className="bg-neutral-800 border-neutral-700 text-neutral-100"
+          autoFocus={isFirst && autoFocusFirst}
+        />
+      </div>
+    )
+  }
 
   const check = (label: string, key: string) => (
     <label className="flex items-center gap-2 text-sm text-neutral-300 cursor-pointer">
-      <input
-        type="checkbox"
+      <Checkbox
         checked={form[key] as boolean}
         onChange={e => setField(key, e.target.checked)}
-        className="accent-blue-500"
       />
       {label}
     </label>
@@ -281,26 +318,68 @@ function ContentForm({ tab, form, setField, classes, sources }: FormProps) {
   const sourceSelect = (
     <div>
       <Label className="text-neutral-400 text-xs mb-1 block">Source</Label>
-      <select
-        value={form.source as string}
-        onChange={e => setField('source', e.target.value)}
-        className="w-full bg-neutral-800 border border-neutral-700 text-neutral-100 rounded-md px-3 py-2 text-sm"
-      >
-        <option value="">— select source —</option>
-        {sources.map(s => (
-          <option key={s.key} value={s.key}>{s.full_name} ({s.key})</option>
-        ))}
-      </select>
+      <Select value={(form.source as string) || 'none'} onValueChange={value => setField('source', value === 'none' ? '' : value)}>
+        <SelectTrigger className="bg-neutral-800 border-neutral-700 text-neutral-100">
+          <SelectValue placeholder="Select source" />
+        </SelectTrigger>
+        <SelectContent className="bg-neutral-800 border-neutral-700">
+          <SelectItem value="none" className="text-neutral-400">Select source</SelectItem>
+          {sources.map(s => (
+            <SelectItem key={s.key} value={s.key} className="text-neutral-200">
+              {s.full_name} ({s.key})
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     </div>
   )
 
   if (tab === 'backgrounds') return (
-    <div className="grid grid-cols-2 gap-4">
-      {field('Name', 'name')}
-      {sourceSelect}
-      {field('Skill Proficiencies (comma-separated)', 'skill_proficiencies', 'text', 'Insight, Religion')}
-      {field('Tool Proficiencies (comma-separated)', 'tool_proficiencies', 'text', 'Thieves\' Tools')}
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-4">
+        {field('Name', 'name')}
+        {sourceSelect}
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        {field('Fixed Skill Proficiencies (comma-separated)', 'skill_proficiencies', 'text', 'Insight, Religion')}
+        {field('Tool Proficiencies (comma-separated)', 'tool_proficiencies', 'text', "Thieves' Tools")}
+      </div>
+      <div className="grid grid-cols-3 gap-4">
+        {field('Skill Choices (count)', 'skill_choice_count', 'number')}
+        <div className="col-span-2">
+          {field('Choose From (comma-separated)', 'skill_choice_from', 'text', 'Athletics, Insight, Stealth')}
+        </div>
+      </div>
       {field('Languages (comma-separated)', 'languages', 'text', 'Any two languages')}
+      <div>
+        <Label className="text-neutral-400 text-xs mb-1 block">Feature</Label>
+        <Textarea
+          value={form.feature as string}
+          onChange={e => setField('feature', e.target.value)}
+          rows={2}
+          placeholder="Shelter of the Faithful"
+          className="bg-neutral-800 border-neutral-700 text-neutral-100"
+        />
+      </div>
+        <div>
+          <Label className="text-neutral-400 text-xs mb-1 block">Background Feat (optional)</Label>
+        <Select
+          value={(form.background_feat_id as string) || 'none'}
+          onValueChange={value => setField('background_feat_id', value === 'none' ? '' : value)}
+        >
+          <SelectTrigger className="bg-neutral-800 border-neutral-700 text-neutral-100">
+            <SelectValue placeholder="No background feat" />
+          </SelectTrigger>
+          <SelectContent className="bg-neutral-800 border-neutral-700">
+            <SelectItem value="none" className="text-neutral-400">No background feat</SelectItem>
+            {feats.map(f => (
+              <SelectItem key={f.id} value={f.id} className="text-neutral-200">
+                {f.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
     </div>
   )
 
@@ -313,13 +392,18 @@ function ContentForm({ tab, form, setField, classes, sources }: FormProps) {
       <div className="grid grid-cols-3 gap-4">
         <div>
           <Label className="text-neutral-400 text-xs mb-1 block">Size</Label>
-          <select
-            value={form.size as string}
-            onChange={e => setField('size', e.target.value)}
-            className="w-full bg-neutral-800 border border-neutral-700 text-neutral-100 rounded-md px-3 py-2 text-sm"
-          >
-            {['tiny','small','medium','large'].map(s => <option key={s} value={s}>{s}</option>)}
-          </select>
+          <Select value={form.size as string} onValueChange={value => setField('size', value)}>
+            <SelectTrigger className="bg-neutral-800 border-neutral-700 text-neutral-100">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="bg-neutral-800 border-neutral-700">
+              {['tiny', 'small', 'medium', 'large'].map(s => (
+                <SelectItem key={s} value={s} className="capitalize text-neutral-200">
+                  {s}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
         {field('Speed (ft)', 'speed', 'number')}
         {field('Darkvision (ft, 0 = none)', 'darkvision_range', 'number')}
@@ -353,25 +437,40 @@ function ContentForm({ tab, form, setField, classes, sources }: FormProps) {
       <div className="grid grid-cols-3 gap-4">
         <div>
           <Label className="text-neutral-400 text-xs mb-1 block">Hit Die</Label>
-          <select
-            value={form.hit_die as number}
-            onChange={e => setField('hit_die', Number(e.target.value))}
-            className="w-full bg-neutral-800 border border-neutral-700 text-neutral-100 rounded-md px-3 py-2 text-sm"
-          >
-            {HIT_DICE.map(d => <option key={d} value={d}>d{d}</option>)}
-          </select>
+          <Select value={String(form.hit_die as number)} onValueChange={value => setField('hit_die', Number(value))}>
+            <SelectTrigger className="bg-neutral-800 border-neutral-700 text-neutral-100">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="bg-neutral-800 border-neutral-700">
+              {HIT_DICE.map(d => (
+                <SelectItem key={d} value={String(d)} className="text-neutral-200">
+                  d{d}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
         {field('Primary Ability (comma-separated)', 'primary_ability', 'text', 'INT')}
         <div>
           <Label className="text-neutral-400 text-xs mb-1 block">Spellcasting Type</Label>
-          <select
-            value={form.spellcasting_type as string}
-            onChange={e => setField('spellcasting_type', e.target.value)}
-            className="w-full bg-neutral-800 border border-neutral-700 text-neutral-100 rounded-md px-3 py-2 text-sm"
+          <Select
+            value={(form.spellcasting_type as string) || 'none'}
+            onValueChange={value => setField('spellcasting_type', value === 'none' ? '' : value)}
           >
-            {SPELLCASTING_TYPES.map(t => <option key={t} value={t}>{t || '— none —'}</option>)}
-          </select>
+            <SelectTrigger className="bg-neutral-800 border-neutral-700 text-neutral-100">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="bg-neutral-800 border-neutral-700">
+              <SelectItem value="none" className="text-neutral-400">None</SelectItem>
+              {SPELLCASTING_TYPES.filter(Boolean).map(t => (
+                <SelectItem key={t} value={t} className="capitalize text-neutral-200">
+                  {t}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
+        {field('Subclass Choice Level', 'subclass_choice_level', 'number')}
       </div>
       <div>
         <Label className="text-neutral-400 text-xs mb-2 block">Saving Throw Proficiencies</Label>
@@ -379,9 +478,15 @@ function ContentForm({ tab, form, setField, classes, sources }: FormProps) {
           {STAT_KEYS.map(k => check(STAT_LABELS[k], `save_${k}`))}
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-3 gap-4">
+        {field('Armor Proficiencies', 'armor_proficiencies', 'text', 'Light, Medium, Shields')}
+        {field('Weapon Proficiencies', 'weapon_proficiencies', 'text', 'Simple, Martial')}
+        {field('Tool Proficiencies', 'tool_proficiencies', 'text', "Thieves' Tools")}
+      </div>
+      <div className="grid grid-cols-3 gap-4">
         {field('Skill Choices (count)', 'skill_choice_count', 'number')}
         {field('Choose From (comma-separated)', 'skill_choice_from', 'text', 'Arcana, History, Insight')}
+        {field('Multiclass Prereqs', 'multiclass_prereqs', 'text', 'STR 13')}
       </div>
     </div>
   )
@@ -392,15 +497,26 @@ function ContentForm({ tab, form, setField, classes, sources }: FormProps) {
       {sourceSelect}
       <div>
         <Label className="text-neutral-400 text-xs mb-1 block">Class</Label>
-        <select
-          value={form.class_id as string}
-          onChange={e => setField('class_id', e.target.value)}
-          className="w-full bg-neutral-800 border border-neutral-700 text-neutral-100 rounded-md px-3 py-2 text-sm"
-        >
-          {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
+        <Select value={form.class_id as string} onValueChange={value => setField('class_id', value)}>
+          <SelectTrigger className="bg-neutral-800 border-neutral-700 text-neutral-100">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent className="bg-neutral-800 border-neutral-700">
+            {classes.map(c => (
+              <SelectItem key={c.id} value={c.id} className="text-neutral-200">
+                {c.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
-      {field('Choice Level', 'choice_level', 'number')}
+      <div>
+        <Label className="text-neutral-400 text-xs mb-1 block">Choice Level</Label>
+        <p className="text-neutral-400 text-sm py-2">
+          {classes.find(c => c.id === form.class_id)?.subclass_choice_level ?? '—'}
+          <span className="text-neutral-600 ml-2">(set on the class)</span>
+        </p>
+      </div>
     </div>
   )
 
@@ -413,13 +529,18 @@ function ContentForm({ tab, form, setField, classes, sources }: FormProps) {
       <div className="grid grid-cols-4 gap-4">
         <div>
           <Label className="text-neutral-400 text-xs mb-1 block">Level</Label>
-          <select
-            value={form.level as number}
-            onChange={e => setField('level', Number(e.target.value))}
-            className="w-full bg-neutral-800 border border-neutral-700 text-neutral-100 rounded-md px-3 py-2 text-sm"
-          >
-            {Object.entries(LEVEL_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-          </select>
+          <Select value={String(form.level as number)} onValueChange={value => setField('level', Number(value))}>
+            <SelectTrigger className="bg-neutral-800 border-neutral-700 text-neutral-100">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="bg-neutral-800 border-neutral-700">
+              {Object.entries(LEVEL_LABELS).map(([v, l]) => (
+                <SelectItem key={v} value={v} className="text-neutral-200">
+                  {l}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
         {field('School', 'school', 'text', 'Evocation')}
         {field('Casting Time', 'casting_time', 'text', '1 action')}
@@ -457,14 +578,12 @@ function ContentForm({ tab, form, setField, classes, sources }: FormProps) {
             const selected = (form.classes as string[]).includes(cls.id)
             return (
               <label key={cls.id} className="flex items-center gap-1.5 text-sm text-neutral-300 cursor-pointer">
-                <input
-                  type="checkbox"
+                <Checkbox
                   checked={selected}
                   onChange={e => {
                     const current = form.classes as string[]
                     setField('classes', e.target.checked ? [...current, cls.id] : current.filter(id => id !== cls.id))
                   }}
-                  className="accent-blue-500"
                 />
                 {cls.name}
               </label>
@@ -494,9 +613,21 @@ function ContentForm({ tab, form, setField, classes, sources }: FormProps) {
   )
 
   if (tab === 'sources') return (
-    <div className="grid grid-cols-2 gap-4">
+    <div className="grid grid-cols-3 gap-4">
       {field('Key (abbreviation)', 'key', 'text', 'XGtE')}
       {field('Full Name', 'full_name', 'text', "Xanathar's Guide to Everything")}
+      <div>
+        <Label className="text-neutral-400 text-xs mb-1 block">Rule Set</Label>
+        <Select value={form.rule_set as string} onValueChange={value => setField('rule_set', value)}>
+          <SelectTrigger className="bg-neutral-800 border-neutral-700 text-neutral-100">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent className="bg-neutral-800 border-neutral-700">
+            <SelectItem value="2014" className="text-neutral-200">2014</SelectItem>
+            <SelectItem value="2024" className="text-neutral-200">2024</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
     </div>
   )
 
@@ -513,6 +644,7 @@ export default function ContentAdmin() {
   const [items, setItems] = useState<ContentItem[]>([])
   const [classes, setClasses] = useState<ClassRow[]>([])
   const [sources, setSources] = useState<SourceRow[]>([])
+  const [feats, setFeats] = useState<FeatRow[]>([])
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [form, setForm] = useState<FormState>({})
@@ -537,10 +669,15 @@ export default function ContentAdmin() {
     fetch('/api/content/sources').then(r => r.json()).then(d => setSources(Array.isArray(d) ? d : []))
   }, [])
 
+  const fetchFeats = useCallback(() => {
+    fetch('/api/content/feats').then(r => r.json()).then(d => setFeats(Array.isArray(d) ? d : []))
+  }, [])
+
   useEffect(() => {
     fetchClasses()
     fetchSources()
-  }, [fetchClasses, fetchSources])
+    fetchFeats()
+  }, [fetchClasses, fetchSources, fetchFeats])
 
   useEffect(() => {
     fetchItems(activeTab)
@@ -577,7 +714,7 @@ export default function ContentAdmin() {
     setSaving(true)
     setError(null)
     try {
-      const payload = formToPayload(activeTab, form)
+      const payload = formToPayload(activeTab, form, classes)
       const url = apiUrl(activeTab)
       if (editingId) {
         payload.id = editingId
@@ -590,6 +727,7 @@ export default function ContentAdmin() {
       await fetchItems(activeTab)
       if (activeTab === 'classes') fetchClasses()
       if (activeTab === 'sources') fetchSources()
+      if (activeTab === 'feats') fetchFeats()
       cancel()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Save failed')
@@ -606,6 +744,7 @@ export default function ContentAdmin() {
       await fetchItems(activeTab)
       if (activeTab === 'classes') fetchClasses()
       if (activeTab === 'sources') fetchSources()
+      if (activeTab === 'feats') fetchFeats()
       if (editingId === itemKey) cancel()
     } else {
       const json = await res.json().catch(() => ({}))
@@ -635,7 +774,7 @@ export default function ContentAdmin() {
               <h3 className="text-sm font-semibold text-neutral-300">
                 {editingId ? 'Edit' : 'Add'} {tab === 'classes' ? 'class' : tab.slice(0, -1)}
               </h3>
-              <ContentForm tab={tab} form={form} setField={setField} classes={classes} sources={sources} />
+              <ContentForm tab={tab} form={form} setField={setField} classes={classes} sources={sources} feats={feats} autoFocusFirst={!editingId} />
               {error && <p className="text-red-400 text-sm">{error}</p>}
               <div className="flex gap-2">
                 <Button size="sm" onClick={save} disabled={saving}>

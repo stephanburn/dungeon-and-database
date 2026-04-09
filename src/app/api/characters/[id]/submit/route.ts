@@ -4,6 +4,11 @@ import { buildLegalityInput } from '@/lib/legality/build-input'
 import { runLegalityChecks } from '@/lib/legality/engine'
 import { captureSnapshot } from '@/lib/snapshots'
 
+/**
+ * Player transition: draft|changes_requested -> submitted.
+ * Legality is returned to the client for review but does not block the
+ * transition in the current advisory-only model.
+ */
 export async function POST(
   _request: NextRequest,
   { params }: { params: { id: string } }

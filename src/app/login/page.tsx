@@ -14,7 +14,7 @@ type State = 'idle' | 'loading' | 'sent' | 'reset-sent' | 'error'
 
 export default function LoginPage() {
   const router = useRouter()
-  const [mode, setMode] = useState<Mode>('password')
+  const [mode, setMode] = useState<Mode>('magic')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [state, setState] = useState<State>('idle')
@@ -66,27 +66,13 @@ export default function LoginPage() {
       <Card className="w-full max-w-sm bg-neutral-900 border-neutral-800">
         <CardHeader className="space-y-1">
           <CardTitle className="text-2xl text-neutral-100">Dungeon &amp; Database</CardTitle>
-          <CardDescription className="text-neutral-400">Sign in to continue.</CardDescription>
+          <CardDescription className="text-neutral-400">
+            {mode === 'magic'
+              ? 'Enter your email and we’ll send you a sign-in link.'
+              : 'Use your email and password to sign in directly.'}
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Mode toggle */}
-          <div className="flex rounded-md overflow-hidden border border-neutral-700 text-sm">
-            <button
-              type="button"
-              onClick={() => switchMode('password')}
-              className={`flex-1 py-1.5 transition-colors ${mode === 'password' ? 'bg-neutral-700 text-neutral-100' : 'text-neutral-400 hover:text-neutral-200'}`}
-            >
-              Password
-            </button>
-            <button
-              type="button"
-              onClick={() => switchMode('magic')}
-              className={`flex-1 py-1.5 transition-colors ${mode === 'magic' ? 'bg-neutral-700 text-neutral-100' : 'text-neutral-400 hover:text-neutral-200'}`}
-            >
-              Magic link
-            </button>
-          </div>
-
           {state === 'sent' && (
             <Alert className="border-neutral-700 bg-neutral-800">
               <AlertDescription className="text-neutral-200">
@@ -123,6 +109,14 @@ export default function LoginPage() {
               <Button type="submit" className="w-full" disabled={state === 'loading'}>
                 {state === 'loading' ? 'Sending…' : 'Send magic link'}
               </Button>
+              <button
+                type="button"
+                onClick={() => switchMode('password')}
+                disabled={state === 'loading'}
+                className="w-full text-xs text-neutral-500 hover:text-neutral-300 transition-colors"
+              >
+                Use password instead
+              </button>
             </form>
           )}
 
@@ -165,6 +159,14 @@ export default function LoginPage() {
                 className="w-full text-xs text-neutral-500 hover:text-neutral-300 transition-colors"
               >
                 Forgot password / set a password for the first time
+              </button>
+              <button
+                type="button"
+                onClick={() => switchMode('magic')}
+                disabled={state === 'loading'}
+                className="w-full text-xs text-neutral-500 hover:text-neutral-300 transition-colors"
+              >
+                Use magic link instead
               </button>
             </form>
           )}

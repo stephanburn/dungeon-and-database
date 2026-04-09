@@ -7,6 +7,10 @@ const schema = z.object({
   notes: z.string().min(1, 'Notes are required when requesting changes.'),
 })
 
+/**
+ * DM transition: submitted -> changes_requested.
+ * The DM must both own the campaign and provide notes for the player.
+ */
 export async function POST(
   request: NextRequest,
   { params }: { params: { id: string } }

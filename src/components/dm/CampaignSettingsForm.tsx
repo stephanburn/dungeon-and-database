@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Select,
   SelectContent,
@@ -26,6 +27,7 @@ export function CampaignSettingsForm({ campaign }: CampaignSettingsFormProps) {
 
   const settings = campaign.settings as CampaignSettings
   const [name, setName] = useState(campaign.name)
+  const [ruleSet, setRuleSet] = useState(campaign.rule_set ?? '2014')
   const [statMethod, setStatMethod] = useState(settings.stat_method)
   const [maxLevel, setMaxLevel] = useState(settings.max_level)
   const [milestoneLevelling, setMilestoneLevelling] = useState(settings.milestone_levelling)
@@ -39,6 +41,7 @@ export function CampaignSettingsForm({ campaign }: CampaignSettingsFormProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name,
+          rule_set: ruleSet,
           settings: { stat_method: statMethod, max_level: maxLevel, milestone_levelling: milestoneLevelling },
         }),
       })
@@ -70,6 +73,19 @@ export function CampaignSettingsForm({ campaign }: CampaignSettingsFormProps) {
         </div>
 
         <div className="space-y-2">
+          <Label className="text-neutral-300">Rule Set</Label>
+          <Select value={ruleSet} onValueChange={(v) => setRuleSet(v as '2014' | '2024')}>
+            <SelectTrigger className="bg-neutral-800 border-neutral-700 text-neutral-100">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="bg-neutral-800 border-neutral-700">
+              <SelectItem value="2014" className="text-neutral-200">D&amp;D 5e 2014</SelectItem>
+              <SelectItem value="2024" className="text-neutral-200">D&amp;D 5e 2024</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-2">
           <Label className="text-neutral-300">Stat Generation Method</Label>
           <Select value={statMethod} onValueChange={(v) => setStatMethod(v as CampaignSettings['stat_method'])}>
             <SelectTrigger className="bg-neutral-800 border-neutral-700 text-neutral-100">
@@ -96,12 +112,10 @@ export function CampaignSettingsForm({ campaign }: CampaignSettingsFormProps) {
         </div>
 
         <div className="flex items-center gap-3">
-          <input
-            type="checkbox"
+          <Checkbox
             id="milestone"
             checked={milestoneLevelling}
             onChange={(e) => setMilestoneLevelling(e.target.checked)}
-            className="w-4 h-4 rounded accent-blue-500"
           />
           <Label htmlFor="milestone" className="text-neutral-300 cursor-pointer">
             Milestone levelling (ignore experience points)

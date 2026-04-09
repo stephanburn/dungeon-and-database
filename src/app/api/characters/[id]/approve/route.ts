@@ -3,6 +3,11 @@ import { requireDm, jsonError } from '@/lib/api-helpers'
 import { assertCharacterInDmCampaign } from '@/lib/auth/ownership'
 import { captureSnapshot } from '@/lib/snapshots'
 
+/**
+ * DM transition: submitted -> approved.
+ * Ownership is checked explicitly so one DM cannot approve another DM's
+ * campaign character even if they both have the DM role.
+ */
 export async function POST(
   _request: NextRequest,
   { params }: { params: { id: string } }

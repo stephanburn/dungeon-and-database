@@ -121,6 +121,11 @@ export function CharacterSheet({
   readOnly = false,
   isDm = false,
 }: CharacterSheetProps) {
+  /**
+   * CharacterSheet is the client-side orchestrator for the editable sheet.
+   * It loads campaign-filtered content, keeps the multi-card form state in one
+   * place, and coordinates the save/submit loop with legality feedback.
+   */
   const router = useRouter()
   const { toast } = useToast()
 

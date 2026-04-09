@@ -1,5 +1,6 @@
 'use client'
 
+import { Circle, Disc, Lock } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { SKILLS, SAVING_THROW_NAMES, normalizeSkillKey } from '@/lib/skills'
 import type { AbilityKey, SkillKey } from '@/lib/skills'
@@ -15,7 +16,7 @@ interface SkillsCardProps {
   totalLevel: number
   selectedClass: Class | null
   background: Background | null
-  // Class-chosen skill proficiencies (canonical keys)
+  // All actively-chosen skill proficiencies (class + background choices combined)
   skillProficiencies: string[]
   canEdit: boolean
   onChange: (skills: string[]) => void
@@ -25,38 +26,70 @@ function mod(score: number) { return Math.floor((score - 10) / 2) }
 function profBonus(level: number) { return Math.floor((Math.max(level, 1) - 1) / 4) + 2 }
 function fmtMod(n: number) { return n >= 0 ? `+${n}` : `${n}` }
 
+function SkillStateIcon({
+  proficient,
+  locked,
+}: {
+  proficient: boolean
+  locked: boolean
+}) {
+  if (locked) return <Lock className="h-3.5 w-3.5 text-blue-400" />
+  if (proficient) return <Disc className="h-3.5 w-3.5 fill-current text-green-400" />
+  return <Circle className="h-3.5 w-3.5 text-neutral-500" />
+}
+
 export function SkillsCard({
   stats, totalLevel, selectedClass, background,
   skillProficiencies, canEdit, onChange,
 }: SkillsCardProps) {
   const pb = profBonus(totalLevel)
 
-  // Background skills (auto-granted, locked)
-  const bgSkills = new Set(
+  // Background: auto-granted (locked)
+  const bgAutoSkills = new Set(
     (background?.skill_proficiencies ?? []).map((s) => normalizeSkillKey(s))
   )
 
+  // Background: choosable pool
+  const bgChoiceFrom = new Set(
+    (background?.skill_choice_from ?? []).map((s) => normalizeSkillKey(s))
+  )
+  const bgChoiceCount = background?.skill_choice_count ?? 0
+
   // Class skill choices config
   const rawChoices = selectedClass?.skill_choices as { count?: number; from?: string[] } | null
-  const choiceCount = rawChoices?.count ?? 0
-  const choiceFrom = new Set((rawChoices?.from ?? []).map(normalizeSkillKey))
+  const classChoiceCount = rawChoices?.count ?? 0
+  const classChoiceFrom = new Set((rawChoices?.from ?? []).map(normalizeSkillKey))
 
-  // Class-chosen skills (what player has picked, excluding bg auto-grants)
-  const chosen = new Set(skillProficiencies.filter((s) => !bgSkills.has(s as SkillKey)))
+  // All actively chosen (excludes auto-granted)
+  const allChosen = new Set(skillProficiencies.filter((s) => !bgAutoSkills.has(s as SkillKey)))
 
-  // All proficient skills = bg + class-chosen
-  function isProficient(key: SkillKey) { return bgSkills.has(key) || chosen.has(key) }
+  // Count bg-chosen: in bgChoiceFrom, NOT in classChoiceFrom (class takes priority on overlap)
+  const allChosenArr = Array.from(allChosen)
+  const bgChosen = new Set(allChosenArr.filter((s) => bgChoiceFrom.has(s as SkillKey) && !classChoiceFrom.has(s as SkillKey)))
+  const classChosen = new Set(allChosenArr.filter((s) => classChoiceFrom.has(s as SkillKey)))
+
+  function isProficient(key: SkillKey) {
+    return bgAutoSkills.has(key) || allChosen.has(key)
+  }
 
   function toggleSkill(key: SkillKey) {
     if (!canEdit) return
-    if (bgSkills.has(key)) return // can't toggle bg skills
-    if (!choiceFrom.has(key) && !chosen.has(key)) return // not available to this class
+    if (bgAutoSkills.has(key)) return // auto-granted, locked
 
-    const next = new Set(chosen)
-    if (next.has(key)) {
+    const isInClassPool = classChoiceFrom.has(key)
+    const isInBgPool = bgChoiceFrom.has(key)
+
+    if (!isInClassPool && !isInBgPool) return // not available
+
+    const isChosen = allChosen.has(key)
+    const next = new Set(allChosen)
+
+    if (isChosen) {
       next.delete(key)
     } else {
-      if (next.size >= choiceCount) return // at limit
+      const canAddClass = isInClassPool && classChosen.size < classChoiceCount
+      const canAddBg = isInBgPool && !isInClassPool && bgChosen.size < bgChoiceCount
+      if (!canAddClass && !canAddBg) return // at limit for both applicable pools
       next.add(key)
     }
     onChange(Array.from(next))
@@ -68,6 +101,11 @@ export function SkillsCard({
   )
 
   const abilities: AbilityKey[] = ['str', 'dex', 'con', 'int', 'wis', 'cha']
+
+  const choiceCountLabel = [
+    classChoiceCount > 0 ? `${classChosen.size}/${classChoiceCount} class` : null,
+    bgChoiceCount > 0 ? `${bgChosen.size}/${bgChoiceCount} background` : null,
+  ].filter(Boolean).join(' · ')
 
   return (
     <Card className="bg-neutral-900 border-neutral-800">
@@ -100,10 +138,8 @@ export function SkillsCard({
         <div>
           <div className="flex items-center justify-between mb-2">
             <p className="text-xs font-semibold text-neutral-400 uppercase tracking-wide">Skills</p>
-            {canEdit && choiceCount > 0 && (
-              <p className="text-xs text-neutral-500">
-                {chosen.size}/{choiceCount} class skill{choiceCount !== 1 ? 's' : ''} chosen
-              </p>
+            {canEdit && choiceCountLabel && (
+              <p className="text-xs text-neutral-500">{choiceCountLabel}</p>
             )}
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
@@ -111,34 +147,44 @@ export function SkillsCard({
               const proficient = isProficient(skill.key)
               const abilityMod = mod(stats[skill.ability])
               const modifier = abilityMod + (proficient ? pb : 0)
-              const fromBg = bgSkills.has(skill.key)
-              const isChoosable = canEdit && choiceFrom.has(skill.key) && !fromBg
-              const isChosen = chosen.has(skill.key)
-              const atLimit = chosen.size >= choiceCount && !isChosen
+              const fromBgAuto = bgAutoSkills.has(skill.key)
+              const fromBgChoice = bgChosen.has(skill.key)
+              const fromClassChoice = classChosen.has(skill.key)
 
-              const isEligible = isChoosable && !(atLimit && !isChosen)
+              const isClassChoosable = canEdit && classChoiceFrom.has(skill.key) && !fromBgAuto
+              const isBgChoosable = canEdit && bgChoiceFrom.has(skill.key) && !classChoiceFrom.has(skill.key) && !fromBgAuto
+              const isChoosable = isClassChoosable || isBgChoosable
+
+              const atClassLimit = classChosen.size >= classChoiceCount && !fromClassChoice
+              const atBgLimit = bgChosen.size >= bgChoiceCount && !fromBgChoice
+              const atLimit = (isClassChoosable && atClassLimit) && (!isBgChoosable || atBgLimit)
+
+              const isEligible = isChoosable && !atLimit
 
               return (
                 <button
                   key={skill.key}
                   type="button"
                   onClick={() => toggleSkill(skill.key)}
-                  disabled={!isChoosable || (atLimit && !isChosen)}
+                  disabled={!isChoosable || (atLimit && !proficient)}
                   className={`flex items-center gap-2 text-sm text-left rounded px-1 py-0.5 w-full transition-colors
                     ${isEligible
                       ? 'hover:bg-neutral-800 cursor-pointer ring-1 ring-neutral-700'
                       : 'cursor-default'}
                   `}
                 >
-                  <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                    proficient
-                      ? fromBg ? 'bg-blue-400' : 'bg-green-400'
-                      : isEligible ? 'bg-neutral-500' : 'bg-neutral-700'
-                  }`} />
+                  <span className="flex-shrink-0">
+                    <SkillStateIcon proficient={proficient} locked={fromBgAuto} />
+                  </span>
                   <span className="text-neutral-400 w-6 font-mono text-xs">{fmtMod(modifier)}</span>
                   <span className={proficient ? 'text-neutral-200' : isEligible ? 'text-neutral-400' : 'text-neutral-600'}>
                     {skill.name}
                   </span>
+                  {fromBgChoice && (
+                    <span className="rounded-full border border-amber-700 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-amber-300">
+                      BG
+                    </span>
+                  )}
                   <span className="text-neutral-600 text-xs ml-auto">{skill.ability.toUpperCase()}</span>
                 </button>
               )
@@ -146,7 +192,7 @@ export function SkillsCard({
           </div>
           {canEdit && (
             <p className="text-xs text-neutral-500 mt-2">
-              Outlined rows are available to choose — click to select. Green dot = class choice · Blue dot = background (locked)
+              Filled = selected · Lock = fixed by background · BG = chosen from background options
             </p>
           )}
         </div>
