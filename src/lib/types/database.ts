@@ -2,7 +2,7 @@
 // Database types — hand-written to match 001_initial_schema.sql
 // ============================================================
 
-export type UserRole = 'player' | 'dm'
+export type UserRole = 'player' | 'dm' | 'admin'
 export type RuleSet = '2014' | '2024'
 export type CharacterStatus = 'draft' | 'submitted' | 'approved' | 'changes_requested'
 export type StatMethod = 'point_buy' | 'standard_array' | 'rolled'

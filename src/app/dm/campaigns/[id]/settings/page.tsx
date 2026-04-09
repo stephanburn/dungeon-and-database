@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { hasDmAccess } from '@/lib/auth/roles'
 import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
@@ -17,7 +18,7 @@ export default async function CampaignSettingsPage({ params }: { params: { id: s
     .eq('id', user.id)
     .single()
 
-  if (profile?.role !== 'dm') redirect('/')
+  if (!hasDmAccess(profile?.role)) redirect('/')
 
   const [campaignResult, allowlistResult] = await Promise.all([
     supabase.from('campaigns').select('*').eq('id', params.id).single(),

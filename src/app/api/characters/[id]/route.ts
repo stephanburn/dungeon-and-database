@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { requireAuth, jsonError } from '@/lib/api-helpers'
+import { hasDmAccess } from '@/lib/auth/roles'
 import { buildLegalityInput } from '@/lib/legality/build-input'
 import { runLegalityChecks } from '@/lib/legality/engine'
 import { captureSnapshot } from '@/lib/snapshots'
@@ -82,7 +83,7 @@ export async function PUT(
     .single()
 
   if (!existing) return jsonError('Character not found', 404)
-  if (profile.role !== 'dm' && existing.user_id !== profile.id) {
+  if (!hasDmAccess(profile.role) && existing.user_id !== profile.id) {
     return jsonError('Forbidden', 403)
   }
 
@@ -93,7 +94,7 @@ export async function PUT(
   const { levels, stat_rolls, skill_proficiencies, spell_choices, feat_choices, character_type, dm_notes, ...characterFields } = parsed.data
 
   // DM-only fields
-  if (profile.role === 'dm') {
+  if (hasDmAccess(profile.role)) {
     if (character_type !== undefined) (characterFields as Record<string, unknown>).character_type = character_type
     if (dm_notes !== undefined) (characterFields as Record<string, unknown>).dm_notes = dm_notes
   }
@@ -221,7 +222,7 @@ export async function DELETE(
     .single()
 
   if (!existing) return jsonError('Character not found', 404)
-  if (profile.role !== 'dm' && existing.user_id !== profile.id) {
+  if (!hasDmAccess(profile.role) && existing.user_id !== profile.id) {
     return jsonError('Forbidden', 403)
   }
 

@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { isAdminRole } from '@/lib/auth/roles'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import ContentAdmin from '@/components/dm/ContentAdmin'
@@ -14,7 +15,7 @@ export default async function DmContentPage() {
     .eq('id', user.id)
     .single()
 
-  if (profile?.role !== 'dm') redirect('/')
+  if (!isAdminRole(profile?.role)) redirect('/dm/dashboard')
 
   return (
     <div className="min-h-screen bg-neutral-950 p-6">

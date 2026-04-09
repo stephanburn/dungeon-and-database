@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server'
-import { requireAuth, requireDm, jsonError } from '@/lib/api-helpers'
+import { requireAuth, requireAdmin, jsonError } from '@/lib/api-helpers'
 import { getAllowedSources } from '@/lib/content-helpers'
 
 export async function GET(request: NextRequest) {
@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const auth = await requireDm()
+  const auth = await requireAdmin()
   if (auth instanceof NextResponse) return auth
   const { supabase } = auth
 
@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
-  const auth = await requireDm()
+  const auth = await requireAdmin()
   if (auth instanceof NextResponse) return auth
   const { supabase } = auth
 
@@ -72,7 +72,7 @@ export async function PUT(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const auth = await requireDm()
+  const auth = await requireAdmin()
   if (auth instanceof NextResponse) return auth
   const { supabase } = auth
 

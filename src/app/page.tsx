@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { hasDmAccess } from '@/lib/auth/roles'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
@@ -33,7 +34,7 @@ export default async function DashboardPage() {
     .eq('id', user.id)
     .single()
 
-  if (profile?.role === 'dm') redirect('/dm/dashboard')
+  if (hasDmAccess(profile?.role)) redirect('/dm/dashboard')
 
   const { data: characters } = await supabase
     .from('characters')

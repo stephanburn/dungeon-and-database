@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { hasDmAccess, isAdminRole } from '@/lib/auth/roles'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
@@ -52,7 +53,7 @@ export default async function DmDashboardPage() {
     .eq('id', user.id)
     .single()
 
-  if (profile?.role !== 'dm') redirect('/')
+  if (!hasDmAccess(profile?.role)) redirect('/')
 
   const { data: campaignsData } = await supabase
     .from('campaigns')
@@ -101,7 +102,7 @@ export default async function DmDashboardPage() {
               <div className="absolute right-0 mt-2 hidden w-44 rounded-xl border border-neutral-800 bg-neutral-900 p-2 shadow-xl group-open:block">
                 <div className="border-b border-neutral-800 px-3 py-2">
                   <p className="text-sm font-medium text-neutral-100">{profile.display_name}</p>
-                  <p className="text-xs text-neutral-500">DM account</p>
+                  <p className="text-xs text-neutral-500">{isAdminRole(profile.role) ? 'Admin account' : 'DM account'}</p>
                 </div>
                 <form action="/api/auth/logout" method="POST" className="pt-2">
                   <Button
@@ -162,12 +163,16 @@ export default async function DmDashboardPage() {
         )}
 
         <div className="flex gap-3 flex-wrap">
-          <Button asChild size="sm" variant="outline" className="border-neutral-700 text-neutral-300 hover:bg-neutral-800">
-            <Link href="/dm/users">Users</Link>
-          </Button>
-          <Button asChild size="sm" variant="outline" className="border-neutral-700 text-neutral-300 hover:bg-neutral-800">
-            <Link href="/dm/content">Content</Link>
-          </Button>
+          {isAdminRole(profile.role) && (
+            <Button asChild size="sm" variant="outline" className="border-neutral-700 text-neutral-300 hover:bg-neutral-800">
+              <Link href="/dm/users">Users</Link>
+            </Button>
+          )}
+          {isAdminRole(profile.role) && (
+            <Button asChild size="sm" variant="outline" className="border-neutral-700 text-neutral-300 hover:bg-neutral-800">
+              <Link href="/dm/content">Content</Link>
+            </Button>
+          )}
           <Button asChild size="sm" variant="outline" className="border-neutral-700 text-neutral-300 hover:bg-neutral-800">
             <Link href="/dm/campaigns/new">+ New campaign</Link>
           </Button>

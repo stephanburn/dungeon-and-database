@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { hasDmAccess } from '@/lib/auth/roles'
 import type { Database } from '@/lib/types/database'
 
 export async function middleware(request: NextRequest) {
@@ -47,7 +48,7 @@ export async function middleware(request: NextRequest) {
       }
 
       const destination =
-        profile?.role === 'dm' ? '/dm/dashboard' : '/'
+        hasDmAccess(profile?.role) ? '/dm/dashboard' : '/'
       return NextResponse.redirect(new URL(destination, request.url))
     }
     return supabaseResponse
@@ -70,7 +71,7 @@ export async function middleware(request: NextRequest) {
 
   // DM-only routes
   if (pathname.startsWith('/dm')) {
-    if (profile?.role !== 'dm') {
+    if (!hasDmAccess(profile?.role)) {
       return NextResponse.redirect(new URL('/', request.url))
     }
   }

@@ -1,5 +1,6 @@
 'use server'
 
+import { hasDmAccess } from '@/lib/auth/roles'
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 
@@ -23,7 +24,7 @@ export async function deleteCharacter(characterId: string, backHref: string) {
   if (!character) redirect(backHref)
 
   // DMs can delete any character; players can only delete their own
-  const canDelete = profile?.role === 'dm' || character.user_id === user.id
+  const canDelete = hasDmAccess(profile?.role) || character.user_id === user.id
   if (!canDelete) redirect(backHref)
 
   await supabase.from('character_levels').delete().eq('character_id', characterId)

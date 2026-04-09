@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { isAdminRole } from '@/lib/auth/roles'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
@@ -13,7 +14,13 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { AddToCampaignButton } from '@/components/dm/AddToCampaignButton'
-import { PromoteToDmButton } from '@/components/dm/PromoteToDmButton'
+import {
+  DeleteUserButton,
+  DemoteToDmButton,
+  DemoteToPlayerButton,
+  PromoteToAdminButton,
+  PromoteToDmButton,
+} from '@/components/dm/PromoteToDmButton'
 import type { User, Campaign, Character } from '@/lib/types/database'
 
 interface UserRow extends User {
@@ -33,7 +40,7 @@ export default async function DmUsersPage() {
     .eq('id', user.id)
     .single()
 
-  if (profile?.role !== 'dm') redirect('/')
+  if (!isAdminRole(profile?.role)) redirect('/dm/dashboard')
 
   const [usersResult, membershipsResult, campaignsResult, charactersResult] = await Promise.all([
     supabase.from('users').select('*').order('created_at'),
@@ -57,9 +64,10 @@ export default async function DmUsersPage() {
     return { ...u, campaignIds, campaignNames, characterCount }
   })
 
+  const admins = userRows.filter((u) => u.role === 'admin')
   const dms = userRows.filter((u) => u.role === 'dm')
-  const unassigned = userRows.filter((u) => u.role !== 'dm' && u.campaignIds.length === 0)
-  const players = userRows.filter((u) => u.role !== 'dm' && u.campaignIds.length > 0)
+  const unassignedPlayers = userRows.filter((u) => u.role === 'player' && u.campaignIds.length === 0)
+  const assignedPlayers = userRows.filter((u) => u.role === 'player' && u.campaignIds.length > 0)
 
   return (
     <div className="min-h-screen bg-neutral-950 p-6">
@@ -75,16 +83,73 @@ export default async function DmUsersPage() {
           <p className="text-sm text-neutral-400 mt-1">{allUsers.length} registered account{allUsers.length !== 1 ? 's' : ''}</p>
         </div>
 
-        {unassigned.length > 0 && (
+        <Card className="bg-neutral-900 border-neutral-800">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-neutral-100 text-sm font-semibold">Role model</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-1 text-sm text-neutral-400">
+            <p>Admins can manage users, roles, shared content, and anything a DM can do.</p>
+            <p>DMs can manage their own campaigns and players, but not platform-wide users or content.</p>
+          </CardContent>
+        </Card>
+
+        <div>
+          <h2 className="text-lg font-semibold text-neutral-200 mb-4">Admins</h2>
+          {admins.length === 0 ? (
+            <p className="text-neutral-500 text-sm">No admin accounts found.</p>
+          ) : (
+            <Card className="bg-neutral-900 border-neutral-800">
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-neutral-800 hover:bg-transparent">
+                    <TableHead className="text-neutral-400">Name</TableHead>
+                    <TableHead className="text-neutral-400">Email</TableHead>
+                    <TableHead className="text-neutral-400">Campaigns</TableHead>
+                    <TableHead className="text-neutral-400">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {admins.map((u) => {
+                    const isSelf = u.id === user.id
+                    return (
+                      <TableRow key={u.id} className="border-neutral-800 hover:bg-neutral-800/30">
+                        <TableCell className="text-neutral-200 font-medium">
+                          {u.display_name}
+                          {isSelf && <span className="ml-2 text-xs text-neutral-500">(you)</span>}
+                        </TableCell>
+                        <TableCell className="text-neutral-400 text-sm">{u.email}</TableCell>
+                        <TableCell className="text-neutral-400 text-sm">
+                          {u.campaignNames.length > 0 ? u.campaignNames.join(', ') : '—'}
+                        </TableCell>
+                        <TableCell>
+                          {isSelf ? (
+                            <span className="text-xs text-neutral-500">Manage your own account elsewhere.</span>
+                          ) : (
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <DemoteToDmButton userId={u.id} displayName={u.display_name} />
+                              <DeleteUserButton userId={u.id} displayName={u.display_name} />
+                            </div>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
+                </TableBody>
+              </Table>
+            </Card>
+          )}
+        </div>
+
+        {unassignedPlayers.length > 0 && (
           <Card className="border-amber-700 bg-amber-950/20">
             <CardHeader className="pb-3">
               <CardTitle className="text-amber-300 text-sm font-semibold flex items-center gap-2">
-                <Badge className="bg-amber-800 text-amber-200 border-0">{unassigned.length}</Badge>
-                {unassigned.length === 1 ? 'player is' : 'players are'} not in any campaign
+                <Badge className="bg-amber-800 text-amber-200 border-0">{unassignedPlayers.length}</Badge>
+                {unassignedPlayers.length === 1 ? 'player is' : 'players are'} not in any campaign
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              {unassigned.map((u) => (
+              {unassignedPlayers.map((u) => (
                 <div key={u.id} className="flex items-center justify-between gap-4">
                   <div>
                     <span className="text-neutral-200 text-sm font-medium">{u.display_name}</span>
@@ -92,11 +157,13 @@ export default async function DmUsersPage() {
                   </div>
                   <div className="flex items-center gap-2">
                     <PromoteToDmButton userId={u.id} displayName={u.display_name} />
+                    <PromoteToAdminButton userId={u.id} displayName={u.display_name} />
                     <AddToCampaignButton
                       userId={u.id}
                       campaigns={campaigns}
                       alreadyIn={u.campaignIds}
                     />
+                    <DeleteUserButton userId={u.id} displayName={u.display_name} />
                   </div>
                 </div>
               ))}
@@ -116,6 +183,7 @@ export default async function DmUsersPage() {
                     <TableHead className="text-neutral-400">Name</TableHead>
                     <TableHead className="text-neutral-400">Email</TableHead>
                     <TableHead className="text-neutral-400">Campaigns</TableHead>
+                    <TableHead className="text-neutral-400">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -126,6 +194,13 @@ export default async function DmUsersPage() {
                       <TableCell className="text-neutral-400 text-sm">
                         {u.campaignNames.length > 0 ? u.campaignNames.join(', ') : '—'}
                       </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <PromoteToAdminButton userId={u.id} displayName={u.display_name} />
+                          <DemoteToPlayerButton userId={u.id} displayName={u.display_name} />
+                          <DeleteUserButton userId={u.id} displayName={u.display_name} />
+                        </div>
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -135,8 +210,8 @@ export default async function DmUsersPage() {
         </div>
 
         <div>
-          <h2 className="text-lg font-semibold text-neutral-200 mb-4">Assigned Players</h2>
-          {players.length === 0 ? (
+          <h2 className="text-lg font-semibold text-neutral-200 mb-4">Players</h2>
+          {assignedPlayers.length === 0 ? (
             <p className="text-neutral-500 text-sm">No players are assigned to your campaigns yet.</p>
           ) : (
             <Card className="bg-neutral-900 border-neutral-800">
@@ -148,11 +223,11 @@ export default async function DmUsersPage() {
                       <TableHead className="text-neutral-400">Campaigns</TableHead>
                       <TableHead className="text-neutral-400">Characters</TableHead>
                       <TableHead className="text-neutral-400">Add to campaign</TableHead>
-                      <TableHead className="text-neutral-400">Role</TableHead>
+                      <TableHead className="text-neutral-400">Actions</TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {players.map((u) => (
+                  {assignedPlayers.map((u) => (
                     <TableRow key={u.id} className="border-neutral-800 hover:bg-neutral-800/30">
                       <TableCell className="text-neutral-200 font-medium">{u.display_name}</TableCell>
                       <TableCell className="text-neutral-400 text-sm">{u.email}</TableCell>
@@ -170,7 +245,11 @@ export default async function DmUsersPage() {
                         />
                       </TableCell>
                       <TableCell>
-                        <PromoteToDmButton userId={u.id} displayName={u.display_name} />
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <PromoteToDmButton userId={u.id} displayName={u.display_name} />
+                          <PromoteToAdminButton userId={u.id} displayName={u.display_name} />
+                          <DeleteUserButton userId={u.id} displayName={u.display_name} />
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}

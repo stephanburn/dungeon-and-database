@@ -1,19 +1,22 @@
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { NextResponse, type NextRequest } from 'next/server'
+import { hasDmAccess } from '@/lib/auth/roles'
 import type { Database } from '@/lib/types/database'
 
-const ROLE_DEFAULT_PATH: Record<'dm' | 'player', string> = {
+const ROLE_DEFAULT_PATH: Record<'admin' | 'dm' | 'player', string> = {
+  admin: '/dm/dashboard',
   dm: '/dm/dashboard',
   player: '/',
 }
 
-const ROLE_ALLOWED_PATHS: Record<'dm' | 'player', string[]> = {
-  dm: ['/dm/dashboard', '/'],
+const ROLE_ALLOWED_PATHS: Record<'admin' | 'dm' | 'player', string[]> = {
+  admin: ['/dm/dashboard', '/dm/users', '/dm/content', '/', '/auth/reset-password'],
+  dm: ['/dm/dashboard', '/', '/auth/reset-password'],
   player: ['/', '/auth/reset-password'],
 }
 
-function getWhitelistedRedirectPath(role: 'dm' | 'player', next: string | null): string {
+function getWhitelistedRedirectPath(role: 'admin' | 'dm' | 'player', next: string | null): string {
   if (next && ROLE_ALLOWED_PATHS[role].includes(next)) {
     return next
   }
@@ -58,7 +61,9 @@ export async function GET(request: NextRequest) {
           .eq('id', user.id)
           .single()
 
-        const role = profile?.role === 'dm' ? 'dm' : 'player'
+        const role = profile?.role === 'admin'
+          ? 'admin'
+          : hasDmAccess(profile?.role) ? 'dm' : 'player'
         const destination = getWhitelistedRedirectPath(role, next)
         return NextResponse.redirect(new URL(destination, origin))
       }

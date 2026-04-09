@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { requireAuth, jsonError } from '@/lib/api-helpers'
+import { hasDmAccess } from '@/lib/auth/roles'
 import { assertCharacterInDmCampaign } from '@/lib/auth/ownership'
 
 export async function GET(
@@ -10,7 +11,7 @@ export async function GET(
   if (auth instanceof NextResponse) return auth
   const { profile, supabase } = auth
 
-  if (profile.role === 'dm') {
+  if (hasDmAccess(profile.role)) {
     const character = await assertCharacterInDmCampaign(supabase, params.id, profile.id)
     if (!character) return jsonError('Forbidden', 403)
   } else {

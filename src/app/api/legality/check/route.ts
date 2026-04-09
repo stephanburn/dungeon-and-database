@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { requireAuth, jsonError } from '@/lib/api-helpers'
+import { hasDmAccess } from '@/lib/auth/roles'
 import { assertCharacterInDmCampaign } from '@/lib/auth/ownership'
 import { buildLegalityInput } from '@/lib/legality/build-input'
 import { runLegalityChecks } from '@/lib/legality/engine'
@@ -18,7 +19,7 @@ export async function POST(request: NextRequest) {
   const parsed = checkSchema.safeParse(body)
   if (!parsed.success) return jsonError(parsed.error.message, 400)
 
-  if (profile.role === 'dm') {
+  if (hasDmAccess(profile.role)) {
     const character = await assertCharacterInDmCampaign(supabase, parsed.data.character_id, profile.id)
     if (!character) return jsonError('Forbidden', 403)
   } else {

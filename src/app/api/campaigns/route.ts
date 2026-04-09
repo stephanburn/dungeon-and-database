@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { requireAuth, requireDm, jsonError } from '@/lib/api-helpers'
+import { hasDmAccess } from '@/lib/auth/roles'
 import { z } from 'zod'
 
 const createCampaignSchema = z.object({
@@ -19,7 +20,7 @@ export async function GET() {
 
   let query = supabase.from('campaigns').select('*')
 
-  if (profile.role !== 'dm') {
+  if (!hasDmAccess(profile.role)) {
     // Players only see campaigns they're members of
     const { data: memberships } = await supabase
       .from('campaign_members')

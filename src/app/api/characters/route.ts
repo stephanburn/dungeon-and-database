@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { requireAuth, jsonError } from '@/lib/api-helpers'
+import { hasDmAccess } from '@/lib/auth/roles'
 import { assertCampaignOwnedByDm } from '@/lib/auth/ownership'
 import { z } from 'zod'
 
@@ -27,7 +28,7 @@ export async function GET(request: NextRequest) {
     `)
     .order('created_at', { ascending: false })
 
-  if (profile.role !== 'dm') {
+  if (!hasDmAccess(profile.role)) {
     query = query.eq('user_id', profile.id)
   }
 
@@ -49,7 +50,7 @@ export async function POST(request: NextRequest) {
   const parsed = createCharacterSchema.safeParse(body)
   if (!parsed.success) return jsonError(parsed.error.message, 400)
 
-  if (profile.role === 'dm') {
+  if (hasDmAccess(profile.role)) {
     const ownedCampaign = await assertCampaignOwnedByDm(supabase, parsed.data.campaign_id, profile.id)
     if (!ownedCampaign) return jsonError('Forbidden', 403)
   } else {
@@ -72,7 +73,7 @@ export async function POST(request: NextRequest) {
       name: parsed.data.name,
       stat_method: parsed.data.stat_method ?? 'point_buy',
       status: 'draft',
-      ...(profile.role === 'dm' && parsed.data.character_type
+      ...(hasDmAccess(profile.role) && parsed.data.character_type
         ? { character_type: parsed.data.character_type }
         : {}),
     })

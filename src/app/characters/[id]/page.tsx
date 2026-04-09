@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { hasDmAccess } from '@/lib/auth/roles'
 import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
@@ -33,7 +34,7 @@ export default async function CharacterPage({ params }: { params: { id: string }
   if (!character) notFound()
 
   // Players can only access their own characters
-  if (profile?.role !== 'dm' && character.user_id !== user.id) {
+  if (!hasDmAccess(profile?.role) && character.user_id !== user.id) {
     redirect('/')
   }
 
@@ -67,7 +68,7 @@ export default async function CharacterPage({ params }: { params: { id: string }
     .map((r) => (r.choice_value as { feat_id: string }).feat_id)
     .filter(Boolean)
 
-  const isDm = profile?.role === 'dm'
+  const isDm = hasDmAccess(profile?.role)
   const isOwner = character.user_id === user.id
   const backHref = isDm ? '/dm/dashboard' : '/'
 

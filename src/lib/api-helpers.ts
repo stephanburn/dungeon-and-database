@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { hasDmAccess, isAdminRole } from '@/lib/auth/roles'
 import { NextResponse } from 'next/server'
 import type { User } from '@/lib/types/database'
 
@@ -29,7 +30,18 @@ export async function requireDm() {
   const result = await requireAuth()
   if (result instanceof NextResponse) return result
 
-  if (result.profile.role !== 'dm') {
+  if (!hasDmAccess(result.profile.role)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  return result
+}
+
+export async function requireAdmin() {
+  const result = await requireAuth()
+  if (result instanceof NextResponse) return result
+
+  if (!isAdminRole(result.profile.role)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 

@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { hasDmAccess } from '@/lib/auth/roles'
 import { redirect } from 'next/navigation'
 import { CharacterNewForm } from './CharacterNewForm'
 
@@ -13,5 +14,5 @@ export default async function CharacterNewPage() {
     .eq('id', user.id)
     .single()
 
-  return <CharacterNewForm isDm={profile?.role === 'dm'} />
+  return <CharacterNewForm isDm={hasDmAccess(profile?.role)} />
 }
