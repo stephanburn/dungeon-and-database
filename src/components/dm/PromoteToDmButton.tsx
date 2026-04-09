@@ -49,51 +49,6 @@ export function PromoteToDmButton({ userId, displayName }: PromoteToDmButtonProp
   )
 }
 
-interface PromoteToAdminButtonProps {
-  userId: string
-  displayName: string
-}
-
-export function PromoteToAdminButton({ userId, displayName }: PromoteToAdminButtonProps) {
-  const router = useRouter()
-  const { toast } = useToast()
-
-  async function handlePromote() {
-    const res = await fetch(`/api/users/${userId}/role`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ role: 'admin' }),
-    })
-
-    const json = await res.json()
-    if (!res.ok) {
-      toast({
-        title: 'Could not promote user',
-        description: json.error ?? 'Unknown error',
-        variant: 'destructive',
-      })
-      return false
-    }
-
-    toast({ title: `${displayName} is now an admin` })
-    router.refresh()
-    return true
-  }
-
-  return (
-    <ConfirmActionButton
-      title="Promote to admin?"
-      description={`${displayName} will be able to manage users, roles, and shared content in addition to DM access.`}
-      triggerLabel="Make admin"
-      confirmLabel="Promote"
-      pendingLabel="Promoting…"
-      onConfirm={handlePromote}
-      size="sm"
-      className="h-7 border-neutral-700 text-neutral-300 hover:bg-neutral-800"
-    />
-  )
-}
-
 interface DemoteToPlayerButtonProps {
   userId: string
   displayName: string
@@ -137,51 +92,6 @@ export function DemoteToPlayerButton({ userId, displayName }: DemoteToPlayerButt
       triggerLabel="Demote"
       confirmLabel="Demote"
       pendingLabel="Demoting…"
-      onConfirm={handleDemote}
-      size="sm"
-      className="h-7 border-neutral-700 text-neutral-300 hover:bg-neutral-800"
-    />
-  )
-}
-
-interface DemoteToDmButtonProps {
-  userId: string
-  displayName: string
-}
-
-export function DemoteToDmButton({ userId, displayName }: DemoteToDmButtonProps) {
-  const router = useRouter()
-  const { toast } = useToast()
-
-  async function handleDemote() {
-    const res = await fetch(`/api/users/${userId}/role`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ role: 'dm' }),
-    })
-
-    const json = await res.json()
-    if (!res.ok) {
-      toast({
-        title: 'Could not demote admin',
-        description: json.error ?? 'Unknown error',
-        variant: 'destructive',
-      })
-      return false
-    }
-
-    toast({ title: `${displayName} is now a DM` })
-    router.refresh()
-    return true
-  }
-
-  return (
-    <ConfirmActionButton
-      title="Demote to DM?"
-      description={`${displayName} will lose admin controls but keep DM access for campaign management.`}
-      triggerLabel="Make DM"
-      confirmLabel="Demote"
-      pendingLabel="Updating…"
       onConfirm={handleDemote}
       size="sm"
       className="h-7 border-neutral-700 text-neutral-300 hover:bg-neutral-800"

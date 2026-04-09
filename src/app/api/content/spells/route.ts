@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from 'next/server'
-import { requireAuth, requireAdmin, jsonError } from '@/lib/api-helpers'
+import { requireAuth, requireAdmin, jsonError, readJsonBody } from '@/lib/api-helpers'
 import { getAllowedSources } from '@/lib/content-helpers'
+import { writeAuditLog } from '@/lib/server/audit'
+import type { SpellComponents } from '@/lib/types/database'
 
 export async function GET(request: NextRequest) {
   const auth = await requireAuth()
@@ -34,9 +36,11 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const auth = await requireAdmin()
   if (auth instanceof NextResponse) return auth
-  const { supabase } = auth
+  const { user, supabase } = auth
 
-  const body = await request.json()
+  const bodyResult = await readJsonBody<Record<string, unknown>>(request)
+  if ('response' in bodyResult) return bodyResult.response
+  const body = bodyResult.data
   if (!body.name || body.level === undefined || !body.school || !body.casting_time ||
       !body.range || !body.duration || !body.source) {
     return jsonError('name, level, school, casting_time, range, duration, and source are required', 400)
@@ -45,18 +49,22 @@ export async function POST(request: NextRequest) {
   const { data, error } = await supabase
     .from('spells')
     .insert({
-      name: body.name,
-      level: body.level,
-      school: body.school,
-      casting_time: body.casting_time,
-      range: body.range,
-      components: body.components ?? {},
-      duration: body.duration,
-      concentration: body.concentration ?? false,
-      ritual: body.ritual ?? false,
-      description: body.description ?? '',
-      classes: body.classes ?? [],
-      source: body.source,
+      name: body.name as string,
+      level: body.level as number,
+      school: body.school as string,
+      casting_time: body.casting_time as string,
+      range: body.range as string,
+      components: (body.components as SpellComponents | undefined) ?? {
+        verbal: false,
+        somatic: false,
+        material: false,
+      },
+      duration: body.duration as string,
+      concentration: (body.concentration as boolean | undefined) ?? false,
+      ritual: (body.ritual as boolean | undefined) ?? false,
+      description: (body.description as string | undefined) ?? '',
+      classes: (body.classes as string[] | undefined) ?? [],
+      source: body.source as string,
       amended: false,
       amendment_note: null,
     })
@@ -64,18 +72,28 @@ export async function POST(request: NextRequest) {
     .single()
 
   if (error) return jsonError(error.message, 500)
+  await writeAuditLog({
+    actorUserId: user.id,
+    action: 'content.spell_created',
+    targetTable: 'spells',
+    targetId: data.id,
+    details: { name: data.name, source: data.source },
+  })
   return NextResponse.json(data, { status: 201 })
 }
 
 export async function PUT(request: NextRequest) {
   const auth = await requireAdmin()
   if (auth instanceof NextResponse) return auth
-  const { supabase } = auth
+  const { user, supabase } = auth
 
-  const body = await request.json()
+  const bodyResult = await readJsonBody<Record<string, unknown>>(request)
+  if ('response' in bodyResult) return bodyResult.response
+  const body = bodyResult.data
   if (!body.id) return jsonError('id is required', 400)
 
-  const { id, ...fields } = body
+  const id = body.id as string
+  const fields = Object.fromEntries(Object.entries(body).filter(([key]) => key !== 'id'))
   const { data, error } = await supabase
     .from('spells')
     .update(fields)
@@ -84,18 +102,32 @@ export async function PUT(request: NextRequest) {
     .single()
 
   if (error) return jsonError(error.message, 500)
+  await writeAuditLog({
+    actorUserId: user.id,
+    action: 'content.spell_updated',
+    targetTable: 'spells',
+    targetId: id,
+    details: { id },
+  })
   return NextResponse.json(data)
 }
 
 export async function DELETE(request: NextRequest) {
   const auth = await requireAdmin()
   if (auth instanceof NextResponse) return auth
-  const { supabase } = auth
+  const { user, supabase } = auth
 
   const id = request.nextUrl.searchParams.get('id')
   if (!id) return jsonError('id is required', 400)
 
   const { error } = await supabase.from('spells').delete().eq('id', id)
   if (error) return jsonError(error.message, 500)
+  await writeAuditLog({
+    actorUserId: user.id,
+    action: 'content.spell_deleted',
+    targetTable: 'spells',
+    targetId: id,
+    details: { id },
+  })
   return new NextResponse(null, { status: 204 })
 }

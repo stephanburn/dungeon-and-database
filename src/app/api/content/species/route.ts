@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from 'next/server'
-import { requireAuth, requireAdmin, jsonError } from '@/lib/api-helpers'
+import { requireAuth, requireAdmin, jsonError, readJsonBody } from '@/lib/api-helpers'
 import { getAllowedSources } from '@/lib/content-helpers'
+import { writeAuditLog } from '@/lib/server/audit'
+import type { AbilityScoreBonus, Sense, SizeCategory } from '@/lib/types/database'
 
 export async function GET(request: NextRequest) {
   const auth = await requireAuth()
@@ -23,24 +25,26 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const auth = await requireAdmin()
   if (auth instanceof NextResponse) return auth
-  const { supabase } = auth
+  const { user, supabase } = auth
 
-  const body = await request.json()
+  const bodyResult = await readJsonBody<Record<string, unknown>>(request)
+  if ('response' in bodyResult) return bodyResult.response
+  const body = bodyResult.data
   if (!body.name || !body.source) return jsonError('name and source are required', 400)
 
   const { data, error } = await supabase
     .from('species')
     .insert({
-      name: body.name,
-      size: body.size ?? 'medium',
-      speed: body.speed ?? 30,
-      ability_score_bonuses: body.ability_score_bonuses ?? [],
-      languages: body.languages ?? [],
+      name: body.name as string,
+      size: (body.size as SizeCategory | undefined) ?? 'medium',
+      speed: (body.speed as number | undefined) ?? 30,
+      ability_score_bonuses: (body.ability_score_bonuses as AbilityScoreBonus[] | undefined) ?? [],
+      languages: (body.languages as string[] | undefined) ?? [],
       traits: [],
-      senses: body.senses ?? [],
+      senses: (body.senses as Sense[] | undefined) ?? [],
       damage_resistances: [],
       condition_immunities: [],
-      source: body.source,
+      source: body.source as string,
       amended: false,
       amendment_note: null,
     })
@@ -48,18 +52,28 @@ export async function POST(request: NextRequest) {
     .single()
 
   if (error) return jsonError(error.message, 500)
+  await writeAuditLog({
+    actorUserId: user.id,
+    action: 'content.species_created',
+    targetTable: 'species',
+    targetId: data.id,
+    details: { name: data.name, source: data.source },
+  })
   return NextResponse.json(data, { status: 201 })
 }
 
 export async function PUT(request: NextRequest) {
   const auth = await requireAdmin()
   if (auth instanceof NextResponse) return auth
-  const { supabase } = auth
+  const { user, supabase } = auth
 
-  const body = await request.json()
+  const bodyResult = await readJsonBody<Record<string, unknown>>(request)
+  if ('response' in bodyResult) return bodyResult.response
+  const body = bodyResult.data
   if (!body.id) return jsonError('id is required', 400)
 
-  const { id, ...fields } = body
+  const id = body.id as string
+  const fields = Object.fromEntries(Object.entries(body).filter(([key]) => key !== 'id'))
   const { data, error } = await supabase
     .from('species')
     .update(fields)
@@ -68,18 +82,32 @@ export async function PUT(request: NextRequest) {
     .single()
 
   if (error) return jsonError(error.message, 500)
+  await writeAuditLog({
+    actorUserId: user.id,
+    action: 'content.species_updated',
+    targetTable: 'species',
+    targetId: id,
+    details: { id },
+  })
   return NextResponse.json(data)
 }
 
 export async function DELETE(request: NextRequest) {
   const auth = await requireAdmin()
   if (auth instanceof NextResponse) return auth
-  const { supabase } = auth
+  const { user, supabase } = auth
 
   const id = request.nextUrl.searchParams.get('id')
   if (!id) return jsonError('id is required', 400)
 
   const { error } = await supabase.from('species').delete().eq('id', id)
   if (error) return jsonError(error.message, 500)
+  await writeAuditLog({
+    actorUserId: user.id,
+    action: 'content.species_deleted',
+    targetTable: 'species',
+    targetId: id,
+    details: { id },
+  })
   return new NextResponse(null, { status: 204 })
 }

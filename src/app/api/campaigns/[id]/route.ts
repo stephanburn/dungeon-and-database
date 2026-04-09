@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
-import { requireAuth, requireDm, jsonError } from '@/lib/api-helpers'
-import { assertCampaignOwnedByDm } from '@/lib/auth/ownership'
+import { requireAuth, requireDm, jsonError, readJsonBody } from '@/lib/api-helpers'
+import { assertCampaignManageableByUser } from '@/lib/auth/ownership'
 import { z } from 'zod'
 
 const updateCampaignSchema = z.object({
@@ -39,10 +39,12 @@ export async function PUT(
   if (auth instanceof NextResponse) return auth
   const { profile, supabase } = auth
 
-  const ownedCampaign = await assertCampaignOwnedByDm(supabase, params.id, profile.id)
+  const ownedCampaign = await assertCampaignManageableByUser(supabase, params.id, profile.id, profile.role)
   if (!ownedCampaign) return jsonError('Forbidden', 403)
 
-  const body = await request.json()
+  const bodyResult = await readJsonBody<unknown>(request)
+  if ('response' in bodyResult) return bodyResult.response
+  const body = bodyResult.data
   const parsed = updateCampaignSchema.safeParse(body)
   if (!parsed.success) return jsonError(parsed.error.message, 400)
 

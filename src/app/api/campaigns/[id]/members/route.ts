@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
-import { requireDm, jsonError } from '@/lib/api-helpers'
-import { assertCampaignOwnedByDm } from '@/lib/auth/ownership'
+import { requireDm, jsonError, readJsonBody } from '@/lib/api-helpers'
+import { assertCampaignManageableByUser } from '@/lib/auth/ownership'
 import { z } from 'zod'
 
 const addSchema = z.object({
@@ -14,7 +14,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   if (auth instanceof NextResponse) return auth
   const { profile, supabase } = auth
 
-  const ownedCampaign = await assertCampaignOwnedByDm(supabase, params.id, profile.id)
+  const ownedCampaign = await assertCampaignManageableByUser(supabase, params.id, profile.id, profile.role)
   if (!ownedCampaign) return jsonError('Forbidden', 403)
 
   const { data: rows, error } = await supabase
@@ -41,10 +41,12 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   if (auth instanceof NextResponse) return auth
   const { profile, supabase } = auth
 
-  const ownedCampaign = await assertCampaignOwnedByDm(supabase, params.id, profile.id)
+  const ownedCampaign = await assertCampaignManageableByUser(supabase, params.id, profile.id, profile.role)
   if (!ownedCampaign) return jsonError('Forbidden', 403)
 
-  const body = await request.json()
+  const bodyResult = await readJsonBody<unknown>(request)
+  if ('response' in bodyResult) return bodyResult.response
+  const body = bodyResult.data
   const parsed = addSchema.safeParse(body)
   if (!parsed.success) return jsonError(parsed.error.message, 400)
 
@@ -70,10 +72,12 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
   if (auth instanceof NextResponse) return auth
   const { profile, supabase } = auth
 
-  const ownedCampaign = await assertCampaignOwnedByDm(supabase, params.id, profile.id)
+  const ownedCampaign = await assertCampaignManageableByUser(supabase, params.id, profile.id, profile.role)
   if (!ownedCampaign) return jsonError('Forbidden', 403)
 
-  const body = await request.json()
+  const bodyResult = await readJsonBody<unknown>(request)
+  if ('response' in bodyResult) return bodyResult.response
+  const body = bodyResult.data
   const parsed = removeSchema.safeParse(body)
   if (!parsed.success) return jsonError(parsed.error.message, 400)
 

@@ -1,3 +1,4 @@
+import { isAdminRole } from '@/lib/auth/roles'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '@/lib/types/database'
 
@@ -14,26 +15,32 @@ type CharacterDmAccessRow = {
   campaign: { dm_id: string } | null
 }
 
-export async function assertCampaignOwnedByDm(
+export async function assertCampaignManageableByUser(
   supabase: SupabaseClient<Database>,
   campaignId: string,
-  dmId: string
+  userId: string,
+  role: Database['public']['Tables']['users']['Row']['role']
 ): Promise<CampaignOwnershipRow | null> {
-  const { data, error } = await supabase
+  let query = supabase
     .from('campaigns')
     .select('id, dm_id')
     .eq('id', campaignId)
-    .eq('dm_id', dmId)
-    .single()
+
+  if (!isAdminRole(role)) {
+    query = query.eq('dm_id', userId)
+  }
+
+  const { data, error } = await query.single()
 
   if (error || !data) return null
   return data
 }
 
-export async function assertCharacterInDmCampaign(
+export async function assertCharacterManageableByUser(
   supabase: SupabaseClient<Database>,
   characterId: string,
-  dmId: string
+  userId: string,
+  role: Database['public']['Tables']['users']['Row']['role']
 ): Promise<CharacterDmAccessRow | null> {
   const { data, error } = await supabase
     .from('characters')
@@ -42,6 +49,10 @@ export async function assertCharacterInDmCampaign(
     .single()
 
   const character = data as CharacterDmAccessRow | null
-  if (error || !character || character.campaign?.dm_id !== dmId) return null
+  if (
+    error ||
+    !character ||
+    (!isAdminRole(role) && character.campaign?.dm_id !== userId)
+  ) return null
   return character
 }

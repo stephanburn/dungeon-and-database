@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
-import { hasDmAccess } from '@/lib/auth/roles'
+import { hasDmAccess, isAdminRole } from '@/lib/auth/roles'
 import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
@@ -31,7 +31,7 @@ export default async function CampaignSettingsPage({ params }: { params: { id: s
   if (!campaignResult.data) notFound()
 
   const campaign = campaignResult.data
-  if (campaign.dm_id !== user.id) notFound()
+  if (!isAdminRole(profile?.role) && campaign.dm_id !== user.id) notFound()
 
   const allowlist = (allowlistResult.data ?? []).map((r) => r.source_key)
 

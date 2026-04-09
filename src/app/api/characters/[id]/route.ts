@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server'
-import { requireAuth, jsonError } from '@/lib/api-helpers'
+import { requireAuth, jsonError, readJsonBody } from '@/lib/api-helpers'
 import { hasDmAccess } from '@/lib/auth/roles'
 import { buildLegalityInput } from '@/lib/legality/build-input'
 import { runLegalityChecks } from '@/lib/legality/engine'
@@ -87,7 +87,9 @@ export async function PUT(
     return jsonError('Forbidden', 403)
   }
 
-  const body = await request.json()
+  const bodyResult = await readJsonBody<unknown>(request)
+  if ('response' in bodyResult) return bodyResult.response
+  const body = bodyResult.data
   const parsed = updateCharacterSchema.safeParse(body)
   if (!parsed.success) return jsonError(parsed.error.message, 400)
 
@@ -116,7 +118,11 @@ export async function PUT(
 
   // Replace levels if provided
   if (levels !== undefined) {
-    await supabase.from('character_levels').delete().eq('character_id', params.id)
+    const { error: deleteLevelsError } = await supabase
+      .from('character_levels')
+      .delete()
+      .eq('character_id', params.id)
+    if (deleteLevelsError) return jsonError(deleteLevelsError.message, 500)
 
     if (levels.length > 0) {
       const rows = levels.map((l) => ({
@@ -133,7 +139,11 @@ export async function PUT(
 
   // Replace stat rolls if provided
   if (stat_rolls !== undefined) {
-    await supabase.from('character_stat_rolls').delete().eq('character_id', params.id)
+    const { error: deleteRollsError } = await supabase
+      .from('character_stat_rolls')
+      .delete()
+      .eq('character_id', params.id)
+    if (deleteRollsError) return jsonError(deleteRollsError.message, 500)
 
     if (stat_rolls.length > 0) {
       const rows = stat_rolls.map((r) => ({
@@ -148,7 +158,11 @@ export async function PUT(
 
   // Replace skill proficiencies if provided
   if (skill_proficiencies !== undefined) {
-    await supabase.from('character_skill_proficiencies').delete().eq('character_id', params.id)
+    const { error: deleteSkillsError } = await supabase
+      .from('character_skill_proficiencies')
+      .delete()
+      .eq('character_id', params.id)
+    if (deleteSkillsError) return jsonError(deleteSkillsError.message, 500)
     if (skill_proficiencies.length > 0) {
       const rows = skill_proficiencies.map((skill) => ({ character_id: params.id, skill, expertise: false }))
       const { error } = await supabase.from('character_skill_proficiencies').insert(rows)
@@ -158,8 +172,9 @@ export async function PUT(
 
   // Replace spell choices if provided
   if (spell_choices !== undefined) {
-    await supabase.from('character_choices').delete()
+    const { error: deleteSpellChoicesError } = await supabase.from('character_choices').delete()
       .eq('character_id', params.id).eq('choice_type', 'spell_known')
+    if (deleteSpellChoicesError) return jsonError(deleteSpellChoicesError.message, 500)
 
     if (spell_choices.length > 0) {
       const rows = spell_choices.map((spell_id) => ({
@@ -175,8 +190,9 @@ export async function PUT(
 
   // Replace feat choices if provided (empty strings = ASI taken, skip those)
   if (feat_choices !== undefined) {
-    await supabase.from('character_choices').delete()
+    const { error: deleteFeatChoicesError } = await supabase.from('character_choices').delete()
       .eq('character_id', params.id).eq('choice_type', 'feat')
+    if (deleteFeatChoicesError) return jsonError(deleteFeatChoicesError.message, 500)
 
     const featRows = feat_choices
       .filter((id) => id && id.length > 0)

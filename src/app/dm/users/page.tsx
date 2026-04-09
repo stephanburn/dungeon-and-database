@@ -16,9 +16,7 @@ import {
 import { AddToCampaignButton } from '@/components/dm/AddToCampaignButton'
 import {
   DeleteUserButton,
-  DemoteToDmButton,
   DemoteToPlayerButton,
-  PromoteToAdminButton,
   PromoteToDmButton,
 } from '@/components/dm/PromoteToDmButton'
 import type { User, Campaign, Character } from '@/lib/types/database'
@@ -45,7 +43,7 @@ export default async function DmUsersPage() {
   const [usersResult, membershipsResult, campaignsResult, charactersResult] = await Promise.all([
     supabase.from('users').select('*').order('created_at'),
     supabase.from('campaign_members').select('campaign_id, user_id'),
-    supabase.from('campaigns').select('id, name').eq('dm_id', user.id).order('created_at'),
+    supabase.from('campaigns').select('id, name').order('created_at'),
     supabase.from('characters').select('user_id').eq('character_type', 'pc'),
   ])
 
@@ -88,7 +86,7 @@ export default async function DmUsersPage() {
             <CardTitle className="text-neutral-100 text-sm font-semibold">Role model</CardTitle>
           </CardHeader>
           <CardContent className="space-y-1 text-sm text-neutral-400">
-            <p>Admins can manage users, roles, shared content, and anything a DM can do.</p>
+            <p>Admins can manage users, shared content, and all campaigns across the platform.</p>
             <p>DMs can manage their own campaigns and players, but not platform-wide users or content.</p>
           </CardContent>
         </Card>
@@ -126,7 +124,6 @@ export default async function DmUsersPage() {
                             <span className="text-xs text-neutral-500">Manage your own account elsewhere.</span>
                           ) : (
                             <div className="flex items-center gap-2 flex-wrap">
-                              <DemoteToDmButton userId={u.id} displayName={u.display_name} />
                               <DeleteUserButton userId={u.id} displayName={u.display_name} />
                             </div>
                           )}
@@ -157,7 +154,6 @@ export default async function DmUsersPage() {
                   </div>
                   <div className="flex items-center gap-2">
                     <PromoteToDmButton userId={u.id} displayName={u.display_name} />
-                    <PromoteToAdminButton userId={u.id} displayName={u.display_name} />
                     <AddToCampaignButton
                       userId={u.id}
                       campaigns={campaigns}
@@ -196,7 +192,6 @@ export default async function DmUsersPage() {
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2 flex-wrap">
-                          <PromoteToAdminButton userId={u.id} displayName={u.display_name} />
                           <DemoteToPlayerButton userId={u.id} displayName={u.display_name} />
                           <DeleteUserButton userId={u.id} displayName={u.display_name} />
                         </div>
@@ -247,7 +242,6 @@ export default async function DmUsersPage() {
                       <TableCell>
                         <div className="flex items-center gap-2 flex-wrap">
                           <PromoteToDmButton userId={u.id} displayName={u.display_name} />
-                          <PromoteToAdminButton userId={u.id} displayName={u.display_name} />
                           <DeleteUserButton userId={u.id} displayName={u.display_name} />
                         </div>
                       </TableCell>

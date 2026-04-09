@@ -302,6 +302,17 @@ export type CharacterSkillProficiency = {
   expertise: boolean
 }
 
+export type AuditLog = {
+  id: string
+  actor_user_id: string | null
+  action: string
+  target_table: string
+  target_id: string
+  details: Record<string, unknown>
+  succeeded: boolean
+  created_at: string
+}
+
 // ── Supabase Database shape (for createClient generics) ────
 // Every table requires Relationships: [] as of @supabase/supabase-js v2.101+
 
@@ -333,11 +344,14 @@ export type Database = {
       character_snapshots: { Row: CharacterSnapshot; Insert: Omit<CharacterSnapshot, 'id' | 'created_at'>; Update: Partial<Omit<CharacterSnapshot, 'id'>>; Relationships: R }
       character_choices: { Row: CharacterChoice; Insert: Omit<CharacterChoice, 'id'>; Update: Partial<Omit<CharacterChoice, 'id'>>; Relationships: R }
       character_skill_proficiencies: { Row: CharacterSkillProficiency; Insert: CharacterSkillProficiency; Update: Partial<CharacterSkillProficiency>; Relationships: R }
+      audit_logs: { Row: AuditLog; Insert: Omit<AuditLog, 'id' | 'created_at'> & { details?: Record<string, unknown>; succeeded?: boolean }; Update: Partial<Omit<AuditLog, 'id' | 'created_at'>>; Relationships: R }
     }
     Views: Record<string, never>
     Functions: {
+      is_admin: { Args: Record<string, never>; Returns: boolean }
       is_dm: { Args: Record<string, never>; Returns: boolean }
       is_campaign_member: { Args: { p_campaign_id: string }; Returns: boolean }
+      can_manage_campaign: { Args: { p_campaign_id: string }; Returns: boolean }
     }
     Enums: {
       user_role: UserRole

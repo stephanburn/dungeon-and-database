@@ -51,3 +51,14 @@ export async function requireAdmin() {
 export function jsonError(message: string, status: number) {
   return NextResponse.json({ error: message }, { status })
 }
+
+export async function readJsonBody<T>(
+  request: Request
+): Promise<{ data: T } | { response: NextResponse }> {
+  try {
+    const data = (await request.json()) as T
+    return { data }
+  } catch {
+    return { response: jsonError('Invalid JSON body', 400) }
+  }
+}

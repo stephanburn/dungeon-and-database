@@ -58,10 +58,11 @@ export default async function DmDashboardPage() {
   const { data: campaignsData } = await supabase
     .from('campaigns')
     .select('*')
-    .eq('dm_id', user.id)
     .order('created_at')
 
-  const campaigns = campaignsData ?? []
+  const campaigns = (isAdminRole(profile.role)
+    ? campaignsData
+    : (campaignsData ?? []).filter((campaign) => campaign.dm_id === user.id)) ?? []
   const campaignIds = campaigns.map((campaign) => campaign.id)
 
   const { data: charactersResult = [] } = campaignIds.length > 0

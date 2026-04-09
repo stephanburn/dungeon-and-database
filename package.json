@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "test": "node --import tsx --test test/**/*.test.ts",
     "seed-srd": "tsx --env-file=.env.local scripts/seed-srd.ts"
   },
   "dependencies": {

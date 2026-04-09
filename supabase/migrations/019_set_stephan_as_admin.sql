@@ -1,5 +1,5 @@
 -- Complete the admin/DM role split after the enum value has been committed.
--- This migration also ensures the known primary account is the platform admin.
+-- The first account becomes the singleton platform admin.
 
 CREATE OR REPLACE FUNCTION public.is_admin()
 RETURNS boolean
@@ -162,15 +162,22 @@ CREATE POLICY "class_features_insert_admin" ON public.class_features
 CREATE POLICY "class_features_update_admin" ON public.class_features
   FOR UPDATE USING (public.is_admin());
 
-UPDATE public.users u
-SET role = CASE
-  WHEN a.email = 'stephan.burn@gmail.com' THEN 'admin'::public.user_role
-  WHEN u.role = 'admin' THEN 'dm'::public.user_role
-  ELSE u.role
-END
-FROM auth.users a
-WHERE a.id = u.id
-  AND (
-    a.email = 'stephan.burn@gmail.com'
-    OR u.role = 'admin'
-  );
+UPDATE public.users
+SET role = 'dm'::public.user_role
+WHERE role = 'admin';
+
+DO $$
+DECLARE
+  first_user_id uuid;
+BEGIN
+  SELECT id INTO first_user_id
+  FROM public.users
+  ORDER BY created_at, id
+  LIMIT 1;
+
+  IF first_user_id IS NOT NULL THEN
+    UPDATE public.users
+    SET role = 'admin'
+    WHERE id = first_user_id;
+  END IF;
+END $$;

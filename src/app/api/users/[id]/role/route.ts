@@ -1,11 +1,20 @@
 import { NextResponse, type NextRequest } from 'next/server'
-import { requireAdmin, jsonError } from '@/lib/api-helpers'
-import { deleteUserById, updateUserRoleById } from '@/lib/server/user-roles'
-import { isAdminRole } from '@/lib/auth/roles'
+import { requireAdmin, jsonError, readJsonBody } from '@/lib/api-helpers'
+import {
+  deleteUserById,
+  getSingletonAdminUser,
+  reassignOwnedCampaignsToAdmin,
+  updateUserRoleById,
+} from '@/lib/server/user-roles'
+import { writeAuditLog } from '@/lib/server/audit'
+import {
+  validateRoleChange,
+} from '@/lib/server/user-admin-policy'
+import { deleteManagedUser } from '@/lib/server/user-admin-actions'
 import { z } from 'zod'
 
 const updateUserRoleSchema = z.object({
-  role: z.enum(['player', 'dm', 'admin']),
+  role: z.enum(['player', 'dm']),
 })
 
 export async function PUT(
@@ -16,7 +25,9 @@ export async function PUT(
   if (auth instanceof NextResponse) return auth
   const { user, supabase } = auth
 
-  const body = await request.json()
+  const bodyResult = await readJsonBody<unknown>(request)
+  if ('response' in bodyResult) return bodyResult.response
+  const body = bodyResult.data
   const parsed = updateUserRoleSchema.safeParse(body)
   if (!parsed.success) return jsonError(parsed.error.message, 400)
 
@@ -27,26 +38,33 @@ export async function PUT(
     .single()
 
   if (existingError || !existingUser) return jsonError('User not found', 404)
-  if (existingUser.id === user.id) return jsonError('Admins cannot change their own role here', 400)
+  const roleChangePolicyError = validateRoleChange({
+    actorUserId: user.id,
+    targetUserId: existingUser.id,
+    existingRole: existingUser.role,
+    requestedRole: parsed.data.role,
+  })
+  if (roleChangePolicyError) return jsonError(roleChangePolicyError, 400)
 
   if (existingUser.role === parsed.data.role) {
     return NextResponse.json(existingUser)
   }
 
-  if (isAdminRole(existingUser.role) && parsed.data.role !== 'admin') {
-    const { count } = await supabase
-      .from('users')
-      .select('*', { count: 'exact', head: true })
-      .eq('role', 'admin')
-
-    if ((count ?? 0) <= 1) {
-      return jsonError('At least one admin must remain', 400)
-    }
-  }
-
   const { data, error } = await updateUserRoleById(params.id, parsed.data.role)
 
   if (error) return jsonError(error.message, 500)
+
+  await writeAuditLog({
+    actorUserId: user.id,
+    action: 'user.role_updated',
+    targetTable: 'users',
+    targetId: params.id,
+    details: {
+      previous_role: existingUser.role,
+      new_role: parsed.data.role,
+    },
+  })
+
   return NextResponse.json(data)
 }
 
@@ -65,20 +83,26 @@ export async function DELETE(
     .single()
 
   if (existingError || !existingUser) return jsonError('User not found', 404)
-  if (existingUser.id === user.id) return jsonError('Admins cannot delete their own account here', 400)
-
-  if (isAdminRole(existingUser.role)) {
-    const { count } = await supabase
-      .from('users')
-      .select('*', { count: 'exact', head: true })
-      .eq('role', 'admin')
-
-    if ((count ?? 0) <= 1) {
-      return jsonError('At least one admin must remain', 400)
+  const result = await deleteManagedUser(
+    {
+      reassignOwnedCampaignsToAdmin,
+      deleteUserById: async (userId) => {
+        const { error } = await deleteUserById(userId)
+        return { error }
+      },
+      getSingletonAdminUser: async () => {
+        const { data, error } = await getSingletonAdminUser()
+        return { data: data ?? null, error }
+      },
+      writeAuditLog,
+    },
+    {
+      actorUserId: user.id,
+      targetUserId: existingUser.id,
+      existingRole: existingUser.role,
     }
-  }
+  )
 
-  const { error } = await deleteUserById(params.id)
-  if (error) return jsonError(error.message, 500)
-  return new NextResponse(null, { status: 204 })
+  if (!result.ok) return jsonError(result.message, result.status)
+  return new NextResponse(null, { status: result.status })
 }

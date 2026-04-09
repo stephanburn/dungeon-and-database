@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { requireDm, jsonError } from '@/lib/api-helpers'
-import { assertCharacterInDmCampaign } from '@/lib/auth/ownership'
+import { assertCharacterManageableByUser } from '@/lib/auth/ownership'
 import { captureSnapshot } from '@/lib/snapshots'
 
 /**
@@ -16,7 +16,7 @@ export async function POST(
   if (auth instanceof NextResponse) return auth
   const { profile, supabase } = auth
 
-  const character = await assertCharacterInDmCampaign(supabase, params.id, profile.id)
+  const character = await assertCharacterManageableByUser(supabase, params.id, profile.id, profile.role)
   if (!character) return jsonError('Forbidden', 403)
   if (character.status !== 'submitted') {
     return jsonError(`Cannot approve a character with status "${character.status}"`, 400)
