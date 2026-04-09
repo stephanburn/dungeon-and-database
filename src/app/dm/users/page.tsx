@@ -57,7 +57,7 @@ export default async function DmUsersPage() {
   })
 
   const unassigned = userRows.filter((u) => u.role !== 'dm' && u.campaignIds.length === 0)
-  const players = userRows.filter((u) => u.role !== 'dm')
+  const players = userRows.filter((u) => u.role !== 'dm' && u.campaignIds.length > 0)
 
   return (
     <div className="min-h-screen bg-neutral-950 p-6">
@@ -73,7 +73,6 @@ export default async function DmUsersPage() {
           <p className="text-sm text-neutral-400 mt-1">{allUsers.length} registered account{allUsers.length !== 1 ? 's' : ''}</p>
         </div>
 
-        {/* Unassigned players banner */}
         {unassigned.length > 0 && (
           <Card className="border-amber-700 bg-amber-950/20">
             <CardHeader className="pb-3">
@@ -100,11 +99,10 @@ export default async function DmUsersPage() {
           </Card>
         )}
 
-        {/* All players table */}
         <div>
-          <h2 className="text-lg font-semibold text-neutral-200 mb-4">All Players</h2>
+          <h2 className="text-lg font-semibold text-neutral-200 mb-4">Assigned Players</h2>
           {players.length === 0 ? (
-            <p className="text-neutral-500 text-sm">No player accounts yet.</p>
+            <p className="text-neutral-500 text-sm">No players are assigned to your campaigns yet.</p>
           ) : (
             <Card className="bg-neutral-900 border-neutral-800">
               <Table>

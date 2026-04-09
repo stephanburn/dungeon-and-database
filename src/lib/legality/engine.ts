@@ -31,6 +31,7 @@ export interface LegalityInput {
     int: number; wis: number; cha: number
   }
   totalLevel: number
+  classCount: number
 
   // Sources of chosen content (null = not yet chosen)
   speciesSource: string | null
@@ -49,6 +50,10 @@ export interface LegalityInput {
   // Skills (Phase 1: first class only)
   classSkillChoices: { count: number; from: string[] }
   skillProficiencies: string[]  // class-chosen canonical skill keys
+
+  // Rule set
+  campaignRuleSet: '2014' | '2024'
+  allSourceRuleSets: Record<string, '2014' | '2024'>
 }
 
 // ── Point buy constants ────────────────────────────────────
@@ -253,14 +258,59 @@ function checkSkillProficiencies(input: LegalityInput): LegalityCheck {
   }
 }
 
+function checkMulticlassSkillsAdvisory(input: LegalityInput): LegalityCheck {
+  const passed = input.classCount <= 1
+  return {
+    key: 'multiclass_skill_validation',
+    passed,
+    message: passed
+      ? 'Single-class skill validation available.'
+      : 'Multiclass skill validation is not implemented yet; current skill checks only validate the first class.',
+    severity: 'warning',
+  }
+}
+
+function checkRuleSetConsistency(input: LegalityInput): LegalityCheck {
+  const { campaignRuleSet, allSourceRuleSets } = input
+
+  const allUsedSources = [
+    input.speciesSource,
+    input.backgroundSource,
+    ...input.classSources,
+    ...input.subclassSources,
+    ...input.spellSources,
+    ...input.featSources,
+  ].filter((s): s is string => s !== null)
+
+  const mismatches: string[] = []
+  for (const src of allUsedSources) {
+    const srcRuleSet = allSourceRuleSets[src]
+    if (srcRuleSet && srcRuleSet !== campaignRuleSet && !mismatches.includes(src)) {
+      mismatches.push(src)
+    }
+  }
+
+  const passed = mismatches.length === 0
+  return {
+    key: 'rule_set_consistency',
+    passed,
+    message: passed
+      ? `All content matches campaign rule set (${campaignRuleSet}).`
+      : `Campaign uses ${campaignRuleSet} rules but content from incompatible sources: ${mismatches.join(', ')}.`,
+    severity: 'warning',
+  }
+}
+
 // ── Main engine ────────────────────────────────────────────
 
 export function runLegalityChecks(input: LegalityInput): LegalityResult {
   const checks: LegalityCheck[] = [
     checkSourceAllowlist(input),
+    checkRuleSetConsistency(input),
     checkStatMethodConsistency(input),
     checkStatMethod(input),
     checkLevelCap(input),
+    checkMulticlassSkillsAdvisory(input),
     checkSkillProficiencies(input),
   ]
 

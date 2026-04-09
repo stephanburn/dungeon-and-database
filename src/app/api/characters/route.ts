@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { requireAuth, jsonError } from '@/lib/api-helpers'
+import { assertCampaignOwnedByDm } from '@/lib/auth/ownership'
 import { z } from 'zod'
 
 const createCharacterSchema = z.object({
@@ -47,6 +48,21 @@ export async function POST(request: NextRequest) {
   const body = await request.json()
   const parsed = createCharacterSchema.safeParse(body)
   if (!parsed.success) return jsonError(parsed.error.message, 400)
+
+  if (profile.role === 'dm') {
+    const ownedCampaign = await assertCampaignOwnedByDm(supabase, parsed.data.campaign_id, profile.id)
+    if (!ownedCampaign) return jsonError('Forbidden', 403)
+  } else {
+    const { data: membership, error: membershipError } = await supabase
+      .from('campaign_members')
+      .select('campaign_id')
+      .eq('campaign_id', parsed.data.campaign_id)
+      .eq('user_id', profile.id)
+      .maybeSingle()
+
+    if (membershipError) return jsonError(membershipError.message, 500)
+    if (!membership) return jsonError('Forbidden', 403)
+  }
 
   const { data, error } = await supabase
     .from('characters')

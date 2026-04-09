@@ -33,9 +33,13 @@ export async function POST(request: NextRequest) {
     .insert({
       name: body.name,
       skill_proficiencies: body.skill_proficiencies ?? [],
+      skill_choice_count: body.skill_choice_count ?? 0,
+      skill_choice_from: body.skill_choice_from ?? [],
       tool_proficiencies: body.tool_proficiencies ?? [],
       languages: body.languages ?? [],
       starting_equipment: body.starting_equipment ?? [],
+      feature: body.feature ?? '',
+      background_feat_id: body.background_feat_id || null,
       source: body.source,
       amended: false,
       amendment_note: null,

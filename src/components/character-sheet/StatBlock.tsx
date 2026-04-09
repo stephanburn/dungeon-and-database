@@ -97,7 +97,14 @@ export function StatBlock({
               </span>
 
               {/* Effective score */}
-              <span className="text-sm font-medium text-neutral-200">{effective}</span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-sm font-medium text-neutral-200">{effective}</span>
+                {racial !== 0 && (
+                  <span className="rounded-full bg-blue-950 px-1.5 py-0.5 text-[10px] font-medium text-blue-300">
+                    {racial > 0 ? `+${racial}` : racial}
+                  </span>
+                )}
+              </div>
 
               {/* Base score input / display */}
               {readOnly ? (
@@ -143,8 +150,8 @@ export function StatBlock({
 
               {/* Racial bonus indicator */}
               {!readOnly && racial !== 0 && (
-                <span className="text-xs text-blue-400">
-                  {racial > 0 ? `+${racial}` : racial} racial
+                <span className="text-xs text-neutral-500">
+                  species bonus
                 </span>
               )}
             </div>

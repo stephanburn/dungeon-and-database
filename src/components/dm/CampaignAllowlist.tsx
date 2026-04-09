@@ -3,11 +3,13 @@
 import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Checkbox } from '@/components/ui/checkbox'
 import { useToast } from '@/hooks/use-toast'
 
 interface SourceRow {
   key: string
   full_name: string
+  rule_set: '2014' | '2024'
 }
 
 interface CampaignAllowlistProps {
@@ -58,6 +60,11 @@ export function CampaignAllowlist({ campaignId, initialAllowlist }: CampaignAllo
     }
   }
 
+  /**
+   * The allowlist editor keeps a Set in local state so toggles stay O(1) and
+   * order-independent while we batch-save the final source key array.
+   */
+
   return (
     <Card className="bg-neutral-900 border-neutral-800">
       <CardHeader>
@@ -67,24 +74,32 @@ export function CampaignAllowlist({ campaignId, initialAllowlist }: CampaignAllo
         <p className="text-sm text-neutral-400">
           Only content from allowed sources will be available to players when building characters.
         </p>
-        <div className="space-y-2">
-          {allSources.map(({ key, full_name }) => (
-            <label
-              key={key}
-              className="flex items-center gap-3 cursor-pointer group"
-            >
-              <input
-                type="checkbox"
-                checked={selected.has(key)}
-                onChange={() => toggle(key)}
-                className="w-4 h-4 rounded accent-blue-500"
-              />
-              <span className="text-neutral-200 group-hover:text-white transition-colors">
-                {full_name}
-              </span>
-              <code className="text-xs text-neutral-500 font-mono">{key}</code>
-            </label>
-          ))}
+        <div className="space-y-4">
+          {(['2014', '2024'] as const).map((rs) => {
+            const group = allSources.filter((s) => s.rule_set === rs)
+            if (group.length === 0) return null
+            return (
+              <div key={rs}>
+                <p className="text-xs font-semibold text-neutral-500 uppercase tracking-wide mb-2">
+                  D&amp;D 5e {rs}
+                </p>
+                <div className="space-y-2">
+                  {group.map(({ key, full_name }) => (
+                    <label key={key} className="flex items-center gap-3 cursor-pointer group">
+                      <Checkbox
+                        checked={selected.has(key)}
+                        onChange={() => toggle(key)}
+                      />
+                      <span className="text-neutral-200 group-hover:text-white transition-colors">
+                        {full_name}
+                      </span>
+                      <code className="text-xs text-neutral-500 font-mono">{key}</code>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )
+          })}
         </div>
         <Button onClick={handleSave} disabled={saving}>
           {saving ? 'Saving…' : 'Save allowlist'}

@@ -89,11 +89,6 @@ export default async function DashboardPage() {
                     <p className="text-sm text-neutral-400">
                       {(char.campaign as Campaign | null)?.name ?? 'No campaign'}
                     </p>
-                    {char.status === 'changes_requested' && char.dm_notes && (
-                      <p className="text-xs text-amber-400 mt-2 truncate">
-                        DM: {char.dm_notes}
-                      </p>
-                    )}
                   </CardContent>
                 </Card>
               </Link>

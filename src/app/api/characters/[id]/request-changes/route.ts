@@ -1,30 +1,30 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { requireDm, jsonError } from '@/lib/api-helpers'
+import { assertCharacterInDmCampaign } from '@/lib/auth/ownership'
 import { z } from 'zod'
 
 const schema = z.object({
   notes: z.string().min(1, 'Notes are required when requesting changes.'),
 })
 
+/**
+ * DM transition: submitted -> changes_requested.
+ * The DM must both own the campaign and provide notes for the player.
+ */
 export async function POST(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   const auth = await requireDm()
   if (auth instanceof NextResponse) return auth
-  const { supabase } = auth
+  const { profile, supabase } = auth
 
   const body = await request.json()
   const parsed = schema.safeParse(body)
   if (!parsed.success) return jsonError(parsed.error.message, 400)
 
-  const { data: character } = await supabase
-    .from('characters')
-    .select('status')
-    .eq('id', params.id)
-    .single()
-
-  if (!character) return jsonError('Character not found', 404)
+  const character = await assertCharacterInDmCampaign(supabase, params.id, profile.id)
+  if (!character) return jsonError('Forbidden', 403)
   if (character.status !== 'submitted') {
     return jsonError(`Cannot request changes on a character with status "${character.status}"`, 400)
   }

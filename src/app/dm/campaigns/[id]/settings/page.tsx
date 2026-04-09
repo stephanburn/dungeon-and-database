@@ -30,6 +30,8 @@ export default async function CampaignSettingsPage({ params }: { params: { id: s
   if (!campaignResult.data) notFound()
 
   const campaign = campaignResult.data
+  if (campaign.dm_id !== user.id) notFound()
+
   const allowlist = (allowlistResult.data ?? []).map((r) => r.source_key)
 
   return (

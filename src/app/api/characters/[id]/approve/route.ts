@@ -1,21 +1,23 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { requireDm, jsonError } from '@/lib/api-helpers'
+import { assertCharacterInDmCampaign } from '@/lib/auth/ownership'
+import { captureSnapshot } from '@/lib/snapshots'
 
+/**
+ * DM transition: submitted -> approved.
+ * Ownership is checked explicitly so one DM cannot approve another DM's
+ * campaign character even if they both have the DM role.
+ */
 export async function POST(
   _request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   const auth = await requireDm()
   if (auth instanceof NextResponse) return auth
-  const { supabase } = auth
+  const { profile, supabase } = auth
 
-  const { data: character } = await supabase
-    .from('characters')
-    .select('status')
-    .eq('id', params.id)
-    .single()
-
-  if (!character) return jsonError('Character not found', 404)
+  const character = await assertCharacterInDmCampaign(supabase, params.id, profile.id)
+  if (!character) return jsonError('Forbidden', 403)
   if (character.status !== 'submitted') {
     return jsonError(`Cannot approve a character with status "${character.status}"`, 400)
   }
@@ -28,5 +30,6 @@ export async function POST(
     .single()
 
   if (error) return jsonError(error.message, 500)
+  await captureSnapshot(supabase, params.id)
   return NextResponse.json(data)
 }

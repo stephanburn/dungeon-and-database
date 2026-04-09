@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { ConfirmActionButton } from '@/components/shared/ConfirmActionButton'
 
 interface Member {
   id: string
@@ -78,14 +79,16 @@ export function CampaignMembers({ campaignId, dmId }: CampaignMembersProps) {
                 <span className="text-neutral-500 ml-2">{m.email}</span>
               </span>
               {m.id !== dmId && (
-                <Button
+                <ConfirmActionButton
+                  title="Remove campaign member?"
+                  description={`Remove ${m.display_name} from this campaign. Their account stays intact.`}
+                  triggerLabel="Remove"
+                  confirmLabel="Remove member"
+                  onConfirm={() => handleRemove(m.id)}
                   variant="ghost"
                   size="sm"
-                  onClick={() => handleRemove(m.id)}
                   className="text-neutral-500 hover:text-red-400 h-6 px-2"
-                >
-                  Remove
-                </Button>
+                />
               )}
             </li>
           ))}

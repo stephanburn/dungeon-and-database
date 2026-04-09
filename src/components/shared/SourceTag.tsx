@@ -7,10 +7,10 @@ interface SourceTagProps {
 
 const SOURCE_COLOURS: Record<string, string> = {
   SRD: 'bg-neutral-700 text-neutral-200',
-  PHB: 'bg-blue-900 text-blue-200',
-  TCoE: 'bg-purple-900 text-purple-200',
-  GGtR: 'bg-green-900 text-green-200',
-  ERftLW: 'bg-amber-900 text-amber-200',
+  PHB: 'bg-neutral-700 text-neutral-200',
+  TCoE: 'bg-neutral-700 text-neutral-200',
+  GGtR: 'bg-neutral-700 text-neutral-200',
+  ERftLW: 'bg-neutral-700 text-neutral-200',
   Homebrew: 'bg-rose-900 text-rose-200',
 }
 

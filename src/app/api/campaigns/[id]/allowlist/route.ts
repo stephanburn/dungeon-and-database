@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { requireAuth, requireDm, jsonError } from '@/lib/api-helpers'
+import { assertCampaignOwnedByDm } from '@/lib/auth/ownership'
 import { z } from 'zod'
 
 const updateAllowlistSchema = z.object({
@@ -29,7 +30,10 @@ export async function PUT(
 ) {
   const auth = await requireDm()
   if (auth instanceof NextResponse) return auth
-  const { supabase } = auth
+  const { profile, supabase } = auth
+
+  const ownedCampaign = await assertCampaignOwnedByDm(supabase, params.id, profile.id)
+  if (!ownedCampaign) return jsonError('Forbidden', 403)
 
   const body = await request.json()
   const parsed = updateAllowlistSchema.safeParse(body)
@@ -39,13 +43,13 @@ export async function PUT(
   const { error: deleteError } = await supabase
     .from('campaign_source_allowlist')
     .delete()
-    .eq('campaign_id', params.id)
+    .eq('campaign_id', ownedCampaign.id)
 
   if (deleteError) return jsonError(deleteError.message, 500)
 
   if (parsed.data.source_keys.length > 0) {
     const rows = parsed.data.source_keys.map((source_key) => ({
-      campaign_id: params.id,
+      campaign_id: ownedCampaign.id,
       source_key,
     }))
 

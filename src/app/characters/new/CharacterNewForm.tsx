@@ -126,7 +126,7 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
                 <Input
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="Enter character name"
+                  placeholder="Mira Stormborn"
                   required
                   className="bg-neutral-800 border-neutral-700 text-neutral-100"
                 />

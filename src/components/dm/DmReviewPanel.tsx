@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { ConfirmActionButton } from '@/components/shared/ConfirmActionButton'
 import { useToast } from '@/hooks/use-toast'
 import type { CharacterStatus } from '@/lib/types/database'
 
@@ -29,10 +30,11 @@ export function DmReviewPanel({ characterId, status }: DmReviewPanelProps) {
       if (!res.ok) {
         const json = await res.json()
         toast({ title: 'Error', description: json.error, variant: 'destructive' })
-        return
+        return false
       }
       toast({ title: 'Character approved' })
       router.refresh()
+      return true
     } finally {
       setLoading(null)
     }
@@ -79,13 +81,15 @@ export function DmReviewPanel({ characterId, status }: DmReviewPanelProps) {
           />
         </div>
         <div className="flex gap-3">
-          <Button
-            onClick={handleApprove}
-            disabled={loading !== null}
+          <ConfirmActionButton
+            title="Approve this character?"
+            description="This will mark the sheet approved and clear any outstanding change-request notes."
+            triggerLabel={loading === 'approve' ? 'Approving…' : 'Approve'}
+            confirmLabel="Approve"
+            pendingLabel="Approving…"
+            onConfirm={handleApprove}
             className="bg-green-700 hover:bg-green-600 text-white"
-          >
-            {loading === 'approve' ? 'Approving…' : 'Approve'}
-          </Button>
+          />
           <Button
             variant="outline"
             onClick={handleRequestChanges}

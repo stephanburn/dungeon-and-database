@@ -3,6 +3,7 @@
 // ============================================================
 
 export type UserRole = 'player' | 'dm'
+export type RuleSet = '2014' | '2024'
 export type CharacterStatus = 'draft' | 'submitted' | 'approved' | 'changes_requested'
 export type StatMethod = 'point_buy' | 'standard_array' | 'rolled'
 export type Alignment = 'LG' | 'NG' | 'CG' | 'LN' | 'N' | 'CN' | 'LE' | 'NE' | 'CE'
@@ -75,6 +76,7 @@ export type Campaign = {
   name: string
   dm_id: string
   settings: CampaignSettings
+  rule_set: RuleSet
   created_at: string
 }
 
@@ -93,6 +95,7 @@ export type Source = {
   key: string
   full_name: string
   is_srd: boolean
+  rule_set: RuleSet
 }
 
 export type SpeciesTrait = {
@@ -142,7 +145,7 @@ export type Class = {
   multiclass_prereqs: MulticlassPrereq[]
   multiclass_proficiencies: Record<string, unknown>
   spellcasting_type: SpellcastingType | null
-  is_spellcaster: boolean
+  subclass_choice_level: number
   source: string
   amended: boolean
   amendment_note: string | null
@@ -223,9 +226,13 @@ export type Background = {
   id: string
   name: string
   skill_proficiencies: string[]
+  skill_choice_count: number
+  skill_choice_from: string[]
   tool_proficiencies: string[]
   languages: string[]
   starting_equipment: StartingEquipmentItem[]
+  feature: string
+  background_feat_id: string | null
   source: string
   amended: boolean
   amendment_note: string | null
@@ -304,10 +311,10 @@ export type Database = {
   public: {
     Tables: {
       users: { Row: User; Insert: Omit<User, 'created_at'>; Update: Partial<Omit<User, 'id'>>; Relationships: R }
-      campaigns: { Row: Campaign; Insert: Omit<Campaign, 'id' | 'created_at'>; Update: Partial<Omit<Campaign, 'id'>>; Relationships: R }
+      campaigns: { Row: Campaign; Insert: Omit<Campaign, 'id' | 'created_at'> & { rule_set?: RuleSet }; Update: Partial<Omit<Campaign, 'id'>>; Relationships: R }
       campaign_members: { Row: CampaignMember; Insert: Omit<CampaignMember, 'joined_at'>; Update: Partial<CampaignMember>; Relationships: R }
       campaign_source_allowlist: { Row: CampaignSourceAllowlist; Insert: CampaignSourceAllowlist; Update: Partial<CampaignSourceAllowlist>; Relationships: R }
-      sources: { Row: Source; Insert: Source; Update: Partial<Source>; Relationships: R }
+      sources: { Row: Source; Insert: Omit<Source, 'rule_set'> & { rule_set?: RuleSet }; Update: Partial<Source>; Relationships: R }
       species_traits: { Row: SpeciesTrait; Insert: Omit<SpeciesTrait, 'id'>; Update: Partial<Omit<SpeciesTrait, 'id'>>; Relationships: R }
       species: { Row: Species; Insert: Omit<Species, 'id'>; Update: Partial<Omit<Species, 'id'>>; Relationships: R }
       class_features: { Row: ClassFeature; Insert: Omit<ClassFeature, 'id'>; Update: Partial<Omit<ClassFeature, 'id'>>; Relationships: R }

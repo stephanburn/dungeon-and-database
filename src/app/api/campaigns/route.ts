@@ -4,6 +4,7 @@ import { z } from 'zod'
 
 const createCampaignSchema = z.object({
   name: z.string().min(1).max(100),
+  rule_set: z.enum(['2014', '2024']).optional(),
   settings: z.object({
     stat_method: z.enum(['point_buy', 'standard_array', 'rolled']).optional(),
     max_level: z.number().int().min(1).max(20).optional(),
@@ -45,13 +46,14 @@ export async function POST(request: NextRequest) {
   const parsed = createCampaignSchema.safeParse(body)
   if (!parsed.success) return jsonError(parsed.error.message, 400)
 
-  const { name, settings } = parsed.data
+  const { name, rule_set, settings } = parsed.data
 
   const { data, error } = await supabase
     .from('campaigns')
     .insert({
       name,
       dm_id: profile.id,
+      rule_set: rule_set ?? '2014',
       settings: {
         stat_method: settings?.stat_method ?? 'point_buy',
         max_level: settings?.max_level ?? 20,

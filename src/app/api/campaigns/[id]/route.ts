@@ -1,9 +1,11 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { requireAuth, requireDm, jsonError } from '@/lib/api-helpers'
+import { assertCampaignOwnedByDm } from '@/lib/auth/ownership'
 import { z } from 'zod'
 
 const updateCampaignSchema = z.object({
   name: z.string().min(1).max(100).optional(),
+  rule_set: z.enum(['2014', '2024']).optional(),
   settings: z.object({
     stat_method: z.enum(['point_buy', 'standard_array', 'rolled']).optional(),
     max_level: z.number().int().min(1).max(20).optional(),
@@ -35,7 +37,10 @@ export async function PUT(
 ) {
   const auth = await requireDm()
   if (auth instanceof NextResponse) return auth
-  const { supabase } = auth
+  const { profile, supabase } = auth
+
+  const ownedCampaign = await assertCampaignOwnedByDm(supabase, params.id, profile.id)
+  if (!ownedCampaign) return jsonError('Forbidden', 403)
 
   const body = await request.json()
   const parsed = updateCampaignSchema.safeParse(body)
@@ -43,14 +48,16 @@ export async function PUT(
 
   const updates: Record<string, unknown> = {}
   if (parsed.data.name !== undefined) updates.name = parsed.data.name
+  if (parsed.data.rule_set !== undefined) updates.rule_set = parsed.data.rule_set
   if (parsed.data.settings !== undefined) {
     // Merge settings rather than replace
-    const { data: existing } = await supabase
+    const { data: existing, error: existingError } = await supabase
       .from('campaigns')
       .select('settings')
-      .eq('id', params.id)
+      .eq('id', ownedCampaign.id)
       .single()
 
+    if (existingError) return jsonError(existingError.message, 500)
     updates.settings = { ...existing?.settings, ...parsed.data.settings }
   }
 
