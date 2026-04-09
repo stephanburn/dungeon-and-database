@@ -13,6 +13,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { AddToCampaignButton } from '@/components/dm/AddToCampaignButton'
+import { PromoteToDmButton } from '@/components/dm/PromoteToDmButton'
 import type { User, Campaign, Character } from '@/lib/types/database'
 
 interface UserRow extends User {
@@ -56,6 +57,7 @@ export default async function DmUsersPage() {
     return { ...u, campaignIds, campaignNames, characterCount }
   })
 
+  const dms = userRows.filter((u) => u.role === 'dm')
   const unassigned = userRows.filter((u) => u.role !== 'dm' && u.campaignIds.length === 0)
   const players = userRows.filter((u) => u.role !== 'dm' && u.campaignIds.length > 0)
 
@@ -88,16 +90,49 @@ export default async function DmUsersPage() {
                     <span className="text-neutral-200 text-sm font-medium">{u.display_name}</span>
                     <span className="text-neutral-500 text-sm ml-2">{u.email}</span>
                   </div>
-                  <AddToCampaignButton
-                    userId={u.id}
-                    campaigns={campaigns}
-                    alreadyIn={u.campaignIds}
-                  />
+                  <div className="flex items-center gap-2">
+                    <PromoteToDmButton userId={u.id} displayName={u.display_name} />
+                    <AddToCampaignButton
+                      userId={u.id}
+                      campaigns={campaigns}
+                      alreadyIn={u.campaignIds}
+                    />
+                  </div>
                 </div>
               ))}
             </CardContent>
           </Card>
         )}
+
+        <div>
+          <h2 className="text-lg font-semibold text-neutral-200 mb-4">DMs</h2>
+          {dms.length === 0 ? (
+            <p className="text-neutral-500 text-sm">No DM accounts found.</p>
+          ) : (
+            <Card className="bg-neutral-900 border-neutral-800">
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-neutral-800 hover:bg-transparent">
+                    <TableHead className="text-neutral-400">Name</TableHead>
+                    <TableHead className="text-neutral-400">Email</TableHead>
+                    <TableHead className="text-neutral-400">Campaigns</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {dms.map((u) => (
+                    <TableRow key={u.id} className="border-neutral-800 hover:bg-neutral-800/30">
+                      <TableCell className="text-neutral-200 font-medium">{u.display_name}</TableCell>
+                      <TableCell className="text-neutral-400 text-sm">{u.email}</TableCell>
+                      <TableCell className="text-neutral-400 text-sm">
+                        {u.campaignNames.length > 0 ? u.campaignNames.join(', ') : '—'}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </Card>
+          )}
+        </div>
 
         <div>
           <h2 className="text-lg font-semibold text-neutral-200 mb-4">Assigned Players</h2>
@@ -107,13 +142,14 @@ export default async function DmUsersPage() {
             <Card className="bg-neutral-900 border-neutral-800">
               <Table>
                 <TableHeader>
-                  <TableRow className="border-neutral-800 hover:bg-transparent">
-                    <TableHead className="text-neutral-400">Name</TableHead>
-                    <TableHead className="text-neutral-400">Email</TableHead>
-                    <TableHead className="text-neutral-400">Campaigns</TableHead>
-                    <TableHead className="text-neutral-400">Characters</TableHead>
-                    <TableHead className="text-neutral-400">Add to campaign</TableHead>
-                  </TableRow>
+                    <TableRow className="border-neutral-800 hover:bg-transparent">
+                      <TableHead className="text-neutral-400">Name</TableHead>
+                      <TableHead className="text-neutral-400">Email</TableHead>
+                      <TableHead className="text-neutral-400">Campaigns</TableHead>
+                      <TableHead className="text-neutral-400">Characters</TableHead>
+                      <TableHead className="text-neutral-400">Add to campaign</TableHead>
+                      <TableHead className="text-neutral-400">Role</TableHead>
+                    </TableRow>
                 </TableHeader>
                 <TableBody>
                   {players.map((u) => (
@@ -132,6 +168,9 @@ export default async function DmUsersPage() {
                           campaigns={campaigns}
                           alreadyIn={u.campaignIds}
                         />
+                      </TableCell>
+                      <TableCell>
+                        <PromoteToDmButton userId={u.id} displayName={u.display_name} />
                       </TableCell>
                     </TableRow>
                   ))}
