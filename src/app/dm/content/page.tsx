@@ -18,14 +18,16 @@ export default async function DmContentPage() {
   if (!isAdminRole(profile?.role)) redirect('/dm/dashboard')
 
   return (
-    <div className="min-h-screen bg-neutral-950 p-6">
-      <div className="max-w-6xl mx-auto space-y-6">
+    <div className="page-shell">
+      <div className="page-container space-y-8">
         <div>
-          <Link href="/dm/dashboard" className="text-sm text-neutral-500 hover:text-neutral-300 transition-colors">
+          <Link href="/dm/dashboard" className="text-sm text-neutral-500 transition-colors hover:text-neutral-300">
             ← Dashboard
           </Link>
-          <h1 className="text-2xl font-bold text-neutral-100 mt-2">Content Library</h1>
-          <p className="text-sm text-neutral-400 mt-1">Add and manage game content available to players.</p>
+          <h1 className="page-title mt-3">Content Library</h1>
+          <p className="page-subtitle">
+            Manage the canonical content available to campaigns. Keep sources and core entities tidy, consistent, and easy to scan.
+          </p>
         </div>
         <ContentAdmin />
       </div>

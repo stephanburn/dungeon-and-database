@@ -299,13 +299,12 @@ function ContentForm({ tab, form, setField, classes, sources, feats, autoFocusFi
     if (isFirst) firstFieldRendered = true
     return (
       <div>
-        <Label className="text-neutral-400 text-xs mb-1 block">{label}</Label>
+        <Label className="mb-1 block text-xs text-neutral-400">{label}</Label>
         <Input
           type={type}
           value={form[key] as string | number}
           onChange={e => setField(key, type === 'number' ? Number(e.target.value) : e.target.value)}
           placeholder={placeholder}
-          className="bg-neutral-800 border-neutral-700 text-neutral-100"
           autoFocus={isFirst && autoFocusFirst}
         />
       </div>
@@ -324,12 +323,12 @@ function ContentForm({ tab, form, setField, classes, sources, feats, autoFocusFi
 
   const sourceSelect = (
     <div>
-      <Label className="text-neutral-400 text-xs mb-1 block">Source</Label>
+      <Label className="mb-1 block text-xs text-neutral-400">Source</Label>
       <Select value={(form.source as string) || 'none'} onValueChange={value => setField('source', value === 'none' ? '' : value)}>
-        <SelectTrigger className="bg-neutral-800 border-neutral-700 text-neutral-100">
+        <SelectTrigger>
           <SelectValue placeholder="Select source" />
         </SelectTrigger>
-        <SelectContent className="bg-neutral-800 border-neutral-700">
+        <SelectContent>
           <SelectItem value="none" className="text-neutral-400">Select source</SelectItem>
           {sources.map(s => (
             <SelectItem key={s.key} value={s.key} className="text-neutral-200">
@@ -365,7 +364,6 @@ function ContentForm({ tab, form, setField, classes, sources, feats, autoFocusFi
           onChange={e => setField('feature', e.target.value)}
           rows={2}
           placeholder="Shelter of the Faithful"
-          className="bg-neutral-800 border-neutral-700 text-neutral-100"
         />
       </div>
         <div>
@@ -374,10 +372,10 @@ function ContentForm({ tab, form, setField, classes, sources, feats, autoFocusFi
           value={(form.background_feat_id as string) || 'none'}
           onValueChange={value => setField('background_feat_id', value === 'none' ? '' : value)}
         >
-          <SelectTrigger className="bg-neutral-800 border-neutral-700 text-neutral-100">
+          <SelectTrigger>
             <SelectValue placeholder="No background feat" />
           </SelectTrigger>
-          <SelectContent className="bg-neutral-800 border-neutral-700">
+          <SelectContent>
             <SelectItem value="none" className="text-neutral-400">No background feat</SelectItem>
             {feats.map(f => (
               <SelectItem key={f.id} value={f.id} className="text-neutral-200">
@@ -400,10 +398,10 @@ function ContentForm({ tab, form, setField, classes, sources, feats, autoFocusFi
         <div>
           <Label className="text-neutral-400 text-xs mb-1 block">Size</Label>
           <Select value={form.size as string} onValueChange={value => setField('size', value)}>
-            <SelectTrigger className="bg-neutral-800 border-neutral-700 text-neutral-100">
+            <SelectTrigger>
               <SelectValue />
             </SelectTrigger>
-            <SelectContent className="bg-neutral-800 border-neutral-700">
+            <SelectContent>
               {['tiny', 'small', 'medium', 'large'].map(s => (
                 <SelectItem key={s} value={s} className="capitalize text-neutral-200">
                   {s}
@@ -425,7 +423,7 @@ function ContentForm({ tab, form, setField, classes, sources, feats, autoFocusFi
                 type="number"
                 value={form[`asb_${k}`] as number}
                 onChange={e => setField(`asb_${k}`, Number(e.target.value))}
-                className="bg-neutral-800 border-neutral-700 text-neutral-100 text-center"
+                className="text-center"
               />
             </div>
           ))}
@@ -445,10 +443,10 @@ function ContentForm({ tab, form, setField, classes, sources, feats, autoFocusFi
         <div>
           <Label className="text-neutral-400 text-xs mb-1 block">Hit Die</Label>
           <Select value={String(form.hit_die as number)} onValueChange={value => setField('hit_die', Number(value))}>
-            <SelectTrigger className="bg-neutral-800 border-neutral-700 text-neutral-100">
+            <SelectTrigger>
               <SelectValue />
             </SelectTrigger>
-            <SelectContent className="bg-neutral-800 border-neutral-700">
+            <SelectContent>
               {HIT_DICE.map(d => (
                 <SelectItem key={d} value={String(d)} className="text-neutral-200">
                   d{d}
@@ -464,10 +462,10 @@ function ContentForm({ tab, form, setField, classes, sources, feats, autoFocusFi
             value={(form.spellcasting_type as string) || 'none'}
             onValueChange={value => setField('spellcasting_type', value === 'none' ? '' : value)}
           >
-            <SelectTrigger className="bg-neutral-800 border-neutral-700 text-neutral-100">
+            <SelectTrigger>
               <SelectValue />
             </SelectTrigger>
-            <SelectContent className="bg-neutral-800 border-neutral-700">
+            <SelectContent>
               <SelectItem value="none" className="text-neutral-400">None</SelectItem>
               {SPELLCASTING_TYPES.filter(Boolean).map(t => (
                 <SelectItem key={t} value={t} className="capitalize text-neutral-200">
@@ -505,10 +503,10 @@ function ContentForm({ tab, form, setField, classes, sources, feats, autoFocusFi
       <div>
         <Label className="text-neutral-400 text-xs mb-1 block">Class</Label>
         <Select value={form.class_id as string} onValueChange={value => setField('class_id', value)}>
-          <SelectTrigger className="bg-neutral-800 border-neutral-700 text-neutral-100">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent className="bg-neutral-800 border-neutral-700">
+        <SelectTrigger>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
             {classes.map(c => (
               <SelectItem key={c.id} value={c.id} className="text-neutral-200">
                 {c.name}
@@ -537,10 +535,10 @@ function ContentForm({ tab, form, setField, classes, sources, feats, autoFocusFi
         <div>
           <Label className="text-neutral-400 text-xs mb-1 block">Level</Label>
           <Select value={String(form.level as number)} onValueChange={value => setField('level', Number(value))}>
-            <SelectTrigger className="bg-neutral-800 border-neutral-700 text-neutral-100">
+            <SelectTrigger>
               <SelectValue />
             </SelectTrigger>
-            <SelectContent className="bg-neutral-800 border-neutral-700">
+            <SelectContent>
               {Object.entries(LEVEL_LABELS).map(([v, l]) => (
                 <SelectItem key={v} value={v} className="text-neutral-200">
                   {l}
@@ -575,7 +573,6 @@ function ContentForm({ tab, form, setField, classes, sources, feats, autoFocusFi
           value={form.description as string}
           onChange={e => setField('description', e.target.value)}
           rows={4}
-          className="bg-neutral-800 border-neutral-700 text-neutral-100"
         />
       </div>
       <div>
@@ -613,7 +610,6 @@ function ContentForm({ tab, form, setField, classes, sources, feats, autoFocusFi
           value={form.description as string}
           onChange={e => setField('description', e.target.value)}
           rows={3}
-          className="bg-neutral-800 border-neutral-700 text-neutral-100"
         />
       </div>
     </div>
@@ -626,10 +622,10 @@ function ContentForm({ tab, form, setField, classes, sources, feats, autoFocusFi
       <div>
         <Label className="text-neutral-400 text-xs mb-1 block">Rule Set</Label>
         <Select value={form.rule_set as string} onValueChange={value => setField('rule_set', value)}>
-          <SelectTrigger className="bg-neutral-800 border-neutral-700 text-neutral-100">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent className="bg-neutral-800 border-neutral-700">
+        <SelectTrigger>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
             <SelectItem value="2014" className="text-neutral-200">2014</SelectItem>
             <SelectItem value="2024" className="text-neutral-200">2024</SelectItem>
           </SelectContent>
@@ -765,33 +761,40 @@ export default function ContentAdmin() {
 
   return (
     <Tabs value={activeTab} onValueChange={v => setActiveTab(v as Tab)}>
-      <div className="flex items-center justify-between mb-4">
-        <TabsList className="bg-neutral-900 border border-neutral-800">
+      <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <h2 className="section-heading">Library Sections</h2>
+          <p className="mt-1 text-sm text-neutral-500">Choose a content type to review or edit.</p>
+        </div>
+        <Button size="sm" onClick={startAdd} disabled={showForm && editingId === null}>
+          Add {activeTab === 'classes' ? 'class' : activeTab.slice(0, -1)}
+        </Button>
+      </div>
+
+      <div className="mb-4 overflow-x-auto">
+        <TabsList className="h-auto rounded-2xl border border-white/10 bg-white/[0.03] p-1">
           {TABS.map(t => (
-            <TabsTrigger key={t} value={t} className="capitalize data-[state=active]:bg-neutral-700 data-[state=active]:text-neutral-100 text-neutral-400">
+            <TabsTrigger key={t} value={t} className="capitalize text-neutral-400 data-[state=active]:bg-white/[0.08] data-[state=active]:text-neutral-100">
               {t}
             </TabsTrigger>
           ))}
         </TabsList>
-        <Button size="sm" onClick={startAdd} disabled={showForm && editingId === null}>
-          + Add
-        </Button>
       </div>
 
       {TABS.map(tab => (
         <TabsContent key={tab} value={tab} className="mt-0 space-y-4">
           {showForm && activeTab === tab && (
-            <div className="bg-neutral-900 border border-neutral-700 rounded-lg p-4 space-y-4">
-              <h3 className="text-sm font-semibold text-neutral-300">
+            <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-5 space-y-4">
+              <h3 className="text-base font-semibold text-neutral-100">
                 {editingId ? 'Edit' : 'Add'} {tab === 'classes' ? 'class' : tab.slice(0, -1)}
               </h3>
               <ContentForm tab={tab} form={form} setField={setField} classes={classes} sources={sources} feats={feats} autoFocusFirst={!editingId} />
-              {error && <p className="text-red-400 text-sm">{error}</p>}
+              {error && <p className="text-sm text-red-400">{error}</p>}
               <div className="flex gap-2">
                 <Button size="sm" onClick={save} disabled={saving}>
                   {saving ? 'Saving…' : 'Save'}
                 </Button>
-                <Button size="sm" variant="outline" onClick={cancel} className="border-neutral-700 text-neutral-300 hover:bg-neutral-800">
+                <Button size="sm" variant="outline" onClick={cancel}>
                   Cancel
                 </Button>
               </div>
@@ -801,10 +804,10 @@ export default function ContentAdmin() {
           {items.length === 0 ? (
             <p className="text-neutral-500 text-sm">No {tab} yet.</p>
           ) : (
-            <div className="rounded-lg border border-neutral-800 overflow-hidden">
+            <div className="overflow-hidden rounded-3xl border border-white/10 bg-white/[0.03]">
               <Table>
                 <TableHeader>
-                  <TableRow className="border-neutral-800 hover:bg-transparent">
+                  <TableRow className="hover:bg-transparent">
                     {renderTableHead(tab)}
                     <TableHead className="w-24" />
                   </TableRow>
@@ -813,14 +816,14 @@ export default function ContentAdmin() {
                   {items.map(item => {
                     const itemKey = tab === 'sources' ? item.key as string : item.id as string
                     return (
-                      <TableRow key={itemKey} className="border-neutral-800 hover:bg-neutral-900/50">
+                      <TableRow key={itemKey}>
                         {renderTableCells(tab, item, classes)}
                         <TableCell>
                           <div className="flex gap-1 justify-end">
-                            <Button size="sm" variant="ghost" onClick={() => startEdit(item)} className="text-neutral-400 hover:text-neutral-100 h-7 px-2 text-xs">
+                            <Button size="sm" variant="ghost" onClick={() => startEdit(item)} className="h-7 px-2 text-xs">
                               Edit
                             </Button>
-                            <Button size="sm" variant="ghost" onClick={() => deleteItem(itemKey)} className="text-red-500 hover:text-red-400 h-7 px-2 text-xs">
+                            <Button size="sm" variant="ghost" onClick={() => deleteItem(itemKey)} className="h-7 px-2 text-xs text-red-400 hover:text-red-300">
                               Delete
                             </Button>
                           </div>

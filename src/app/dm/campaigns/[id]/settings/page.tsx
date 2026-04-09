@@ -36,17 +36,19 @@ export default async function CampaignSettingsPage({ params }: { params: { id: s
   const allowlist = (allowlistResult.data ?? []).map((r) => r.source_key)
 
   return (
-    <div className="min-h-screen bg-neutral-950 p-6">
-      <div className="max-w-2xl mx-auto space-y-6">
+    <div className="page-shell">
+      <div className="mx-auto max-w-3xl space-y-8">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" asChild className="text-neutral-400 hover:text-neutral-200 -ml-2">
+          <Button variant="ghost" asChild className="-ml-2">
             <Link href="/dm/dashboard">← Dashboard</Link>
           </Button>
         </div>
 
         <div>
-          <h1 className="text-2xl font-bold text-neutral-100">{campaign.name}</h1>
-          <p className="text-sm text-neutral-400 mt-1">Campaign settings</p>
+          <h1 className="page-title">{campaign.name}</h1>
+          <p className="page-subtitle">
+            Configure membership, campaign rules, and available source material in one place.
+          </p>
         </div>
 
         <CampaignMembers campaignId={params.id} dmId={campaign.dm_id} />

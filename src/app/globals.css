@@ -3,25 +3,80 @@
 @tailwind utilities;
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --background: #0b0c0f;
+  --foreground: #f3f4f6;
+  --surface: #12141a;
+  --surface-muted: #171a21;
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.14);
+  --text-muted: #9ca3af;
+  --text-soft: #cfd5df;
+  --accent: #4f7fc1;
+  --accent-soft: rgba(79, 127, 193, 0.14);
+  --success: #3ba776;
+  --warning: #c89a3d;
+  --danger: #c55d63;
 }
 
 body {
   color: var(--foreground);
   background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+  min-height: 100vh;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: rgba(79, 127, 193, 0.32);
+  color: var(--foreground);
+}
+
+@layer base {
+  h1,
+  h2,
+  h3,
+  h4 {
+    letter-spacing: -0.02em;
+  }
+
+  p {
+    color: inherit;
+  }
 }
 
 @layer utilities {
   .text-balance {
     text-wrap: balance;
+  }
+
+  .page-shell {
+    @apply min-h-screen bg-neutral-950 px-4 py-8 sm:px-6 lg:px-8;
+  }
+
+  .page-container {
+    @apply mx-auto w-full max-w-6xl;
+  }
+
+  .page-header {
+    @apply flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between;
+  }
+
+  .page-title {
+    @apply text-3xl font-semibold text-neutral-50 sm:text-[2rem];
+  }
+
+  .page-subtitle {
+    @apply mt-1 text-sm leading-6 text-neutral-400;
+  }
+
+  .section-heading {
+    @apply text-lg font-semibold text-neutral-100;
+  }
+
+  .section-caption {
+    @apply text-sm text-neutral-500;
+  }
+
+  .panel-subtle {
+    @apply rounded-2xl border border-white/10 bg-white/[0.03];
   }
 }

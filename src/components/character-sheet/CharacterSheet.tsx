@@ -87,24 +87,24 @@ function CollapsibleSection({
   return (
     <section
       id={id}
-      className={`rounded-2xl border transition-all ${
+      className={`rounded-3xl border transition-all ${
         highlighted
-          ? 'border-blue-500 ring-2 ring-blue-500/40'
-          : 'border-neutral-800'
+          ? 'border-blue-400/30 ring-2 ring-blue-400/20'
+          : 'border-white/10'
       }`}
     >
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
-        className="flex w-full items-center justify-between gap-4 rounded-2xl bg-neutral-900 px-5 py-4 text-left"
+        className="flex w-full items-center justify-between gap-4 rounded-3xl bg-white/[0.03] px-6 py-5 text-left"
       >
         <div>
-          <h2 className="text-lg font-semibold text-neutral-100">{title}</h2>
-          {subtitle && <p className="text-sm text-neutral-400 mt-1">{subtitle}</p>}
+          <h2 className="text-xl font-semibold text-neutral-100">{title}</h2>
+          {subtitle && <p className="mt-1 text-sm leading-6 text-neutral-400">{subtitle}</p>}
         </div>
-        <span className="text-sm text-neutral-500">{open ? 'Hide' : 'Show'}</span>
+        <span className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-sm text-neutral-400">{open ? 'Hide' : 'Show'}</span>
       </button>
-      {open && <div className="space-y-4 bg-neutral-950 p-4">{children}</div>}
+      {open && <div className="space-y-4 border-t border-white/8 bg-neutral-950/40 p-4 sm:p-5">{children}</div>}
     </section>
   )
 }
@@ -366,7 +366,7 @@ export function CharacterSheet({
 
       {/* DM notes banner */}
       {status === 'changes_requested' && initial.dm_notes && (
-        <Alert className="border-amber-700 bg-amber-950">
+        <Alert className="border-amber-400/20 bg-amber-400/10">
           <AlertDescription className="text-amber-200">
             <strong>DM notes:</strong> {initial.dm_notes}
           </AlertDescription>
@@ -375,11 +375,11 @@ export function CharacterSheet({
 
       {/* Legality errors */}
       {legalityResult && failedChecks.length > 0 && (
-        <Card className="border-red-800 bg-red-950/30">
+        <Card className="border-rose-500/20 bg-rose-500/10">
           <CardHeader className="pb-2">
-          <CardTitle className="text-sm text-red-300">Legality issues</CardTitle>
+          <CardTitle className="text-sm text-rose-100">What needs attention</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-1">
+        <CardContent className="space-y-2">
           {failedChecks.map((check) => (
             <button
               key={check.key}
@@ -400,7 +400,7 @@ export function CharacterSheet({
         subtitle="Core identity, campaign-facing selections, and level structure."
         highlighted={highlightedSection === 'identity-class'}
       >
-      <Card className="bg-neutral-900 border-neutral-800">
+      <div className="panel-subtle">
         <CardHeader>
           <CardTitle className="text-neutral-200">Identity</CardTitle>
         </CardHeader>
@@ -411,7 +411,6 @@ export function CharacterSheet({
               <Input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="bg-neutral-800 border-neutral-700 text-neutral-100"
               />
             ) : (
               <p className="text-neutral-200">{name}</p>
@@ -422,10 +421,10 @@ export function CharacterSheet({
             <Label className="text-neutral-300">Alignment</Label>
             {canEdit ? (
               <Select value={alignment} onValueChange={(v) => setAlignment(v as Alignment)}>
-                <SelectTrigger className="bg-neutral-800 border-neutral-700 text-neutral-100">
+                <SelectTrigger>
                   <SelectValue placeholder="Choose alignment" />
                 </SelectTrigger>
-                <SelectContent className="bg-neutral-800 border-neutral-700">
+                <SelectContent>
                   {ALIGNMENTS.map((a) => (
                     <SelectItem key={a} value={a} className="text-neutral-200">{ALIGNMENT_LABELS[a]}</SelectItem>
                   ))}
@@ -440,10 +439,10 @@ export function CharacterSheet({
             <Label className="text-neutral-300">Species</Label>
             {canEdit ? (
               <Select value={speciesId} onValueChange={setSpeciesId}>
-                <SelectTrigger className="bg-neutral-800 border-neutral-700 text-neutral-100">
+                <SelectTrigger>
                   <SelectValue placeholder="Choose species" />
                 </SelectTrigger>
-                <SelectContent className="bg-neutral-800 border-neutral-700">
+                <SelectContent>
                   {speciesList.map((s) => (
                     <SelectItem key={s.id} value={s.id} className="text-neutral-200">
                       <span className="flex items-center gap-2">
@@ -466,10 +465,10 @@ export function CharacterSheet({
             <Label className="text-neutral-300">Background</Label>
             {canEdit ? (
               <Select value={backgroundId} onValueChange={setBackgroundId}>
-                <SelectTrigger className="bg-neutral-800 border-neutral-700 text-neutral-100">
+                <SelectTrigger>
                   <SelectValue placeholder="Choose background" />
                 </SelectTrigger>
-                <SelectContent className="bg-neutral-800 border-neutral-700">
+                <SelectContent>
                   {backgroundList.map((b) => (
                     <SelectItem key={b.id} value={b.id} className="text-neutral-200">
                       <span className="flex items-center gap-2">
@@ -508,21 +507,19 @@ export function CharacterSheet({
                 min={0}
                 value={experiencePoints}
                 onChange={(e) => setExperiencePoints(parseInt(e.target.value, 10) || 0)}
-                className="bg-neutral-800 border-neutral-700 text-neutral-100"
               />
             ) : (
               <p className="text-neutral-200">{experiencePoints.toLocaleString()}</p>
             )}
           </div>
         </CardContent>
-      </Card>
+      </div>
 
-      <Card className="bg-neutral-900 border-neutral-800">
+      <div className="panel-subtle">
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-neutral-200">Class &amp; Level</CardTitle>
           {canEdit && (
-            <Button size="sm" variant="outline" onClick={addLevel}
-              className="border-neutral-700 text-neutral-300 hover:bg-neutral-800">
+            <Button size="sm" variant="outline" onClick={addLevel}>
               + Add class
             </Button>
           )}
@@ -539,10 +536,10 @@ export function CharacterSheet({
                 {canEdit ? (
                   <>
                     <Select value={l.class_id} onValueChange={(v) => updateLevel(i, 'class_id', v)}>
-                      <SelectTrigger className="w-40 bg-neutral-800 border-neutral-700 text-neutral-100">
+                      <SelectTrigger className="w-40">
                         <SelectValue />
                       </SelectTrigger>
-                      <SelectContent className="bg-neutral-800 border-neutral-700">
+                      <SelectContent>
                         {classList.map((c) => (
                           <SelectItem key={c.id} value={c.id} className="text-neutral-200">
                             <span className="flex items-center gap-2">
@@ -557,7 +554,7 @@ export function CharacterSheet({
                     <Input
                       type="number" min={1} max={20} value={l.level}
                       onChange={(e) => updateLevel(i, 'level', parseInt(e.target.value, 10) || 1)}
-                      className="w-16 bg-neutral-800 border-neutral-700 text-neutral-100 text-center"
+                      className="w-16 text-center"
                     />
 
                     {subclasses.length > 0 && l.level >= (cls?.subclass_choice_level ?? subclasses[0].choice_level) && (
@@ -565,10 +562,10 @@ export function CharacterSheet({
                         value={l.subclass_id ?? 'none'}
                         onValueChange={(v) => updateLevel(i, 'subclass_id', v === 'none' ? null : v)}
                       >
-                        <SelectTrigger className="w-44 bg-neutral-800 border-neutral-700 text-neutral-100">
+                        <SelectTrigger className="w-44">
                           <SelectValue placeholder="Subclass (optional)" />
                         </SelectTrigger>
-                        <SelectContent className="bg-neutral-800 border-neutral-700">
+                        <SelectContent>
                           <SelectItem value="none" className="text-neutral-400">None</SelectItem>
                           {subclasses.map((sc) => (
                             <SelectItem key={sc.id} value={sc.id} className="text-neutral-200">
@@ -584,7 +581,7 @@ export function CharacterSheet({
 
                     <Button size="sm" variant="ghost"
                       onClick={() => removeLevel(i)}
-                      className="text-red-400 hover:text-red-300 hover:bg-red-900/20 px-2">
+                      className="px-2 text-rose-300 hover:bg-rose-500/10 hover:text-rose-100">
                       ✕
                     </Button>
                   </>
@@ -600,7 +597,7 @@ export function CharacterSheet({
           })}
           <div className="text-sm text-neutral-400 pt-1">Total level: {totalLevel}</div>
         </CardContent>
-      </Card>
+      </div>
       </CollapsibleSection>
 
       <CollapsibleSection
@@ -609,15 +606,15 @@ export function CharacterSheet({
         subtitle="Ability scores, saving throws, and skill choices."
         highlighted={highlightedSection === 'stats-skills'}
       >
-      <Card className="bg-neutral-900 border-neutral-800">
+      <div className="panel-subtle">
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-neutral-200">Ability Scores</CardTitle>
           {canEdit && (
             <Select value={statMethod} onValueChange={(v) => setStatMethod(v as StatMethod)}>
-              <SelectTrigger className="w-40 bg-neutral-800 border-neutral-700 text-neutral-100 text-sm">
+              <SelectTrigger className="w-40 text-sm">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent className="bg-neutral-800 border-neutral-700">
+              <SelectContent>
                 <SelectItem value="point_buy" className="text-neutral-200">Point Buy</SelectItem>
                 <SelectItem value="standard_array" className="text-neutral-200">Standard Array</SelectItem>
                 <SelectItem value="rolled" className="text-neutral-200">Rolled</SelectItem>
@@ -634,7 +631,7 @@ export function CharacterSheet({
             racialBonuses={racialBonuses}
           />
         </CardContent>
-      </Card>
+      </div>
 
       {/* Skills & Proficiencies */}
       <SkillsCard
@@ -690,7 +687,7 @@ export function CharacterSheet({
         subtitle="Durability, DM notes, and stat block output."
         highlighted={highlightedSection === 'hp-notes'}
       >
-      <Card className="bg-neutral-900 border-neutral-800">
+      <div className="panel-subtle">
         <CardHeader>
           <CardTitle className="text-neutral-200">Hit Points</CardTitle>
         </CardHeader>
@@ -701,18 +698,18 @@ export function CharacterSheet({
               <Input
                 type="number" min={0} value={hpMax}
                 onChange={(e) => setHpMax(parseInt(e.target.value, 10) || 0)}
-                className="w-24 bg-neutral-800 border-neutral-700 text-neutral-100"
+                className="w-24"
               />
             ) : (
               <span className="text-2xl font-bold text-neutral-100">{hpMax}</span>
             )}
           </div>
         </CardContent>
-      </Card>
+      </div>
 
       {/* DM Notes (read-only for players, editable display only) */}
       {isDm && (
-        <Card className="bg-neutral-900 border-neutral-800">
+        <div className="panel-subtle">
           <CardHeader>
             <CardTitle className="text-neutral-200">DM Notes</CardTitle>
           </CardHeader>
@@ -720,11 +717,11 @@ export function CharacterSheet({
             <Textarea
               value={dmNotes}
               onChange={(e) => setDmNotes(e.target.value)}
-              className="bg-neutral-800 border-neutral-700 text-neutral-100 min-h-[80px]"
+              className="min-h-[120px]"
               placeholder="Internal notes visible only to DM"
             />
           </CardContent>
-        </Card>
+        </div>
       )}
 
       {/* Stat Block — DM only, built from live form state */}

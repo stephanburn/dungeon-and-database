@@ -51,11 +51,11 @@ export function StatBlock({
   const remaining = 27 - spent
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       {/* Point buy budget tracker */}
       {!readOnly && statMethod === 'point_buy' && (
         <p className={`text-sm font-medium ${
-          remaining < 0 ? 'text-red-400' : remaining === 0 ? 'text-green-400' : 'text-neutral-400'
+          remaining < 0 ? 'text-rose-300' : remaining === 0 ? 'text-emerald-300' : 'text-neutral-400'
         }`}>
           Points: {spent} / 27
           {remaining > 0 && ` · ${remaining} remaining`}
@@ -71,7 +71,7 @@ export function StatBlock({
         </p>
       )}
 
-      <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
         {STATS.map((stat) => {
           const base = values[stat]
           const racial = racialBonuses[stat] ?? 0
@@ -81,13 +81,13 @@ export function StatBlock({
           return (
             <div
               key={stat}
-              className={`flex flex-col items-center gap-1 rounded-lg p-3 border ${
+              className={`flex flex-col items-center gap-2 rounded-2xl border p-4 ${
                 outOfRange
-                  ? 'bg-red-950/30 border-red-700'
-                  : 'bg-neutral-800 border-neutral-700'
+                  ? 'border-rose-500/25 bg-rose-500/10'
+                  : 'border-white/10 bg-white/[0.03]'
               }`}
             >
-              <Label className="text-xs font-bold text-neutral-400 tracking-widest">
+              <Label className="text-[11px] font-semibold text-neutral-500 tracking-[0.18em]">
                 {ABILITY_LABELS[stat]}
               </Label>
 
@@ -100,7 +100,7 @@ export function StatBlock({
               <div className="flex items-center gap-1.5">
                 <span className="text-sm font-medium text-neutral-200">{effective}</span>
                 {racial !== 0 && (
-                  <span className="rounded-full bg-blue-950 px-1.5 py-0.5 text-[10px] font-medium text-blue-300">
+                  <span className="rounded-full border border-blue-400/20 bg-blue-400/10 px-2 py-0.5 text-[10px] font-medium text-blue-100">
                     {racial > 0 ? `+${racial}` : racial}
                   </span>
                 )}
@@ -118,10 +118,10 @@ export function StatBlock({
                   value={String(base)}
                   onValueChange={(v) => onChange?.(stat, parseInt(v, 10))}
                 >
-                  <SelectTrigger className="w-full text-center text-xs bg-neutral-700 border-neutral-600 text-neutral-100 h-7 px-1">
+                  <SelectTrigger className="h-8 w-full px-2 text-center text-xs">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="bg-neutral-800 border-neutral-700">
+                  <SelectContent>
                     {STANDARD_ARRAY.map((v) => {
                       const usedElsewhere = STATS.some((s) => s !== stat && values[s] === v)
                       return (
@@ -144,7 +144,7 @@ export function StatBlock({
                   max={statMethod === 'point_buy' ? 15 : 20}
                   value={base}
                   onChange={(e) => onChange?.(stat, parseInt(e.target.value, 10) || 8)}
-                  className="w-full text-center text-xs bg-neutral-700 border-neutral-600 text-neutral-100 h-7 px-1"
+                  className="h-8 w-full px-2 text-center text-xs"
                 />
               )}
 

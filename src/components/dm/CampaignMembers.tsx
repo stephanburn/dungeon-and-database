@@ -66,17 +66,17 @@ export function CampaignMembers({ campaignId, dmId }: CampaignMembersProps) {
   }
 
   return (
-    <Card className="bg-neutral-900 border-neutral-800">
+    <Card className="border-white/10 bg-white/[0.03]">
       <CardHeader>
         <CardTitle className="text-neutral-100 text-base">Campaign Members</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <ul className="space-y-2">
           {members.map((m) => (
-            <li key={m.id} className="flex items-center justify-between text-sm">
+            <li key={m.id} className="flex items-center justify-between rounded-2xl border border-white/8 bg-white/[0.02] px-3 py-3 text-sm">
               <span className="text-neutral-200">
                 {m.display_name}
-                <span className="text-neutral-500 ml-2">{m.email}</span>
+                <span className="ml-2 text-neutral-500">{m.email}</span>
               </span>
               {m.id !== dmId && (
                 <ConfirmActionButton
@@ -87,7 +87,7 @@ export function CampaignMembers({ campaignId, dmId }: CampaignMembersProps) {
                   onConfirm={() => handleRemove(m.id)}
                   variant="ghost"
                   size="sm"
-                  className="text-neutral-500 hover:text-red-400 h-6 px-2"
+                  className="h-7 px-2 text-neutral-500 hover:text-red-400"
                 />
               )}
             </li>
@@ -107,7 +107,7 @@ export function CampaignMembers({ campaignId, dmId }: CampaignMembersProps) {
               onChange={(e) => setEmail(e.target.value)}
               required
               disabled={adding}
-              className="bg-neutral-800 border-neutral-700 text-neutral-100 h-8 text-sm"
+              className="h-10 text-sm"
             />
             <Button type="submit" size="sm" disabled={adding}>
               {adding ? 'Adding…' : 'Add'}

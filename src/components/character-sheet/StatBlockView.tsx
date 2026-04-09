@@ -166,7 +166,6 @@ export function StatBlockView({ character, classNames = [], selectedClass = null
         variant="outline"
         size="sm"
         onClick={() => setOpen((v) => !v)}
-        className="border-neutral-700 text-neutral-300 hover:bg-neutral-800"
       >
         {open ? 'Hide Stat Block' : 'Stat Block'}
       </Button>
@@ -182,7 +181,7 @@ export function StatBlockView({ character, classNames = [], selectedClass = null
               value={acOverride}
               onChange={(e) => setAcOverride(e.target.value)}
               placeholder={`${computedAc} (unarmored)`}
-              className="w-36 bg-neutral-800 border-neutral-700 text-neutral-100 h-8 text-sm"
+              className="h-10 w-36 text-sm"
             />
           </div>
         </div>
@@ -248,7 +247,6 @@ export function StatBlockView({ character, classNames = [], selectedClass = null
           variant="outline"
           size="sm"
           onClick={handleCopy}
-          className="border-neutral-700 text-neutral-300 hover:bg-neutral-800"
         >
           {copied ? 'Copied!' : 'Copy for Craft'}
         </Button>

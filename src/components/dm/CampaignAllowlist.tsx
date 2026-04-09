@@ -66,7 +66,7 @@ export function CampaignAllowlist({ campaignId, initialAllowlist }: CampaignAllo
    */
 
   return (
-    <Card className="bg-neutral-900 border-neutral-800">
+    <Card className="border-white/10 bg-white/[0.03]">
       <CardHeader>
         <CardTitle className="text-neutral-200">Source Allowlist</CardTitle>
       </CardHeader>
@@ -80,12 +80,12 @@ export function CampaignAllowlist({ campaignId, initialAllowlist }: CampaignAllo
             if (group.length === 0) return null
             return (
               <div key={rs}>
-                <p className="text-xs font-semibold text-neutral-500 uppercase tracking-wide mb-2">
+                <p className="mb-3 text-xs font-semibold uppercase tracking-[0.12em] text-neutral-500">
                   D&amp;D 5e {rs}
                 </p>
                 <div className="space-y-2">
                   {group.map(({ key, full_name }) => (
-                    <label key={key} className="flex items-center gap-3 cursor-pointer group">
+                    <label key={key} className="group flex cursor-pointer items-center gap-3 rounded-2xl border border-white/8 bg-white/[0.02] px-3 py-3">
                       <Checkbox
                         checked={selected.has(key)}
                         onChange={() => toggle(key)}

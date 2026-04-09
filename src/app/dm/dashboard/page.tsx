@@ -84,24 +84,26 @@ export default async function DmDashboardPage() {
   const recentSubmitted = submitted.slice(0, 5)
 
   return (
-    <div className="min-h-screen bg-neutral-950 p-6">
-      <div className="max-w-6xl mx-auto space-y-8">
+    <div className="page-shell">
+      <div className="page-container space-y-10">
         {/* Header */}
-        <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div className="page-header">
           <div>
-            <h1 className="text-2xl font-bold text-neutral-100">DM Dashboard</h1>
-            <p className="text-sm text-neutral-400 mt-1">Welcome, {profile.display_name}</p>
+            <h1 className="page-title">DM Dashboard</h1>
+            <p className="page-subtitle">
+              Welcome, {profile.display_name}. Review what needs attention, then manage campaigns and roster details.
+            </p>
           </div>
           <div className="flex items-center gap-3">
-            <Button asChild size="sm">
-              <Link href="/characters/new">+ New character</Link>
+            <Button asChild>
+              <Link href="/characters/new">New character</Link>
             </Button>
             <details className="group relative">
-              <summary className="list-none cursor-pointer rounded-md px-3 py-2 text-sm text-neutral-400 transition-colors hover:bg-neutral-900 hover:text-neutral-200">
+              <summary className="list-none cursor-pointer rounded-xl px-3 py-2 text-sm text-neutral-400 transition-colors hover:bg-white/[0.04] hover:text-neutral-200">
                 Account
               </summary>
-              <div className="absolute right-0 mt-2 hidden w-44 rounded-xl border border-neutral-800 bg-neutral-900 p-2 shadow-xl group-open:block">
-                <div className="border-b border-neutral-800 px-3 py-2">
+              <div className="absolute right-0 mt-2 hidden w-48 rounded-2xl border border-white/10 bg-neutral-900 p-2 shadow-2xl shadow-black/30 group-open:block">
+                <div className="border-b border-white/10 px-3 py-2">
                   <p className="text-sm font-medium text-neutral-100">{profile.display_name}</p>
                   <p className="text-xs text-neutral-500">{isAdminRole(profile.role) ? 'Admin account' : 'DM account'}</p>
                 </div>
@@ -109,7 +111,7 @@ export default async function DmDashboardPage() {
                   <Button
                     variant="ghost"
                     type="submit"
-                    className="w-full justify-start text-neutral-300 hover:bg-neutral-800 hover:text-white"
+                    className="w-full justify-start"
                   >
                     Sign out
                   </Button>
@@ -121,23 +123,23 @@ export default async function DmDashboardPage() {
 
         {/* Pending review hero */}
         {submitted.length > 0 && (
-          <Card className="border-blue-700 bg-gradient-to-br from-blue-950/60 to-neutral-900">
+          <Card className="border-blue-500/20 bg-gradient-to-br from-blue-500/12 via-blue-500/8 to-white/[0.03]">
             <CardContent className="py-6 space-y-4">
               <div className="flex items-center justify-between gap-4 flex-wrap">
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
-                    <Badge className="bg-blue-800 text-blue-200 border-0">{submitted.length}</Badge>
-                    <span className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-300">Review Queue</span>
+                    <Badge className="border-0 bg-blue-400/20 text-blue-100">{submitted.length}</Badge>
+                    <span className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-200">Review Queue</span>
                   </div>
                   <h2 className="text-2xl font-semibold text-neutral-100">
                     {submitted.length === 1 ? '1 character needs review' : `${submitted.length} characters need review`}
                   </h2>
-                  <p className="text-sm text-neutral-400">
+                  <p className="max-w-xl text-sm leading-6 text-neutral-300">
                     Review the latest submitted sheets first so players are not blocked.
                   </p>
                 </div>
                 {recentSubmitted[0] && (
-                  <Button asChild className="bg-blue-700 text-white hover:bg-blue-600">
+                  <Button asChild className="bg-blue-200 text-blue-950 hover:bg-blue-100">
                     <Link href={`/characters/${recentSubmitted[0].id}`}>Open next review</Link>
                   </Button>
                 )}
@@ -146,13 +148,13 @@ export default async function DmDashboardPage() {
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                 {recentSubmitted.map((char) => (
                   <Link key={char.id} href={`/characters/${char.id}`}>
-                    <div className="rounded-xl border border-blue-900/70 bg-neutral-950/50 p-4 transition-colors hover:border-blue-600">
+                    <div className="rounded-2xl border border-white/10 bg-black/10 p-4 transition-colors hover:border-blue-300/30 hover:bg-black/15">
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <p className="font-medium text-neutral-100">{char.name}</p>
                           <p className="text-sm text-neutral-400">{char.owner?.display_name ?? 'Unknown player'}</p>
                         </div>
-                        <Badge className="bg-blue-900/70 text-blue-200 border-0">Submitted</Badge>
+                        <Badge className="border-0 bg-blue-400/18 text-blue-100">Submitted</Badge>
                       </div>
                       <p className="mt-3 text-sm text-neutral-500">{char.campaign?.name ?? 'No campaign'}</p>
                     </div>
@@ -165,17 +167,17 @@ export default async function DmDashboardPage() {
 
         <div className="flex gap-3 flex-wrap">
           {isAdminRole(profile.role) && (
-            <Button asChild size="sm" variant="outline" className="border-neutral-700 text-neutral-300 hover:bg-neutral-800">
+            <Button asChild size="sm" variant="outline">
               <Link href="/dm/users">Users</Link>
             </Button>
           )}
           {isAdminRole(profile.role) && (
-            <Button asChild size="sm" variant="outline" className="border-neutral-700 text-neutral-300 hover:bg-neutral-800">
+            <Button asChild size="sm" variant="outline">
               <Link href="/dm/content">Content</Link>
             </Button>
           )}
-          <Button asChild size="sm" variant="outline" className="border-neutral-700 text-neutral-300 hover:bg-neutral-800">
-            <Link href="/dm/campaigns/new">+ New campaign</Link>
+          <Button asChild size="sm" variant="outline">
+            <Link href="/dm/campaigns/new">New campaign</Link>
           </Button>
         </div>
 
@@ -187,15 +189,15 @@ export default async function DmDashboardPage() {
           {campaigns.length === 0 ? (
             <p className="text-neutral-500 text-sm">No campaigns yet. Create one from the settings page.</p>
           ) : (
-            <div className="flex gap-3 flex-wrap">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {campaigns.map((campaign) => (
                 <Link key={campaign.id} href={`/dm/campaigns/${campaign.id}/settings`}>
-                  <Card className="bg-neutral-900 border-neutral-800 hover:border-neutral-600 transition-colors cursor-pointer w-60">
-                    <CardHeader className="pb-1">
+                  <Card className="h-full border-white/10 bg-white/[0.03] transition-colors hover:border-white/20 hover:bg-white/[0.05]">
+                    <CardHeader className="pb-2">
                       <CardTitle className="text-neutral-200 text-base">{campaign.name}</CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <p className="text-xs text-neutral-500">Settings →</p>
+                      <p className="text-sm text-neutral-500">Open campaign settings</p>
                     </CardContent>
                   </Card>
                 </Link>
@@ -215,10 +217,10 @@ export default async function DmDashboardPage() {
           {characters.length === 0 ? (
             <p className="text-neutral-500 text-sm">No characters yet.</p>
           ) : (
-            <Card className="bg-neutral-900 border-neutral-800">
+            <Card className="border-white/10 bg-white/[0.03]">
               <Table>
                 <TableHeader>
-                  <TableRow className="border-neutral-800 hover:bg-transparent">
+                  <TableRow className="hover:bg-transparent">
                     <TableHead className="text-neutral-400">Character</TableHead>
                     <TableHead className="text-neutral-400">Player</TableHead>
                     <TableHead className="text-neutral-400">Campaign</TableHead>
@@ -230,7 +232,7 @@ export default async function DmDashboardPage() {
                   {characters.map((char) => (
                     <TableRow
                       key={char.id}
-                      className={`border-neutral-800 hover:bg-neutral-800/50 cursor-pointer${char.character_type === 'test' ? ' opacity-50' : ''}`}
+                      className={`cursor-pointer${char.character_type === 'test' ? ' opacity-55' : ''}`}
                     >
                       <TableCell>
                         <div className="flex items-center gap-2">

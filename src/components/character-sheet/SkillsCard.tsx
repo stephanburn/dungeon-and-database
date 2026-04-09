@@ -108,23 +108,23 @@ export function SkillsCard({
   ].filter(Boolean).join(' · ')
 
   return (
-    <Card className="bg-neutral-900 border-neutral-800">
-      <CardHeader>
+    <Card className="border-white/10 bg-white/[0.03]">
+      <CardHeader className="pb-4">
         <CardTitle className="text-neutral-200">Skills &amp; Proficiencies</CardTitle>
       </CardHeader>
       <CardContent className="space-y-5">
 
         {/* Saving throws */}
         <div>
-          <p className="text-xs font-semibold text-neutral-400 uppercase tracking-wide mb-2">Saving Throws</p>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-1">
+          <p className="mb-3 text-xs font-semibold uppercase tracking-[0.12em] text-neutral-500">Saving Throws</p>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
             {abilities.map((ability) => {
               const proficient = savingThrows.has(ability)
               const modifier = mod(stats[ability]) + (proficient ? pb : 0)
               return (
-                <div key={ability} className="flex items-center gap-2 text-sm">
-                  <span className={`w-2 h-2 rounded-full flex-shrink-0 ${proficient ? 'bg-green-400' : 'bg-neutral-600'}`} />
-                  <span className="text-neutral-400 w-6 font-mono text-xs">{fmtMod(modifier)}</span>
+                <div key={ability} className="flex items-center gap-3 rounded-xl border border-white/8 bg-white/[0.02] px-3 py-2 text-sm">
+                  <span className={`h-2 w-2 rounded-full flex-shrink-0 ${proficient ? 'bg-emerald-400' : 'bg-neutral-600'}`} />
+                  <span className="w-7 font-mono text-xs text-neutral-400">{fmtMod(modifier)}</span>
                   <span className={proficient ? 'text-neutral-200' : 'text-neutral-500'}>
                     {SAVING_THROW_NAMES[ability]}
                   </span>
@@ -137,12 +137,12 @@ export function SkillsCard({
         {/* Skills */}
         <div>
           <div className="flex items-center justify-between mb-2">
-            <p className="text-xs font-semibold text-neutral-400 uppercase tracking-wide">Skills</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-neutral-500">Skills</p>
             {canEdit && choiceCountLabel && (
-              <p className="text-xs text-neutral-500">{choiceCountLabel}</p>
+              <p className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[11px] text-neutral-400">{choiceCountLabel}</p>
             )}
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {SKILLS.map((skill) => {
               const proficient = isProficient(skill.key)
               const abilityMod = mod(stats[skill.ability])
@@ -167,32 +167,32 @@ export function SkillsCard({
                   type="button"
                   onClick={() => toggleSkill(skill.key)}
                   disabled={!isChoosable || (atLimit && !proficient)}
-                  className={`flex items-center gap-2 text-sm text-left rounded px-1 py-0.5 w-full transition-colors
+                  className={`flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left text-sm transition-colors
                     ${isEligible
-                      ? 'hover:bg-neutral-800 cursor-pointer ring-1 ring-neutral-700'
-                      : 'cursor-default'}
+                      ? 'cursor-pointer border-white/12 bg-white/[0.03] hover:border-white/18 hover:bg-white/[0.05]'
+                      : 'cursor-default border-white/8 bg-white/[0.02]'}
                   `}
                 >
                   <span className="flex-shrink-0">
                     <SkillStateIcon proficient={proficient} locked={fromBgAuto} />
                   </span>
-                  <span className="text-neutral-400 w-6 font-mono text-xs">{fmtMod(modifier)}</span>
+                  <span className="w-7 font-mono text-xs text-neutral-400">{fmtMod(modifier)}</span>
                   <span className={proficient ? 'text-neutral-200' : isEligible ? 'text-neutral-400' : 'text-neutral-600'}>
                     {skill.name}
                   </span>
                   {fromBgChoice && (
-                    <span className="rounded-full border border-amber-700 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-amber-300">
+                    <span className="rounded-full border border-amber-400/20 bg-amber-400/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-amber-100">
                       BG
                     </span>
                   )}
-                  <span className="text-neutral-600 text-xs ml-auto">{skill.ability.toUpperCase()}</span>
+                  <span className="ml-auto text-xs text-neutral-600">{skill.ability.toUpperCase()}</span>
                 </button>
               )
             })}
           </div>
           {canEdit && (
-            <p className="text-xs text-neutral-500 mt-2">
-              Filled = selected · Lock = fixed by background · BG = chosen from background options
+            <p className="mt-2 text-xs text-neutral-500">
+              Filled = selected. Lock = granted by background. BG = chosen from background options.
             </p>
           )}
         </div>

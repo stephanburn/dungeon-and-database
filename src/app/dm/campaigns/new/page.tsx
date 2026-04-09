@@ -45,43 +45,57 @@ export default function NewCampaignPage() {
   }
 
   return (
-    <div className="min-h-screen bg-neutral-950 p-6">
-      <div className="max-w-md mx-auto space-y-6">
-        <Button variant="ghost" asChild className="text-neutral-400 hover:text-neutral-200 -ml-2">
+    <div className="page-shell">
+      <div className="mx-auto max-w-2xl space-y-6">
+        <Button variant="ghost" asChild className="-ml-2">
           <Link href="/dm/dashboard">← Dashboard</Link>
         </Button>
 
-        <Card className="bg-neutral-900 border-neutral-800">
-          <CardHeader>
-            <CardTitle className="text-neutral-100">New Campaign</CardTitle>
+        <Card className="border-white/10 bg-white/[0.04]">
+          <CardHeader className="space-y-2">
+            <CardTitle className="text-2xl text-neutral-50">New Campaign</CardTitle>
+            <p className="max-w-lg text-sm leading-6 text-neutral-400">
+              Start with the fundamentals. You can invite players and refine campaign rules on the next screen.
+            </p>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleCreate} className="space-y-4">
-              <div className="space-y-2">
-                <Label className="text-neutral-300">Campaign Name</Label>
-                <Input
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. Embers of the Last War"
-                  required
-                  className="bg-neutral-800 border-neutral-700 text-neutral-100"
-                />
+            <form onSubmit={handleCreate} className="space-y-8">
+              <div className="grid gap-5 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label className="text-neutral-300">Campaign Name</Label>
+                  <Input
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Embers of the Last War"
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-neutral-300">Rule Set</Label>
+                  <Select value={ruleSet} onValueChange={(value) => setRuleSet(value as RuleSet)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="2014" className="text-neutral-200">D&amp;D 5e 2014</SelectItem>
+                      <SelectItem value="2024" className="text-neutral-200">D&amp;D 5e 2024</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label className="text-neutral-300">Rule Set</Label>
-                <Select value={ruleSet} onValueChange={(value) => setRuleSet(value as RuleSet)}>
-                  <SelectTrigger className="bg-neutral-800 border-neutral-700 text-neutral-100">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-neutral-800 border-neutral-700">
-                    <SelectItem value="2014" className="text-neutral-200">D&amp;D 5e 2014</SelectItem>
-                    <SelectItem value="2024" className="text-neutral-200">D&amp;D 5e 2024</SelectItem>
-                  </SelectContent>
-                </Select>
+
+              <div className="panel-subtle p-5">
+                <h2 className="section-heading text-base">What happens next</h2>
+                <p className="mt-1 text-sm leading-6 text-neutral-400">
+                  After creation, you&apos;ll be able to invite members, choose allowed sourcebooks, and tune campaign rules.
+                </p>
               </div>
-              <Button type="submit" className="w-full" disabled={creating}>
-                {creating ? 'Creating…' : 'Create campaign'}
-              </Button>
+
+              <div className="flex justify-end">
+                <Button type="submit" size="lg" className="min-w-44" disabled={creating}>
+                  {creating ? 'Creating…' : 'Create campaign'}
+                </Button>
+              </div>
             </form>
           </CardContent>
         </Card>

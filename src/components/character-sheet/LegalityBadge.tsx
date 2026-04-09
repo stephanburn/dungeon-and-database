@@ -12,25 +12,25 @@ export function LegalityBadge({ check, hideWhenPassed = false }: LegalityBadgePr
 
   if (check.passed) {
     return (
-      <span className="inline-block w-2 h-2 rounded-full bg-green-500" title={check.message} />
+      <span className="inline-block h-2 w-2 rounded-full bg-emerald-400" title={check.message} />
     )
   }
 
   const colour =
     check.severity === 'error'
-      ? 'bg-red-500'
-      : 'bg-amber-400'
+      ? 'bg-rose-400'
+      : 'bg-amber-300'
 
   return (
     <span
-      className={`inline-flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded ${
+      className={`inline-flex items-start gap-2 rounded-xl border px-2.5 py-1.5 text-xs font-medium leading-5 ${
         check.severity === 'error'
-          ? 'bg-red-900/60 text-red-300'
-          : 'bg-amber-900/60 text-amber-300'
+          ? 'border-rose-500/20 bg-rose-500/10 text-rose-100'
+          : 'border-amber-400/20 bg-amber-400/10 text-amber-100'
       }`}
       title={check.message}
     >
-      <span className={`w-1.5 h-1.5 rounded-full ${colour}`} />
+      <span className={`mt-1 h-1.5 w-1.5 rounded-full ${colour}`} />
       {check.message}
     </span>
   )
@@ -40,16 +40,16 @@ export function LegalityBadge({ check, hideWhenPassed = false }: LegalityBadgePr
 export function LegalitySummaryBadge({ passed, errorCount }: { passed: boolean; errorCount: number }) {
   if (passed) {
     return (
-      <span className="inline-flex items-center gap-1.5 text-xs font-medium text-green-400">
-        <span className="w-2 h-2 rounded-full bg-green-500" />
-        Legal
+      <span className="inline-flex items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-400/10 px-2.5 py-1 text-xs font-medium text-emerald-100">
+        <span className="h-2 w-2 rounded-full bg-emerald-400" />
+        Ready to submit
       </span>
     )
   }
   return (
-    <span className="inline-flex items-center gap-1.5 text-xs font-medium text-red-400">
-      <span className="w-2 h-2 rounded-full bg-red-500" />
-      {errorCount} {errorCount === 1 ? 'error' : 'errors'}
+    <span className="inline-flex items-center gap-2 rounded-full border border-rose-400/20 bg-rose-400/10 px-2.5 py-1 text-xs font-medium text-rose-100">
+      <span className="h-2 w-2 rounded-full bg-rose-400" />
+      {errorCount} {errorCount === 1 ? 'issue to fix' : 'issues to fix'}
     </span>
   )
 }

@@ -54,7 +54,7 @@ export function FeatsCard({
   }
 
   return (
-    <Card className="bg-neutral-900 border-neutral-800">
+    <Card className="border-white/10 bg-white/[0.03]">
       <CardHeader>
         <CardTitle className="text-neutral-200">Feats</CardTitle>
       </CardHeader>
@@ -62,11 +62,11 @@ export function FeatsCard({
 
         {/* Background-granted feat (locked) */}
         {hasBgFeat && (
-          <div className="flex items-start gap-3 p-2 rounded bg-neutral-800/50">
-            <span className="w-2 h-2 rounded-full bg-blue-400 mt-1.5 flex-shrink-0" />
+          <div className="flex items-start gap-3 rounded-2xl border border-blue-400/15 bg-blue-400/10 p-3">
+            <span className="mt-1.5 h-2 w-2 rounded-full bg-blue-300 flex-shrink-0" />
             <div>
               <p className="text-sm font-medium text-neutral-200">{backgroundFeat!.name}</p>
-              <p className="text-xs text-neutral-500">From background: {background?.name}</p>
+              <p className="text-xs text-neutral-400">Granted by background: {background?.name}</p>
               {backgroundFeat!.description && (
                 <p className="text-xs text-neutral-400 mt-1">{backgroundFeat!.description}</p>
               )}
@@ -86,10 +86,10 @@ export function FeatsCard({
               </p>
               {canEdit ? (
                 <Select value={chosenId || 'asi'} onValueChange={(value) => setSlot(i, value === 'asi' ? '' : value)}>
-                  <SelectTrigger className="bg-neutral-800 border-neutral-700 text-neutral-100">
+                  <SelectTrigger>
                     <SelectValue placeholder="Take ASI or choose feat" />
                   </SelectTrigger>
-                  <SelectContent className="bg-neutral-800 border-neutral-700">
+                  <SelectContent>
                     <SelectItem value="asi" className="text-neutral-400">Take ASI instead</SelectItem>
                     {availableFeats.map((f) => (
                       <SelectItem key={f.id} value={f.id} className="text-neutral-200">
@@ -99,8 +99,8 @@ export function FeatsCard({
                   </SelectContent>
                 </Select>
               ) : (
-                <div className="flex items-start gap-3 p-2 rounded bg-neutral-800/50">
-                  <span className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${chosenFeat ? 'bg-green-400' : 'bg-neutral-600'}`} />
+                <div className="flex items-start gap-3 rounded-2xl border border-white/8 bg-white/[0.02] p-3">
+                  <span className={`mt-1.5 h-2 w-2 rounded-full flex-shrink-0 ${chosenFeat ? 'bg-emerald-400' : 'bg-neutral-600'}`} />
                   <div>
                     {chosenFeat ? (
                       <>

@@ -63,10 +63,10 @@ export function SpellsCard({ classId, campaignId, spellChoices, canEdit, onChang
   }
 
   return (
-    <Card className="bg-neutral-900 border-neutral-800">
-      <CardHeader className="flex flex-row items-center justify-between pb-3">
+    <Card className="border-white/10 bg-white/[0.03]">
+      <CardHeader className="flex flex-col gap-3 pb-3 sm:flex-row sm:items-center sm:justify-between">
         <CardTitle className="text-neutral-200">
-          Spells
+          Spell List
           {spellChoices.length > 0 && (
             <span className="ml-2 text-sm font-normal text-neutral-400">({spellChoices.length} selected)</span>
           )}
@@ -75,42 +75,43 @@ export function SpellsCard({ classId, campaignId, spellChoices, canEdit, onChang
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="Search spells…"
-          className="w-48 h-8 bg-neutral-800 border-neutral-700 text-neutral-100 text-sm"
+          className="h-10 w-full text-sm sm:w-56"
         />
       </CardHeader>
       <CardContent className="space-y-4">
         {canEdit && (
-          <p className="text-xs text-neutral-500">Click a spell to add or remove it from your spell list.</p>
+          <p className="text-xs text-neutral-500">Choose the spells this character currently knows or prepares.</p>
         )}
         {levels.map(level => (
           <div key={level}>
-            <h4 className="text-xs font-semibold text-neutral-500 uppercase tracking-wide mb-2">
+            <h4 className="mb-3 text-xs font-semibold uppercase tracking-[0.12em] text-neutral-500">
               {LEVEL_LABELS[level]}
             </h4>
-            <div className="space-y-1">
+            <div className="space-y-2">
               {byLevel[level].map(spell => {
                 const chosen = spellChoices.includes(spell.id)
                 return (
-                  <div
+                  <button
                     key={spell.id}
+                    type="button"
                     onClick={() => toggle(spell.id)}
-                    className={`flex items-center justify-between px-3 py-1.5 rounded text-sm transition-colors ${
+                    className={`flex w-full items-center justify-between rounded-xl border px-3 py-3 text-left text-sm transition-colors ${
                       chosen
-                        ? 'bg-blue-900/40 text-blue-200'
+                        ? 'border-blue-400/25 bg-blue-400/10 text-blue-50'
                         : canEdit
-                          ? 'hover:bg-neutral-800 text-neutral-300 cursor-pointer'
+                          ? 'cursor-pointer border-white/10 bg-white/[0.02] text-neutral-300 hover:border-white/18 hover:bg-white/[0.05]'
                           : 'text-neutral-400'
                     } ${canEdit ? 'cursor-pointer' : 'cursor-default'}`}
                   >
                     <div className="flex items-center gap-2">
-                      {chosen && <span className="w-1.5 h-1.5 rounded-full bg-blue-400 shrink-0" />}
+                      <span className={`h-2 w-2 rounded-full shrink-0 ${chosen ? 'bg-blue-300' : 'bg-neutral-600'}`} />
                       <span className="font-medium">{spell.name}</span>
                       <span className="text-xs text-neutral-500">{spell.school}</span>
-                      {spell.ritual && <span className="text-xs text-neutral-500">(R)</span>}
-                      {spell.concentration && <span className="text-xs text-neutral-500">(C)</span>}
+                      {spell.ritual && <span className="rounded-full border border-white/10 px-2 py-0.5 text-[10px] text-neutral-400">Ritual</span>}
+                      {spell.concentration && <span className="rounded-full border border-white/10 px-2 py-0.5 text-[10px] text-neutral-400">Concentration</span>}
                     </div>
                     <span className="text-xs text-neutral-500 shrink-0 ml-2">{spell.casting_time}</span>
-                  </div>
+                  </button>
                 )
               })}
             </div>

@@ -45,19 +45,21 @@ export default async function DashboardPage() {
   const typedCharacters = (characters ?? []) as unknown as CharacterWithCampaign[]
 
   return (
-    <div className="min-h-screen bg-neutral-950 p-6">
-      <div className="max-w-4xl mx-auto space-y-6">
-        <div className="flex items-center justify-between">
+    <div className="page-shell">
+      <div className="page-container max-w-4xl space-y-8">
+        <div className="page-header">
           <div>
-            <h1 className="text-2xl font-bold text-neutral-100">My Characters</h1>
-            <p className="text-sm text-neutral-400 mt-1">Welcome, {profile?.display_name}</p>
+            <h1 className="page-title">My Characters</h1>
+            <p className="page-subtitle">
+              Welcome back, {profile?.display_name}. Pick up where you left off or start a new sheet.
+            </p>
           </div>
-          <div className="flex gap-3">
-            <Button asChild>
+          <div className="flex items-center gap-3">
+            <Button asChild size="lg">
               <Link href="/characters/new">New character</Link>
             </Button>
             <form action="/api/auth/logout" method="POST">
-              <Button variant="ghost" type="submit" className="text-neutral-400 hover:text-neutral-200">
+              <Button variant="ghost" type="submit">
                 Sign out
               </Button>
             </form>
@@ -65,31 +67,35 @@ export default async function DashboardPage() {
         </div>
 
         {typedCharacters.length === 0 ? (
-          <Card className="bg-neutral-900 border-neutral-800">
-            <CardContent className="py-12 text-center">
-              <p className="text-neutral-400 mb-4">No characters yet.</p>
-              <Button asChild>
+          <Card className="border-white/10 bg-white/[0.04]">
+            <CardContent className="py-16 text-center">
+              <p className="text-base text-neutral-200">No characters yet.</p>
+              <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-neutral-400">
+                Create your first character to start building within your campaign&apos;s rules.
+              </p>
+              <Button asChild size="lg" className="mt-6">
                 <Link href="/characters/new">Create your first character</Link>
               </Button>
             </CardContent>
           </Card>
         ) : (
-          <div className="grid gap-4">
+          <div className="grid gap-3">
             {typedCharacters.map((char) => (
               <Link key={char.id} href={`/characters/${char.id}`} className="block">
-                <Card className="bg-neutral-900 border-neutral-800 hover:border-neutral-600 transition-colors">
+                <Card className="border-white/10 bg-white/[0.03] transition-colors hover:border-white/20 hover:bg-white/[0.05]">
                   <CardHeader className="pb-2">
                     <div className="flex items-start justify-between gap-4">
-                      <CardTitle className="text-neutral-100">{char.name}</CardTitle>
+                      <CardTitle className="text-lg text-neutral-100">{char.name}</CardTitle>
                       <Badge className={`${STATUS_STYLE[char.status]} border-0 shrink-0`}>
                         {STATUS_LABEL[char.status]}
                       </Badge>
                     </div>
                   </CardHeader>
-                  <CardContent>
+                  <CardContent className="flex items-center justify-between pt-1">
                     <p className="text-sm text-neutral-400">
                       {(char.campaign as Campaign | null)?.name ?? 'No campaign'}
                     </p>
+                    <p className="text-sm text-neutral-500">Open</p>
                   </CardContent>
                 </Card>
               </Link>

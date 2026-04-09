@@ -62,27 +62,27 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-neutral-950 px-4">
-      <Card className="w-full max-w-sm bg-neutral-900 border-neutral-800">
-        <CardHeader className="space-y-1">
-          <CardTitle className="text-2xl text-neutral-100">Dungeon &amp; Database</CardTitle>
-          <CardDescription className="text-neutral-400">
+    <div className="page-shell flex items-center justify-center">
+      <Card className="w-full max-w-md border-white/10 bg-white/[0.04]">
+        <CardHeader className="space-y-2">
+          <CardTitle className="text-[2rem] text-neutral-50">Dungeon &amp; Database</CardTitle>
+          <CardDescription className="max-w-sm text-sm leading-6 text-neutral-400">
             {mode === 'magic'
-              ? 'Enter your email and we’ll send you a sign-in link.'
-              : 'Use your email and password to sign in directly.'}
+              ? 'Sign in with a one-time link sent to your email.'
+              : 'Sign in with your email and password.'}
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-5">
           {state === 'sent' && (
-            <Alert className="border-neutral-700 bg-neutral-800">
+            <Alert>
               <AlertDescription className="text-neutral-200">
-                Magic link sent to <strong>{email}</strong> — check your inbox.
+                Magic link sent to <strong>{email}</strong>. Check your inbox to continue.
               </AlertDescription>
             </Alert>
           )}
 
           {state === 'reset-sent' && (
-            <Alert className="border-neutral-700 bg-neutral-800">
+            <Alert>
               <AlertDescription className="text-neutral-200">
                 Password reset email sent to <strong>{email}</strong>.
               </AlertDescription>
@@ -102,18 +102,17 @@ export default function LoginPage() {
                   onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.form?.requestSubmit() }}
                   required
                   disabled={state === 'loading'}
-                  className="bg-neutral-800 border-neutral-700 text-neutral-100 placeholder:text-neutral-500"
                 />
               </div>
               {state === 'error' && <Alert variant="destructive"><AlertDescription>{errorMessage}</AlertDescription></Alert>}
-              <Button type="submit" className="w-full" disabled={state === 'loading'}>
+              <Button type="submit" size="lg" className="w-full" disabled={state === 'loading'}>
                 {state === 'loading' ? 'Sending…' : 'Send magic link'}
               </Button>
               <button
                 type="button"
                 onClick={() => switchMode('password')}
                 disabled={state === 'loading'}
-                className="w-full text-xs text-neutral-500 hover:text-neutral-300 transition-colors"
+                className="w-full text-sm text-neutral-500 transition-colors hover:text-neutral-200"
               >
                 Use password instead
               </button>
@@ -132,7 +131,6 @@ export default function LoginPage() {
                   onChange={(e) => setEmail(e.target.value)}
                   required
                   disabled={state === 'loading'}
-                  className="bg-neutral-800 border-neutral-700 text-neutral-100 placeholder:text-neutral-500"
                 />
               </div>
               <div className="space-y-2">
@@ -145,26 +143,25 @@ export default function LoginPage() {
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   disabled={state === 'loading'}
-                  className="bg-neutral-800 border-neutral-700 text-neutral-100 placeholder:text-neutral-500"
                 />
               </div>
               {state === 'error' && <Alert variant="destructive"><AlertDescription>{errorMessage}</AlertDescription></Alert>}
-              <Button type="submit" className="w-full" disabled={state === 'loading'}>
+              <Button type="submit" size="lg" className="w-full" disabled={state === 'loading'}>
                 {state === 'loading' ? 'Signing in…' : 'Sign in'}
               </Button>
               <button
                 type="button"
                 onClick={handleForgotPassword}
                 disabled={state === 'loading'}
-                className="w-full text-xs text-neutral-500 hover:text-neutral-300 transition-colors"
+                className="w-full text-sm text-neutral-500 transition-colors hover:text-neutral-200"
               >
-                Forgot password / set a password for the first time
+                Reset or set password
               </button>
               <button
                 type="button"
                 onClick={() => switchMode('magic')}
                 disabled={state === 'loading'}
-                className="w-full text-xs text-neutral-500 hover:text-neutral-300 transition-colors"
+                className="w-full text-sm text-neutral-500 transition-colors hover:text-neutral-200"
               >
                 Use magic link instead
               </button>

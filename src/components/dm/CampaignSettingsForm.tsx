@@ -58,60 +58,63 @@ export function CampaignSettingsForm({ campaign }: CampaignSettingsFormProps) {
   }
 
   return (
-    <Card className="bg-neutral-900 border-neutral-800">
+    <Card className="border-white/10 bg-white/[0.03]">
       <CardHeader>
         <CardTitle className="text-neutral-200">Campaign Settings</CardTitle>
       </CardHeader>
       <CardContent className="space-y-5">
-        <div className="space-y-2">
-          <Label className="text-neutral-300">Campaign Name</Label>
-          <Input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="bg-neutral-800 border-neutral-700 text-neutral-100"
-          />
+        <div className="grid gap-5 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label className="text-neutral-300">Campaign Name</Label>
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-neutral-300">Rule Set</Label>
+            <Select value={ruleSet} onValueChange={(v) => setRuleSet(v as '2014' | '2024')}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="2014" className="text-neutral-200">D&amp;D 5e 2014</SelectItem>
+                <SelectItem value="2024" className="text-neutral-200">D&amp;D 5e 2024</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
-        <div className="space-y-2">
-          <Label className="text-neutral-300">Rule Set</Label>
-          <Select value={ruleSet} onValueChange={(v) => setRuleSet(v as '2014' | '2024')}>
-            <SelectTrigger className="bg-neutral-800 border-neutral-700 text-neutral-100">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent className="bg-neutral-800 border-neutral-700">
-              <SelectItem value="2014" className="text-neutral-200">D&amp;D 5e 2014</SelectItem>
-              <SelectItem value="2024" className="text-neutral-200">D&amp;D 5e 2024</SelectItem>
-            </SelectContent>
-          </Select>
+        <div className="grid gap-5 sm:grid-cols-[minmax(0,1fr)_160px]">
+          <div className="space-y-2">
+            <Label className="text-neutral-300">Stat Generation Method</Label>
+            <Select value={statMethod} onValueChange={(v) => setStatMethod(v as CampaignSettings['stat_method'])}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="point_buy" className="text-neutral-200">Point Buy</SelectItem>
+                <SelectItem value="standard_array" className="text-neutral-200">Standard Array</SelectItem>
+                <SelectItem value="rolled" className="text-neutral-200">Rolled</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-neutral-300">Maximum Level</Label>
+            <Input
+              type="number"
+              min={1}
+              max={20}
+              value={maxLevel}
+              onChange={(e) => setMaxLevel(parseInt(e.target.value, 10) || 20)}
+            />
+          </div>
         </div>
 
-        <div className="space-y-2">
-          <Label className="text-neutral-300">Stat Generation Method</Label>
-          <Select value={statMethod} onValueChange={(v) => setStatMethod(v as CampaignSettings['stat_method'])}>
-            <SelectTrigger className="bg-neutral-800 border-neutral-700 text-neutral-100">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent className="bg-neutral-800 border-neutral-700">
-              <SelectItem value="point_buy" className="text-neutral-200">Point Buy</SelectItem>
-              <SelectItem value="standard_array" className="text-neutral-200">Standard Array</SelectItem>
-              <SelectItem value="rolled" className="text-neutral-200">Rolled</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="space-y-2">
-          <Label className="text-neutral-300">Maximum Level</Label>
-          <Input
-            type="number"
-            min={1}
-            max={20}
-            value={maxLevel}
-            onChange={(e) => setMaxLevel(parseInt(e.target.value, 10) || 20)}
-            className="w-24 bg-neutral-800 border-neutral-700 text-neutral-100"
-          />
-        </div>
-
-        <div className="flex items-center gap-3">
+        <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-4">
+          <div className="flex items-center gap-3">
           <Checkbox
             id="milestone"
             checked={milestoneLevelling}
@@ -120,6 +123,10 @@ export function CampaignSettingsForm({ campaign }: CampaignSettingsFormProps) {
           <Label htmlFor="milestone" className="text-neutral-300 cursor-pointer">
             Milestone levelling (ignore experience points)
           </Label>
+        </div>
+          <p className="mt-2 text-sm leading-6 text-neutral-500">
+            Turn this on if characters level through campaign progression rather than tracked XP.
+          </p>
         </div>
 
         <Button onClick={handleSave} disabled={saving}>
