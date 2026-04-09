@@ -12,25 +12,48 @@ export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl
   const campaignId = searchParams.get('campaign_id')
   const classId = searchParams.get('class_id')
+  const subclassIds = searchParams.getAll('subclass_id').filter(Boolean)
+  const classLevel = parseInt(searchParams.get('class_level') ?? '0', 10)
   const levelParam = searchParams.get('level')
 
   const allowedSources = await getAllowedSources(supabase, campaignId)
+  const activeBonusRows = subclassIds.length > 0
+    ? await supabase
+        .from('subclass_bonus_spells')
+        .select('*')
+        .in('subclass_id', subclassIds)
+        .lte('required_class_level', Number.isNaN(classLevel) ? 0 : classLevel)
+    : { data: [], error: null }
 
-  let query = supabase.from('spells').select('*').order('level').order('name')
+  if (activeBonusRows.error) return jsonError(activeBonusRows.error.message, 500)
 
-  if (allowedSources) {
-    query = query.in('source', Array.from(allowedSources))
-  }
-  if (classId) {
-    query = query.contains('classes', [classId])
-  }
-  if (levelParam !== null) {
-    query = query.eq('level', parseInt(levelParam, 10))
-  }
-
-  const { data, error } = await query
+  const grantedSpellIds = new Set((activeBonusRows.data ?? []).map((row) => row.spell_id))
+  const baseQuery = supabase.from('spells').select('*').order('level').order('name')
+  const { data: allSpells, error } = await baseQuery
   if (error) return jsonError(error.message, 500)
-  return NextResponse.json(data)
+
+  const bonusRowsBySpellId = new Map<string, Array<(typeof activeBonusRows.data)[number]>>()
+  for (const row of activeBonusRows.data ?? []) {
+    const existing = bonusRowsBySpellId.get(row.spell_id) ?? []
+    existing.push(row)
+    bonusRowsBySpellId.set(row.spell_id, existing)
+  }
+
+  const filtered = (allSpells ?? []).filter((spell) => {
+    const baseAllowed = !classId || spell.classes.includes(classId)
+    const bonusAllowed = grantedSpellIds.has(spell.id)
+    const sourceAllowed = !allowedSources || allowedSources.has(spell.source) || bonusAllowed
+    const levelAllowed = levelParam === null || spell.level === parseInt(levelParam, 10)
+    return sourceAllowed && levelAllowed && (baseAllowed || bonusAllowed)
+  }).map((spell) => ({
+    ...spell,
+    granted_by_subclasses: (bonusRowsBySpellId.get(spell.id) ?? []).map((row) => row.subclass_id),
+    counts_against_selection_limit: !(bonusRowsBySpellId.get(spell.id) ?? []).some(
+      (row) => !row.counts_against_selection_limit
+    ),
+  }))
+
+  return NextResponse.json(filtered)
 }
 
 export async function POST(request: NextRequest) {

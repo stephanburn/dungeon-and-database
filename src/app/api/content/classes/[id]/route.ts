@@ -9,10 +9,15 @@ export async function GET(
   if (auth instanceof NextResponse) return auth
   const { supabase } = auth
 
-  const [classResult, progressionResult] = await Promise.all([
+  const [classResult, progressionResult, spellSlotResult] = await Promise.all([
     supabase.from('classes').select('*').eq('id', params.id).single(),
     supabase
       .from('class_feature_progression')
+      .select('*')
+      .eq('class_id', params.id)
+      .order('level'),
+    supabase
+      .from('spell_slot_tables')
       .select('*')
       .eq('class_id', params.id)
       .order('level'),
@@ -23,5 +28,6 @@ export async function GET(
   return NextResponse.json({
     ...classResult.data,
     progression: progressionResult.data ?? [],
+    spell_slots: spellSlotResult.data ?? [],
   })
 }

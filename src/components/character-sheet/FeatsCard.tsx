@@ -26,6 +26,7 @@ interface FeatsCardProps {
   availableFeats: Feat[]
   featChoices: string[]
   totalLevel: number
+  featSlotLabels?: string[]
   canEdit: boolean
   onChange: (featChoices: string[]) => void
 }
@@ -36,10 +37,11 @@ export function FeatsCard({
   availableFeats,
   featChoices,
   totalLevel,
+  featSlotLabels,
   canEdit,
   onChange,
 }: FeatsCardProps) {
-  const slots = asiSlotsEarned(totalLevel)
+  const slots = featSlotLabels?.length ?? asiSlotsEarned(totalLevel)
   const hasBgFeat = !!backgroundFeat
   const hasAnything = hasBgFeat || slots > 0
 
@@ -82,7 +84,7 @@ export function FeatsCard({
           return (
             <div key={i} className="space-y-1">
               <p className="text-xs text-neutral-500">
-                ASI slot {i + 1} (level {DEFAULT_ASI_LEVELS[i]})
+                ASI slot {i + 1} ({featSlotLabels?.[i] ?? `level ${DEFAULT_ASI_LEVELS[i]}`})
               </p>
               {canEdit ? (
                 <Select value={chosenId || 'asi'} onValueChange={(value) => setSlot(i, value === 'asi' ? '' : value)}>

@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { requireAuth, requireAdmin, jsonError, readJsonBody } from '@/lib/api-helpers'
 import { getAllowedSources } from '@/lib/content-helpers'
 import { writeAuditLog } from '@/lib/server/audit'
-import type { MulticlassPrereq, SkillChoices, SpellcastingType } from '@/lib/types/database'
+import type { MulticlassPrereq, SkillChoices, SpellcastingProgression, SpellcastingType } from '@/lib/types/database'
 
 export async function GET(request: NextRequest) {
   const auth = await requireAuth()
@@ -48,6 +48,7 @@ export async function POST(request: NextRequest) {
       multiclass_prereqs: (body.multiclass_prereqs as MulticlassPrereq[] | undefined) ?? [],
       multiclass_proficiencies: (body.multiclass_proficiencies as Record<string, unknown> | undefined) ?? {},
       spellcasting_type: (body.spellcasting_type as SpellcastingType | null | undefined) ?? null,
+      spellcasting_progression: (body.spellcasting_progression as SpellcastingProgression | undefined) ?? { mode: 'none' },
       subclass_choice_level: (body.subclass_choice_level as number | undefined) ?? 3,
       source: body.source as string,
       amended: false,

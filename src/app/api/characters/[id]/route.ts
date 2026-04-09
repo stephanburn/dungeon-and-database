@@ -63,8 +63,16 @@ export async function GET(
     .eq('id', params.id)
     .single()
 
-  if (error) return jsonError('Character not found', 404)
-  return NextResponse.json(data)
+  if (error || !data) return jsonError('Character not found', 404)
+
+  const legalityInput = await buildLegalityInput(supabase, params.id)
+  const legalityResult = legalityInput ? runLegalityChecks(legalityInput) : null
+
+  return NextResponse.json({
+    ...(data as Record<string, unknown>),
+    legality: legalityResult,
+    derived: legalityResult?.derived ?? null,
+  })
 }
 
 export async function PUT(

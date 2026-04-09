@@ -49,7 +49,7 @@ function defaultForm(tab: string, classes: ClassRow[]): FormState {
     armor_proficiencies: '', weapon_proficiencies: '', tool_proficiencies: '',
     multiclass_prereqs: '',
     skill_choice_count: 2, skill_choice_from: '',
-    spellcasting_type: '', subclass_choice_level: 3, source: '',
+    spellcasting_type: '', spellcasting_progression: '{"mode":"none"}', subclass_choice_level: 3, source: '',
   }
   if (tab === 'subclasses') return { name: '', class_id: classes[0]?.id ?? '', source: '' }
   if (tab === 'spells') return { name: '', level: 0, school: '', casting_time: '1 action', range: '', comp_verbal: false, comp_somatic: false, comp_material: false, comp_materials: '', duration: 'Instantaneous', concentration: false, ritual: false, description: '', classes: [] as string[], source: '' }
@@ -107,6 +107,7 @@ function itemToForm(tab: string, item: ContentItem): FormState {
       skill_choice_count: sc.count,
       skill_choice_from: sc.from.join(', '),
       spellcasting_type: (item.spellcasting_type as string) ?? '',
+      spellcasting_progression: JSON.stringify((item.spellcasting_progression as Record<string, unknown> | null) ?? { mode: 'none' }, null, 2),
       subclass_choice_level: (item.subclass_choice_level as number) ?? 3,
       source: item.source as string,
     }
@@ -197,6 +198,10 @@ function formToPayload(tab: string, form: FormState, classes: ClassRow[] = []): 
     const prereqs = splitComma(form.multiclass_prereqs as string)
       .map(s => { const [ability, min] = s.trim().split(/\s+/); return { ability: ability?.toLowerCase() ?? '', min: Number(min) || 13 } })
       .filter(p => p.ability)
+    const spellcastingProgressionRaw = (form.spellcasting_progression as string).trim()
+    const spellcastingProgression = spellcastingProgressionRaw
+      ? JSON.parse(spellcastingProgressionRaw)
+      : { mode: 'none' }
     return {
       name: form.name,
       hit_die: Number(form.hit_die),
@@ -209,6 +214,7 @@ function formToPayload(tab: string, form: FormState, classes: ClassRow[] = []): 
       multiclass_prereqs: prereqs,
       multiclass_proficiencies: {},
       spellcasting_type: (form.spellcasting_type as string) || null,
+      spellcasting_progression: spellcastingProgression,
       subclass_choice_level: Number(form.subclass_choice_level),
       source: form.source,
     }
@@ -492,6 +498,18 @@ function ContentForm({ tab, form, setField, classes, sources, feats, autoFocusFi
         {field('Skill Choices (count)', 'skill_choice_count', 'number')}
         {field('Choose From (comma-separated)', 'skill_choice_from', 'text', 'Arcana, History, Insight')}
         {field('Multiclass Prereqs', 'multiclass_prereqs', 'text', 'STR 13')}
+      </div>
+      <div>
+        <Label className="text-neutral-400 text-xs mb-1 block">Spellcasting Progression (JSON)</Label>
+        <Textarea
+          value={String(form.spellcasting_progression ?? '{"mode":"none"}')}
+          onChange={event => setField('spellcasting_progression', event.target.value)}
+          rows={8}
+          placeholder={'{\n  "mode": "prepared",\n  "spellcasting_ability": "int",\n  "cantrips_known_by_level": [2,2,2,2,2,2,2,2,2,3],\n  "prepared_formula": "half_level_down",\n  "prepared_add_ability_mod": true,\n  "prepared_min": 1\n}'}
+        />
+        <p className="mt-2 text-xs text-neutral-500">
+          Example for Artificer: prepared caster using INT, half level rounded down, minimum 1, with cantrip counts by level.
+        </p>
       </div>
     </div>
   )

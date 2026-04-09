@@ -296,9 +296,14 @@ export function CharacterSheet({
   }
   // First class (used for skill choices and saving throws)
   const firstClassId = levels[0]?.class_id
+  const firstClassLevel = levels[0]?.level ?? 0
+  const firstClassSubclassIds = levels
+    .filter((level) => level.class_id === firstClassId && level.subclass_id)
+    .map((level) => level.subclass_id as string)
   const selectedClass = classList.find((c) => c.id === firstClassId) ?? null
 
   const failedChecks = legalityResult?.checks.filter((c) => !c.passed) ?? []
+  const derivedProgression = legalityResult?.derived ?? null
   const canEdit = !readOnly && (status === 'draft' || status === 'changes_requested' || isDm)
   const canSubmit = !readOnly && (status === 'draft' || status === 'changes_requested')
   const errorCount = failedChecks.filter((c) => c.severity === 'error').length
@@ -320,6 +325,12 @@ export function CharacterSheet({
     level_cap: 'identity-class',
     multiclass_skill_validation: 'stats-skills',
     skill_proficiencies: 'stats-skills',
+    multiclass_prerequisites: 'identity-class',
+    subclass_timing: 'identity-class',
+    feat_prerequisites: 'spells-feats',
+    feat_slots: 'spells-feats',
+    spell_legality: 'spells-feats',
+    spell_selection_count: 'spells-feats',
   }
 
   function jumpToCheck(key: string) {
@@ -652,11 +663,27 @@ export function CharacterSheet({
         defaultOpen={selectedClass?.spellcasting_type != null && selectedClass.spellcasting_type !== 'none'}
         highlighted={highlightedSection === 'spells-feats'}
       >
+        {derivedProgression && (derivedProgression.spellSlots.length > 0 || derivedProgression.pactSpellSlots.length > 0) && (
+          <Alert className="border-white/10 bg-white/[0.03]">
+            <AlertDescription className="text-neutral-300">
+              Standard spell slots: {derivedProgression.spellSlots.length > 0 ? derivedProgression.spellSlots.join(' / ') : 'none'}
+              {derivedProgression.pactSpellSlots.map((entry) => ` · ${entry.className} pact: ${entry.slots.join(' / ') || 'none'}`).join('')}
+            </AlertDescription>
+          </Alert>
+        )}
+
         {selectedClass?.spellcasting_type != null && selectedClass.spellcasting_type !== 'none' && (
           <SpellsCard
             classId={firstClassId}
             campaignId={campaignId}
+            subclassIds={firstClassSubclassIds}
+            classLevel={firstClassLevel}
             spellChoices={spellChoices}
+            maxSpellLevel={derivedProgression?.maxSpellLevel}
+            spellLevelCaps={derivedProgression?.spellLevelCaps}
+            leveledSpellSelectionCap={derivedProgression?.leveledSpellSelectionCap}
+            cantripSelectionCap={derivedProgression?.cantripSelectionCap}
+            selectionSummary={derivedProgression?.spellSelectionSummary}
             canEdit={canEdit}
             onChange={setSpellChoices}
           />
@@ -674,6 +701,7 @@ export function CharacterSheet({
               availableFeats={featList}
               featChoices={featChoices}
               totalLevel={totalLevel}
+              featSlotLabels={derivedProgression?.featSlotLabels}
               canEdit={canEdit}
               onChange={setFeatChoices}
             />

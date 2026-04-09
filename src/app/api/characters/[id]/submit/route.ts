@@ -1,14 +1,9 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { requireAuth, jsonError } from '@/lib/api-helpers'
 import { buildLegalityInput } from '@/lib/legality/build-input'
-import { runLegalityChecks } from '@/lib/legality/engine'
+import { runLegalityChecks, shouldBlockCharacterSubmit } from '@/lib/legality/engine'
 import { captureSnapshot } from '@/lib/snapshots'
 
-/**
- * Player transition: draft|changes_requested -> submitted.
- * Legality is returned to the client for review but does not block the
- * transition in the current advisory-only model.
- */
 export async function POST(
   _request: NextRequest,
   { params }: { params: { id: string } }
@@ -29,9 +24,18 @@ export async function POST(
     return jsonError(`Cannot submit a character with status "${character.status}"`, 400)
   }
 
-  // Legality is advisory only in this phase.
   const legalityInput = await buildLegalityInput(supabase, params.id)
   const legalityResult = legalityInput ? runLegalityChecks(legalityInput) : null
+
+  if (shouldBlockCharacterSubmit(legalityResult)) {
+    return NextResponse.json(
+      {
+        error: 'Character has blocking legality errors.',
+        legality: legalityResult,
+      },
+      { status: 400 }
+    )
+  }
 
   const { data, error } = await supabase
     .from('characters')

@@ -12,6 +12,7 @@ export type SpellcastingType = 'full' | 'half' | 'third' | 'pact' | 'none'
 export type ChoiceType = 'asi' | 'feat' | 'spell_known' | 'skill' | 'fighting_style' | 'other'
 export type CheckSeverity = 'error' | 'warning'
 export type CharacterType = 'pc' | 'npc' | 'test'
+export type SpellcastingMode = 'prepared' | 'known' | 'spellbook' | 'none'
 
 // ── JSON shapes ────────────────────────────────────────────
 
@@ -48,6 +49,25 @@ export type MulticlassPrereq = {
 export type SkillChoices = {
   count: number
   from: string[]
+}
+
+export type SpellcastingPreparedFormula =
+  | 'class_level'
+  | 'half_level_down'
+  | 'half_level_up'
+  | 'third_level_down'
+  | 'third_level_up'
+  | 'fixed'
+
+export type SpellcastingProgression = {
+  mode: SpellcastingMode
+  spellcasting_ability?: 'str' | 'dex' | 'con' | 'int' | 'wis' | 'cha'
+  cantrips_known_by_level?: number[]
+  spells_known_by_level?: number[]
+  prepared_formula?: SpellcastingPreparedFormula
+  prepared_fixed?: number
+  prepared_add_ability_mod?: boolean
+  prepared_min?: number
 }
 
 export type CampaignSettings = {
@@ -145,6 +165,7 @@ export type Class = {
   multiclass_prereqs: MulticlassPrereq[]
   multiclass_proficiencies: Record<string, unknown>
   spellcasting_type: SpellcastingType | null
+  spellcasting_progression: SpellcastingProgression | null
   subclass_choice_level: number
   source: string
   amended: boolean
@@ -191,6 +212,14 @@ export type SubclassFeature = {
   source: string
   amended: boolean
   amendment_note: string | null
+}
+
+export type SubclassBonusSpell = {
+  id: string
+  subclass_id: string
+  spell_id: string
+  required_class_level: number
+  counts_against_selection_limit: boolean
 }
 
 export type Spell = {
@@ -335,6 +364,7 @@ export type Database = {
       multiclass_spell_slot_table: { Row: MulticlassSpellSlotTable; Insert: MulticlassSpellSlotTable; Update: Partial<MulticlassSpellSlotTable>; Relationships: R }
       subclasses: { Row: Subclass; Insert: Omit<Subclass, 'id'>; Update: Partial<Omit<Subclass, 'id'>>; Relationships: R }
       subclass_features: { Row: SubclassFeature; Insert: Omit<SubclassFeature, 'id'>; Update: Partial<Omit<SubclassFeature, 'id'>>; Relationships: R }
+      subclass_bonus_spells: { Row: SubclassBonusSpell; Insert: Omit<SubclassBonusSpell, 'id'>; Update: Partial<Omit<SubclassBonusSpell, 'id'>>; Relationships: R }
       spells: { Row: Spell; Insert: Omit<Spell, 'id'>; Update: Partial<Omit<Spell, 'id'>>; Relationships: R }
       feats: { Row: Feat; Insert: Omit<Feat, 'id'>; Update: Partial<Omit<Feat, 'id'>>; Relationships: R }
       backgrounds: { Row: Background; Insert: Omit<Background, 'id'>; Update: Partial<Omit<Background, 'id'>>; Relationships: R }
