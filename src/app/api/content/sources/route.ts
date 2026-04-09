@@ -29,6 +29,32 @@ export async function POST(request: NextRequest) {
   return NextResponse.json(data, { status: 201 })
 }
 
+export async function PUT(request: NextRequest) {
+  const auth = await requireDm()
+  if (auth instanceof NextResponse) return auth
+  const { supabase } = auth
+
+  const body = await request.json()
+  if (!body.original_key || !body.key || !body.full_name) {
+    return jsonError('original_key, key, and full_name are required', 400)
+  }
+
+  const { data, error } = await supabase
+    .from('sources')
+    .update({
+      key: body.key,
+      full_name: body.full_name,
+      is_srd: body.is_srd ?? false,
+      rule_set: body.rule_set ?? '2014',
+    })
+    .eq('key', body.original_key)
+    .select()
+    .single()
+
+  if (error) return jsonError(error.message, 500)
+  return NextResponse.json(data)
+}
+
 export async function DELETE(request: NextRequest) {
   const auth = await requireDm()
   if (auth instanceof NextResponse) return auth

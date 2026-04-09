@@ -94,14 +94,16 @@ export default async function DmDashboardPage() {
             <Button asChild size="sm">
               <Link href="/characters/new">+ New character</Link>
             </Button>
-            <details className="relative">
-              <summary className="list-none">
-                <Button variant="ghost" size="sm" className="text-neutral-400 hover:text-neutral-200">
-                  Account
-                </Button>
+            <details className="group relative">
+              <summary className="list-none cursor-pointer rounded-md px-3 py-2 text-sm text-neutral-400 transition-colors hover:bg-neutral-900 hover:text-neutral-200">
+                Account
               </summary>
-              <div className="absolute right-0 mt-2 w-44 rounded-xl border border-neutral-800 bg-neutral-900 p-2 shadow-xl">
-                <form action="/api/auth/logout" method="POST">
+              <div className="absolute right-0 mt-2 hidden w-44 rounded-xl border border-neutral-800 bg-neutral-900 p-2 shadow-xl group-open:block">
+                <div className="border-b border-neutral-800 px-3 py-2">
+                  <p className="text-sm font-medium text-neutral-100">{profile.display_name}</p>
+                  <p className="text-xs text-neutral-500">DM account</p>
+                </div>
+                <form action="/api/auth/logout" method="POST" className="pt-2">
                   <Button
                     variant="ghost"
                     type="submit"

@@ -145,6 +145,13 @@ function itemToForm(tab: string, item: ContentItem): FormState {
       source: item.source as string,
     }
   }
+  if (tab === 'sources') {
+    return {
+      key: item.key as string,
+      full_name: item.full_name as string,
+      rule_set: (item.rule_set as '2014' | '2024') ?? '2014',
+    }
+  }
   return {}
 }
 
@@ -698,7 +705,7 @@ export default function ContentAdmin() {
   }
 
   function startEdit(item: ContentItem) {
-    setEditingId(item.id as string)
+    setEditingId(activeTab === 'sources' ? item.key as string : item.id as string)
     setForm(itemToForm(activeTab, item))
     setShowForm(true)
     setError(null)
@@ -717,7 +724,11 @@ export default function ContentAdmin() {
       const payload = formToPayload(activeTab, form, classes)
       const url = apiUrl(activeTab)
       if (editingId) {
-        payload.id = editingId
+        if (activeTab === 'sources') {
+          payload.original_key = editingId
+        } else {
+          payload.id = editingId
+        }
         const res = await fetch(url, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
         if (!res.ok) throw new Error((await res.json()).error ?? 'Save failed')
       } else {
@@ -806,11 +817,9 @@ export default function ContentAdmin() {
                         {renderTableCells(tab, item, classes)}
                         <TableCell>
                           <div className="flex gap-1 justify-end">
-                            {tab !== 'sources' && (
-                              <Button size="sm" variant="ghost" onClick={() => startEdit(item)} className="text-neutral-400 hover:text-neutral-100 h-7 px-2 text-xs">
-                                Edit
-                              </Button>
-                            )}
+                            <Button size="sm" variant="ghost" onClick={() => startEdit(item)} className="text-neutral-400 hover:text-neutral-100 h-7 px-2 text-xs">
+                              Edit
+                            </Button>
                             <Button size="sm" variant="ghost" onClick={() => deleteItem(itemKey)} className="text-red-500 hover:text-red-400 h-7 px-2 text-xs">
                               Delete
                             </Button>
