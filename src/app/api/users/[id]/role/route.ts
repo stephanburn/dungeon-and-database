@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { requireDm, jsonError } from '@/lib/api-helpers'
+import { updateUserRoleById } from '@/lib/server/user-roles'
 import { z } from 'zod'
 
 const updateUserRoleSchema = z.object({
@@ -30,12 +31,7 @@ export async function PUT(
     return NextResponse.json(existingUser)
   }
 
-  const { data, error } = await supabase
-    .from('users')
-    .update({ role: parsed.data.role })
-    .eq('id', params.id)
-    .select('id, role, display_name')
-    .single()
+  const { data, error } = await updateUserRoleById(params.id, parsed.data.role)
 
   if (error) return jsonError(error.message, 500)
   return NextResponse.json(data)
