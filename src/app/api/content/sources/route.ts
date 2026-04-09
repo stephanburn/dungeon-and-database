@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
 
   const { data, error } = await supabase
     .from('sources')
-    .insert({ key: body.key, full_name: body.full_name, is_srd: body.is_srd ?? false })
+    .insert({ key: body.key, full_name: body.full_name, is_srd: body.is_srd ?? false, rule_set: body.rule_set ?? '2014' })
     .select()
     .single()
 

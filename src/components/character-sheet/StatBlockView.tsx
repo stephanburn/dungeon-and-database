@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import type { Character, Species, Background, CharacterLevel, Sense, Class } from '@/lib/types/database'
+import type { Character, Species, Background, CharacterLevel, Sense, Class, Feat } from '@/lib/types/database'
 import { SKILLS, normalizeSkillKey } from '@/lib/skills'
 import type { AbilityKey } from '@/lib/skills'
 
@@ -19,6 +19,7 @@ interface StatBlockViewProps {
   classNames?: string[]
   selectedClass?: Class | null
   skillProficiencies?: string[]
+  feats?: Feat[]
 }
 
 function mod(score: number): number {
@@ -54,7 +55,7 @@ function formatSenses(senses: Sense[]): string {
     .join(', ')
 }
 
-export function StatBlockView({ character, classNames = [], selectedClass = null, skillProficiencies = [] }: StatBlockViewProps) {
+export function StatBlockView({ character, classNames = [], selectedClass = null, skillProficiencies = [], feats = [] }: StatBlockViewProps) {
   const computedAc = computeUnarmoredAc(
     character.base_dex,
     character.base_con,
@@ -142,6 +143,9 @@ export function StatBlockView({ character, classNames = [], selectedClass = null
     }
     if (character.background?.name) {
       lines.push(`**Background:** ${character.background.name}`)
+    }
+    if (feats.length > 0) {
+      lines.push(`**Feats:** ${feats.map((f) => f.name).join(', ')}`)
     }
     return lines.join('\n')
   }
@@ -234,6 +238,9 @@ export function StatBlockView({ character, classNames = [], selectedClass = null
 
           {character.background && (
             <p className="text-sm"><span className="font-bold">Background</span> {character.background.name}</p>
+          )}
+          {feats.length > 0 && (
+            <p className="text-sm"><span className="font-bold">Feats</span> {feats.map((f) => f.name).join(', ')}</p>
           )}
         </div>
 
