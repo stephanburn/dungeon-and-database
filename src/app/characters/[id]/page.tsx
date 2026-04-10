@@ -71,6 +71,7 @@ export default async function CharacterPage({ params }: { params: { id: string }
   const isDm = hasDmAccess(profile?.role)
   const isOwner = character.user_id === user.id
   const backHref = isDm ? '/dm/dashboard' : '/'
+  const canEditCharacter = character.status === 'draft' || character.status === 'changes_requested' || isDm
 
   return (
     <div className="min-h-screen bg-neutral-950 p-6">
@@ -79,9 +80,16 @@ export default async function CharacterPage({ params }: { params: { id: string }
           <Button variant="ghost" asChild className="text-neutral-400 hover:text-neutral-200 -ml-2">
             <Link href={backHref}>← Back</Link>
           </Button>
-          {(isDm || isOwner) && (
-            <DeleteCharacterButton characterId={character.id} backHref={backHref} />
-          )}
+          <div className="flex items-center gap-2">
+            {canEditCharacter && (
+              <Button asChild variant="outline" className="border-blue-400/20 bg-blue-400/10 text-blue-50 hover:bg-blue-400/15">
+                <Link href={`/characters/${character.id}/level-up`}>Level up</Link>
+              </Button>
+            )}
+            {(isDm || isOwner) && (
+              <DeleteCharacterButton characterId={character.id} backHref={backHref} />
+            )}
+          </div>
         </div>
 
         <CharacterSheet
