@@ -140,8 +140,13 @@ export function CharacterSheet({
   const [hpMax, setHpMax] = useState(initial.hp_max)
   const [speciesId, setSpeciesId] = useState<string>(initial.species_id ?? '')
   const [backgroundId, setBackgroundId] = useState<string>(initial.background_id ?? '')
-  const [levels, setLevels] = useState<Array<{ class_id: string; level: number; subclass_id: string | null }>>
-    (initial.character_levels.map((l) => ({ class_id: l.class_id, level: l.level, subclass_id: l.subclass_id })))
+  const [levels, setLevels] = useState<Array<{ class_id: string; level: number; subclass_id: string | null; hp_roll: number | null }>>
+    (initial.character_levels.map((l) => ({
+      class_id: l.class_id,
+      level: l.level,
+      subclass_id: l.subclass_id,
+      hp_roll: l.hp_roll,
+    })))
 
   // Content options
   const [speciesList, setSpeciesList] = useState<Species[]>([])
@@ -208,7 +213,7 @@ export function CharacterSheet({
 
   function addLevel() {
     if (classList.length === 0) return
-    setLevels((prev) => [...prev, { class_id: classList[0].id, level: 1, subclass_id: null }])
+    setLevels((prev) => [...prev, { class_id: classList[0].id, level: 1, subclass_id: null, hp_roll: null }])
   }
 
   function removeLevel(index: number) {
@@ -764,7 +769,7 @@ export function CharacterSheet({
             hp_max: hpMax,
             species: speciesList.find((s) => s.id === speciesId) ?? initial.species,
             background: backgroundList.find((b) => b.id === backgroundId) ?? initial.background,
-            character_levels: levels.map((l) => ({ ...l, id: '', character_id: initial.id, hp_roll: null, taken_at: '' })),
+            character_levels: levels.map((l) => ({ ...l, id: '', character_id: initial.id, hp_roll: l.hp_roll, taken_at: '' })),
           }}
           classNames={levels.map((l) => classList.find((c) => c.id === l.class_id)?.name ?? '')}
           selectedClass={selectedClass}

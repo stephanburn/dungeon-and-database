@@ -34,7 +34,7 @@ import { StatBlock } from '@/components/character-sheet/StatBlock'
 import { SkillsCard } from '@/components/character-sheet/SkillsCard'
 import { SpellsCard } from '@/components/character-sheet/SpellsCard'
 import { FeatsCard } from '@/components/character-sheet/FeatsCard'
-import { LegalityBadge } from '@/components/character-sheet/LegalityBadge'
+import { LegalityBadge, LegalitySummaryBadge } from '@/components/character-sheet/LegalityBadge'
 import {
   createBuildBackgroundSummary,
   deriveCharacterProgression,
@@ -56,6 +56,18 @@ interface ClassDetail extends Class {
 type SpellOption = Spell & {
   granted_by_subclasses?: string[]
   counts_against_selection_limit?: boolean
+}
+
+type WizardLevel = {
+  class_id: string
+  level: number
+  subclass_id: string | null
+}
+
+type WizardLegalitySummary = {
+  blockers: string[]
+  warnings: string[]
+  successes: string[]
 }
 
 type StepId =
@@ -105,7 +117,7 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
 
   const [speciesId, setSpeciesId] = useState('')
   const [backgroundId, setBackgroundId] = useState('')
-  const [levels, setLevels] = useState<Array<{ class_id: string; level: number; subclass_id: string | null }>>([])
+  const [levels, setLevels] = useState<WizardLevel[]>([])
   const [stats, setStats] = useState({ str: 15, dex: 14, con: 13, int: 12, wis: 10, cha: 8 })
   const [skillProficiencies, setSkillProficiencies] = useState<string[]>([])
   const [spellChoices, setSpellChoices] = useState<string[]>([])
@@ -231,6 +243,9 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
     skillProficiencies,
   })
   const derived = localContext ? deriveCharacterProgression(localContext) : null
+  const creationHitDieRows = buildWizardHitDieRows(levels, classDetailMap)
+  const creationHpMax = calculateCreationHpMax(creationHitDieRows, stats.con)
+  const wizardLegalitySummary = summarizeWizardLegality(legalityResult)
 
   function handleStatChange(stat: string, value: number) {
     setStats((prev) => ({ ...prev, [stat]: value }))
@@ -262,6 +277,7 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
       case 'classes':
         if (levels.length === 0) return 'Add at least one class entry.'
         if (levels.some((level) => !level.class_id)) return 'Every class row needs a class.'
+        if (levels.some((level) => !classDetailMap[level.class_id])) return 'Class details are still loading. Try again in a moment.'
         if (derived && localContext && derived.totalLevel > localContext.campaignSettings.max_level) {
           return `This build exceeds the campaign max level of ${localContext.campaignSettings.max_level}.`
         }
@@ -299,6 +315,13 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
   }
 
   async function persistDraft(targetCharacterId: string) {
+    const levelsWithHp = levels.map((level) => ({
+      class_id: level.class_id,
+      level: level.level,
+      subclass_id: level.subclass_id,
+      hp_roll: classDetailMap[level.class_id]?.hit_die ?? null,
+    }))
+
     const response = await fetch(`/api/characters/${targetCharacterId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -307,7 +330,8 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
         stat_method: statMethod,
         species_id: speciesId || null,
         background_id: backgroundId || null,
-        levels,
+        hp_max: creationHpMax,
+        levels: levelsWithHp,
         base_str: stats.str,
         base_dex: stats.dex,
         base_con: stats.con,
@@ -564,6 +588,14 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
                   </div>
                 ))}
 
+                {creationHitDieRows.length > 0 && (
+                  <Alert className="border-white/10 bg-white/[0.03]">
+                    <AlertDescription className="text-neutral-300">
+                      Creation HP preview: {creationHpMax}. The wizard uses full hit dice for each selected level at creation, and you can adjust HP later on the full sheet.
+                    </AlertDescription>
+                  </Alert>
+                )}
+
                 <Button type="button" variant="outline" onClick={addClassLevelRow}>
                   Add Class
                 </Button>
@@ -667,6 +699,25 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
               <div className="space-y-5">
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                    <p className="text-sm text-neutral-500">Class Build</p>
+                    <p className="text-neutral-100">
+                      {levels.map((level) => {
+                        const className = classList.find((cls) => cls.id === level.class_id)?.name ?? 'Class'
+                        const subclassName = level.subclass_id
+                          ? (subclassMap[level.class_id] ?? []).find((entry) => entry.id === level.subclass_id)?.name
+                          : null
+                        return subclassName ? `${className} ${level.level} (${subclassName})` : `${className} ${level.level}`
+                      }).join(', ') || '—'}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                    <p className="text-sm text-neutral-500">Creation HP</p>
+                    <p className="text-neutral-100">{creationHpMax}</p>
+                    <p className="mt-1 text-xs text-neutral-500">
+                      Full hit die at creation, including Constitution at each selected level.
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
                     <p className="text-sm text-neutral-500">Species</p>
                     <p className="text-neutral-100">{selectedSpecies?.name ?? '—'}</p>
                   </div>
@@ -681,19 +732,84 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
                     <AlertDescription className="text-neutral-300">
                       Level {derived.totalLevel} build with {derived.totalAsiSlots} feat/ASI slots.
                       {derived.spellSlots.length > 0 && ` Spell slots: ${derived.spellSlots.join(' / ')}.`}
+                      {spellChoices.length > 0 && ` ${spellChoices.length} spells selected.`}
+                      {featChoices.length > 0 && ` ${featChoices.length} feats selected.`}
                     </AlertDescription>
                   </Alert>
                 )}
 
                 {legalityResult ? (
-                  <div className="space-y-2">
-                    <p className="text-sm font-medium text-neutral-200">Legality check</p>
-                    {legalityResult.checks.map((check) => (
-                      <LegalityBadge key={check.key} check={check} />
-                    ))}
+                  <div className="space-y-4">
+                    <div className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:flex-row sm:items-start sm:justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-neutral-100">Review your build</p>
+                        <p className="mt-1 text-sm text-neutral-400">
+                          This is the final mechanical check before opening the full sheet.
+                        </p>
+                      </div>
+                      <LegalitySummaryBadge
+                        passed={legalityResult.passed}
+                        errorCount={legalityResult.checks.filter((check) => check.severity === 'error' && !check.passed).length}
+                      />
+                    </div>
+
+                    {wizardLegalitySummary.blockers.length > 0 && (
+                      <Alert className="border-rose-400/20 bg-rose-400/10">
+                        <AlertDescription className="space-y-2 text-rose-50">
+                          <p className="text-sm font-medium">Finish these before submission</p>
+                          <ul className="space-y-1 text-sm text-rose-100">
+                            {wizardLegalitySummary.blockers.map((item) => (
+                              <li key={item}>• {item}</li>
+                            ))}
+                          </ul>
+                        </AlertDescription>
+                      </Alert>
+                    )}
+
+                    {wizardLegalitySummary.warnings.length > 0 && (
+                      <Alert className="border-amber-400/20 bg-amber-400/10">
+                        <AlertDescription className="space-y-2 text-amber-50">
+                          <p className="text-sm font-medium">Heads up</p>
+                          <ul className="space-y-1 text-sm text-amber-100">
+                            {wizardLegalitySummary.warnings.map((item) => (
+                              <li key={item}>• {item}</li>
+                            ))}
+                          </ul>
+                        </AlertDescription>
+                      </Alert>
+                    )}
+
+                    {wizardLegalitySummary.successes.length > 0 && (
+                      <div className="rounded-2xl border border-emerald-400/15 bg-emerald-400/5 p-4">
+                        <p className="text-sm font-medium text-emerald-100">Already looking good</p>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {wizardLegalitySummary.successes.map((item) => (
+                            <span
+                              key={item}
+                              className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1 text-xs text-emerald-100"
+                            >
+                              {item}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium text-neutral-200">Detailed legality check</p>
+                      <div className="flex flex-wrap gap-2">
+                        {legalityResult.checks.map((check) => (
+                          <LegalityBadge key={check.key} check={check} />
+                        ))}
+                      </div>
+                    </div>
                   </div>
                 ) : (
-                  <p className="text-sm text-neutral-500">Continue once more to run a full legality check and open the sheet.</p>
+                  <Alert className="border-white/10 bg-white/[0.03]">
+                    <AlertDescription className="text-neutral-300">
+                      Open the full character sheet to run the complete legality pass. If anything needs attention, the sheet will show exactly what to fix before submission.
+                    </AlertDescription>
+                  </Alert>
                 )}
               </div>
             )}
@@ -741,7 +857,7 @@ function buildLocalContext({
   stats: Record<'str' | 'dex' | 'con' | 'int' | 'wis' | 'cha', number>
   selectedSpecies: Species | null
   selectedBackground: Background | null
-  levels: Array<{ class_id: string; level: number; subclass_id: string | null }>
+  levels: WizardLevel[]
   classDetailMap: Record<string, ClassDetail>
   subclassMap: Record<string, Subclass[]>
   spellOptions: SpellOption[]
@@ -854,5 +970,115 @@ function buildLocalContext({
     freePreparedSpellIds: spellChoices
       .filter((spellId) => spellById.get(spellId)?.counts_against_selection_limit === false),
     multiclassSpellSlotsByCasterLevel: {},
+  }
+}
+
+function abilityModifier(score: number): number {
+  return Math.floor((score - 10) / 2)
+}
+
+function buildWizardHitDieRows(
+  levels: WizardLevel[],
+  classDetailMap: Record<string, ClassDetail>
+): Array<WizardLevel & { hitDie: number }> {
+  return levels.flatMap((entry) => {
+    const detail = classDetailMap[entry.class_id]
+    if (!detail) return []
+
+    return Array.from({ length: Math.max(0, entry.level) }, (_, index) => ({
+      class_id: entry.class_id,
+      subclass_id: index === entry.level - 1 ? entry.subclass_id : null,
+      level: index + 1,
+      hitDie: detail.hit_die,
+    }))
+  })
+}
+
+function calculateCreationHpMax(
+  levels: Array<WizardLevel & { hitDie: number }>,
+  constitution: number
+): number {
+  const conMod = abilityModifier(constitution)
+  return levels.reduce((total, level) => total + Math.max(1, level.hitDie + conMod), 0)
+}
+
+function summarizeWizardLegality(result: LegalityResult | null): WizardLegalitySummary {
+  if (!result) {
+    return {
+      blockers: [],
+      warnings: [],
+      successes: [],
+    }
+  }
+
+  const blockers: string[] = []
+  const warnings: string[] = []
+  const successes: string[] = []
+
+  for (const check of result.checks) {
+    if (!check.passed) {
+      const target = check.severity === 'error' ? blockers : warnings
+      target.push(humanizeLegalityCheck(check))
+      continue
+    }
+
+    const success = summarizePassedCheck(check)
+    if (success) successes.push(success)
+  }
+
+  return {
+    blockers: Array.from(new Set(blockers)),
+    warnings: Array.from(new Set(warnings)),
+    successes: Array.from(new Set(successes)).slice(0, 4),
+  }
+}
+
+function humanizeLegalityCheck(check: LegalityResult['checks'][number]): string {
+  switch (check.key) {
+    case 'source_allowlist':
+      return 'One or more choices use sources that are not allowed in this campaign.'
+    case 'rule_set_consistency':
+      return 'Some selected content comes from a different ruleset than the campaign.'
+    case 'stat_method_consistency':
+      return 'Your ability score method does not match the campaign setting.'
+    case 'stat_method':
+      return 'Your ability scores do not match the chosen generation method yet.'
+    case 'level_cap':
+      return 'This build goes past the campaign level cap.'
+    case 'skill_proficiencies':
+      return 'One or more selected skills are not available to this build.'
+    case 'multiclass_prerequisites':
+      return 'A multiclass choice is missing the required ability scores.'
+    case 'subclass_timing':
+      return 'A subclass is missing or selected too early for at least one class.'
+    case 'feat_prerequisites':
+      return 'At least one feat is missing its prerequisite.'
+    case 'feat_slots':
+      return 'You have picked more feats than this build currently unlocks.'
+    case 'spell_legality':
+      return 'At least one selected spell is not available to this build yet.'
+    case 'spell_selection_count':
+      return 'You have chosen more spells or cantrips than this build allows.'
+    default:
+      return check.message
+  }
+}
+
+function summarizePassedCheck(check: LegalityResult['checks'][number]): string | null {
+  switch (check.key) {
+    case 'source_allowlist':
+      return 'Allowed campaign sources'
+    case 'stat_method':
+      return 'Valid ability scores'
+    case 'level_cap':
+      return 'Level cap respected'
+    case 'subclass_timing':
+      return 'Subclass timing looks good'
+    case 'spell_selection_count':
+      return 'Spell counts fit the build'
+    case 'feat_slots':
+      return 'Feat slots fit the build'
+    default:
+      return null
   }
 }
