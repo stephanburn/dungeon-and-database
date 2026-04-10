@@ -142,7 +142,7 @@ export function LevelUpWizard({
   const [selectedSubclassId, setSelectedSubclassId] = useState<string | null>(null)
   const [skillProficiencies, setSkillProficiencies] = useState<string[]>(initialSkillProficiencies)
   const [spellChoices, setSpellChoices] = useState<string[]>(initialSpellChoices)
-  const [featChoices, setFeatChoices] = useState<string[]>(initialFeatChoices)
+  const [featChoices] = useState<string[]>(initialFeatChoices)
   const [newFeatChoice, setNewFeatChoice] = useState('')
   const [hpMode, setHpMode] = useState<HpMode>('fixed')
   const [manualHpRoll, setManualHpRoll] = useState<number>(1)
@@ -359,7 +359,6 @@ export function LevelUpWizard({
     classDetailMap,
     featChoices,
     featList,
-    initialFeatChoices,
     mergedSpellOptions,
     newFeatChoice,
     skillProficiencies,
