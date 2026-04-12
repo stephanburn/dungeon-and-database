@@ -77,7 +77,41 @@ The most recent RLS tightening is in:
 ### Prerequisites
 
 - Node.js and npm
+- Vercel CLI
+- Supabase CLI
 - A Supabase project with the schema migrations applied
+
+### First-time machine setup
+
+On a fresh machine, relink the repo to the existing hosted services before running the app:
+
+```bash
+vercel login
+supabase login
+supabase link --project-ref cqpyvaynpzgyjerfesmz
+cp .env.example .env.local
+```
+
+Then fill in the real Supabase keys in `.env.local`.
+
+If you want one repeatable setup command after cloning, run:
+
+```bash
+nvm use
+./setup
+```
+
+If you prefer `make`, the repo also supports:
+
+```bash
+make setup
+make doctor
+```
+
+Vercel project metadata is already tracked in `.vercel/project.json`.
+Supabase local project config is now tracked in `supabase/config.toml`.
+Only the machine-specific Supabase link state in `supabase/.temp/` remains untracked.
+Use `./setup` for first-time machine bootstrap and `npm run doctor` or `make doctor` to verify that the current machine is ready before editing or deploying.
 
 ### Environment variables
 
@@ -87,7 +121,8 @@ The repo directly references these variables:
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY`
 
-`SUPABASE_SERVICE_ROLE_KEY` is required for the SRD seed script. A checked-in `.env.example` file was not found in the repo.
+Use `.env.example` as the starting point for `.env.local`.
+`SUPABASE_SERVICE_ROLE_KEY` is required for the SRD seed script.
 
 ### Run the app
 
@@ -115,10 +150,17 @@ Schema and RLS changes are tracked in `supabase/migrations/`.
 Typical workflow:
 
 1. Add a new migration file in `supabase/migrations/`
-2. Apply it to the target Supabase project
-3. Verify the app still typechecks locally
+2. Ensure the repo is linked with `supabase link --project-ref cqpyvaynpzgyjerfesmz`
+3. Apply it to the target Supabase project
+4. Verify the app still typechecks locally
 
-An automated migration runner config file was not found in the repo, so migration application details depend on your Supabase setup.
+The repo now includes `supabase/config.toml` for local CLI defaults, but the remote project link is still machine-local and must be recreated with `supabase link` after cloning.
+
+## Multi-Machine Notes
+
+- Prefer one git checkout per machine rather than one shared live working tree with simultaneous edits.
+- Do not rely on synced build artifacts. `node_modules`, `.next`, `output`, and `supabase/.temp` should stay machine-local.
+- Run `npm run doctor` after switching machines or after another agent has changed setup-related files.
 
 ## Repo Map
 

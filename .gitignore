@@ -12,6 +12,7 @@
 # next.js
 /.next/
 /out/
+/output/
 
 # production
 /build
@@ -42,3 +43,4 @@ supabase/.temp/
 
 *.docx
 Github  \& Super base details.md
+.claude/
