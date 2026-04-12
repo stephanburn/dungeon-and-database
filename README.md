@@ -74,6 +74,8 @@ The most recent RLS tightening is in:
 
 ## Local Development
 
+For the practical multi-machine setup workflow, see [SETUP.md](SETUP.md).
+
 ### Prerequisites
 
 - Node.js and npm
