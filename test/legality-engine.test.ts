@@ -441,6 +441,64 @@ test('buildTypedLanguageChoices tags changeling and background language picks wi
   ])
 })
 
+test('buildTypedLanguageChoices tags dragonmarked half-elf and human bonus language picks with provenance', () => {
+  const halfElfChoices = buildTypedLanguageChoices({
+    languageChoices: ['Draconic'],
+    background: null,
+    species: {
+      id: 'mark-storm',
+      name: 'Half-Elf (Mark of Storm)',
+      size: 'medium',
+      speed: 30,
+      ability_score_bonuses: [{ ability: 'cha', bonus: 2 }, { ability: 'dex', bonus: 1 }],
+      languages: ['Common', 'Elvish'],
+      traits: [],
+      senses: [{ type: 'darkvision', range_ft: 60 }],
+      damage_resistances: ['lightning'],
+      condition_immunities: [],
+      source: 'ERftLW',
+      amended: true,
+      amendment_note: null,
+    },
+  })
+
+  const humanChoices = buildTypedLanguageChoices({
+    languageChoices: ['Goblin'],
+    background: null,
+    species: {
+      id: 'mark-making',
+      name: 'Human (Mark of Making)',
+      size: 'medium',
+      speed: 30,
+      ability_score_bonuses: [{ ability: 'int', bonus: 2 }],
+      languages: ['Common'],
+      traits: [],
+      senses: [],
+      damage_resistances: [],
+      condition_immunities: [],
+      source: 'ERftLW',
+      amended: true,
+      amendment_note: null,
+    },
+  })
+
+  assert.deepEqual(halfElfChoices, [{
+    language: 'Draconic',
+    character_level_id: null,
+    source_category: 'species_choice',
+    source_entity_id: 'mark-storm',
+    source_feature_key: 'species_languages:half_elf_dragonmark',
+  }])
+
+  assert.deepEqual(humanChoices, [{
+    language: 'Goblin',
+    character_level_id: null,
+    source_category: 'species_choice',
+    source_entity_id: 'mark-making',
+    source_feature_key: 'species_languages:human_dragonmark',
+  }])
+})
+
 test('buildTypedToolChoices tags warforged specialized design picks', () => {
   const choices = buildTypedToolChoices({
     toolChoices: ["Thieves' Tools"],
@@ -471,6 +529,36 @@ test('buildTypedToolChoices tags warforged specialized design picks', () => {
       source_feature_key: 'species_trait:specialized_design',
     },
   ])
+})
+
+test('buildTypedToolChoices tags mark of making artisan tool picks', () => {
+  const choices = buildTypedToolChoices({
+    toolChoices: ["Smith's Tools"],
+    selectedClass: null,
+    species: {
+      id: 'mark-making',
+      name: 'Human (Mark of Making)',
+      size: 'medium',
+      speed: 30,
+      ability_score_bonuses: [{ ability: 'int', bonus: 2 }],
+      languages: ['Common'],
+      traits: [],
+      senses: [],
+      damage_resistances: [],
+      condition_immunities: [],
+      source: 'ERftLW',
+      amended: true,
+      amendment_note: null,
+    },
+  })
+
+  assert.deepEqual(choices, [{
+    tool: "Smith's Tools",
+    character_level_id: null,
+    source_category: 'species_choice',
+    source_entity_id: 'mark-making',
+    source_feature_key: 'species_trait:artisans_gift',
+  }])
 })
 
 test('buildTypedAbilityBonusChoices tags changeling and warforged flexible species bonuses', () => {
@@ -522,6 +610,22 @@ test('buildTypedAbilityBonusChoices tags changeling and warforged flexible speci
     amendment_note: null,
   }, ['int'])
 
+  const markOfMakingChoices = buildTypedAbilityBonusChoices({
+    id: 'mark-making',
+    name: 'Human (Mark of Making)',
+    size: 'medium',
+    speed: 30,
+    ability_score_bonuses: [{ ability: 'int', bonus: 2 }],
+    languages: ['Common'],
+    traits: [],
+    senses: [],
+    damage_resistances: [],
+    condition_immunities: [],
+    source: 'ERftLW',
+    amended: true,
+    amendment_note: null,
+  }, ['wis'])
+
   assert.deepEqual(changelingChoices, [{
     ability: 'dex',
     bonus: 1,
@@ -547,6 +651,15 @@ test('buildTypedAbilityBonusChoices tags changeling and warforged flexible speci
     source_category: 'species_choice',
     source_entity_id: 'mark-detection-erftlw',
     source_feature_key: 'species_asi:mark_of_detection_flexible_bonus',
+  }])
+
+  assert.deepEqual(markOfMakingChoices, [{
+    ability: 'wis',
+    bonus: 1,
+    character_level_id: null,
+    source_category: 'species_choice',
+    source_entity_id: 'mark-making',
+    source_feature_key: 'species_asi:mark_of_making_flexible_bonus',
   }])
 })
 

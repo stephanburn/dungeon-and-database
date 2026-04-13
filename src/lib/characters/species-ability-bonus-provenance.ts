@@ -59,6 +59,39 @@ export function getSpeciesAbilityBonusChoiceConfig(species: Species | null): Spe
     }
   }
 
+  if (species.name === 'Human (Mark of Handling)' && species.source === 'ERftLW') {
+    return {
+      count: 1,
+      bonus: 1,
+      allowedAbilities: ALL_ABILITIES.filter((ability) => ability !== 'wis'),
+      sourceCategory: 'species_choice',
+      sourceEntityId: species.id,
+      sourceFeatureKey: 'species_asi:mark_of_handling_flexible_bonus',
+    }
+  }
+
+  if (species.name === 'Human (Mark of Making)' && species.source === 'ERftLW') {
+    return {
+      count: 1,
+      bonus: 1,
+      allowedAbilities: ALL_ABILITIES.filter((ability) => ability !== 'int'),
+      sourceCategory: 'species_choice',
+      sourceEntityId: species.id,
+      sourceFeatureKey: 'species_asi:mark_of_making_flexible_bonus',
+    }
+  }
+
+  if (species.name === 'Human (Mark of Passage)' && species.source === 'ERftLW') {
+    return {
+      count: 1,
+      bonus: 1,
+      allowedAbilities: ALL_ABILITIES.filter((ability) => ability !== 'dex'),
+      sourceCategory: 'species_choice',
+      sourceEntityId: species.id,
+      sourceFeatureKey: 'species_asi:mark_of_passage_flexible_bonus',
+    }
+  }
+
   return null
 }
 
