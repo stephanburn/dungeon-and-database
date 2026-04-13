@@ -202,12 +202,13 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
       class_id: firstClassId,
       class_level: String(firstClassLevel),
     })
+    if (speciesId) params.set('species_id', speciesId)
     for (const subclassId of firstClassSubclassIds) params.append('subclass_id', subclassId)
 
     fetch(`/api/content/spells?${params.toString()}`)
       .then((response) => response.json())
       .then((data: SpellOption[]) => setSpellOptions(Array.isArray(data) ? data : []))
-  }, [campaignId, levels, classDetailMap])
+  }, [campaignId, levels, classDetailMap, speciesId])
 
   const currentStep = STEPS[stepIndex]
   const selectedSpecies = speciesList.find((species) => species.id === speciesId) ?? null
@@ -781,6 +782,7 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
                   <SpellsCard
                     classId={firstClassId}
                     campaignId={campaignId}
+                    speciesId={speciesId || null}
                     subclassIds={firstClassSubclassIds}
                     classLevel={firstClassLevel}
                     derivedSpellcasting={derived?.spellcasting}

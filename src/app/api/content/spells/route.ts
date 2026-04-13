@@ -13,6 +13,7 @@ export async function GET(request: NextRequest) {
   const campaignId = searchParams.get('campaign_id')
   const classId = searchParams.get('class_id')
   const subclassIds = searchParams.getAll('subclass_id').filter(Boolean)
+  const speciesId = searchParams.get('species_id')
   const classLevel = parseInt(searchParams.get('class_level') ?? '0', 10)
   const levelParam = searchParams.get('level')
 
@@ -27,7 +28,17 @@ export async function GET(request: NextRequest) {
 
   if (activeBonusRows.error) return jsonError(activeBonusRows.error.message, 500)
 
+  const speciesBonusRows = speciesId
+    ? await supabase
+        .from('species_bonus_spells')
+        .select('*')
+        .eq('species_id', speciesId)
+    : { data: [], error: null }
+
+  if (speciesBonusRows.error) return jsonError(speciesBonusRows.error.message, 500)
+
   const grantedSpellIds = new Set((activeBonusRows.data ?? []).map((row) => row.spell_id))
+  const speciesBonusSpellIds = new Set((speciesBonusRows.data ?? []).map((row) => row.spell_id))
   const baseQuery = supabase.from('spells').select('*').order('level').order('name')
   const { data: allSpells, error } = await baseQuery
   if (error) return jsonError(error.message, 500)
@@ -42,12 +53,14 @@ export async function GET(request: NextRequest) {
   const filtered = (allSpells ?? []).filter((spell) => {
     const baseAllowed = !classId || spell.classes.includes(classId)
     const bonusAllowed = grantedSpellIds.has(spell.id)
-    const sourceAllowed = !allowedSources || allowedSources.has(spell.source) || bonusAllowed
+    const speciesAllowed = speciesBonusSpellIds.has(spell.id)
+    const sourceAllowed = !allowedSources || allowedSources.has(spell.source) || bonusAllowed || speciesAllowed
     const levelAllowed = levelParam === null || spell.level === parseInt(levelParam, 10)
-    return sourceAllowed && levelAllowed && (baseAllowed || bonusAllowed)
+    return sourceAllowed && levelAllowed && (baseAllowed || bonusAllowed || speciesAllowed)
   }).map((spell) => ({
     ...spell,
     granted_by_subclasses: (bonusRowsBySpellId.get(spell.id) ?? []).map((row) => row.subclass_id),
+    expanded_by_species: speciesBonusSpellIds.has(spell.id) ? [speciesId].filter((value): value is string => Boolean(value)) : [],
     counts_against_selection_limit: !(bonusRowsBySpellId.get(spell.id) ?? []).some(
       (row) => !row.counts_against_selection_limit
     ),

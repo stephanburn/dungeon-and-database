@@ -128,6 +128,7 @@ export interface CharacterBuildContext {
   }
   grantedSpellIds: string[]
   freePreparedSpellIds: string[]
+  speciesExpandedSpellIds: string[]
   multiclassSpellSlotsByCasterLevel: Record<number, number[]>
 }
 

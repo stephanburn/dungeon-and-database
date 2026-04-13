@@ -198,6 +198,12 @@ export function CharacterSheet({
     .filter((level) => level.class_id === firstClassId && level.subclass_id)
     .map((level) => level.subclass_id as string)
   const selectedClass = classList.find((c) => c.id === firstClassId) ?? null
+  const selectedSpecies =
+    speciesList.find((s) => s.id === speciesId) ??
+    (initial.species?.id === speciesId ? initial.species : null)
+  const selectedBackground =
+    backgroundList.find((b) => b.id === backgroundId) ??
+    (initial.background?.id === backgroundId ? initial.background : null)
 
   // Load content options filtered by campaign allowlist
   useEffect(() => {
@@ -249,12 +255,13 @@ export function CharacterSheet({
       class_id: firstClassId,
       class_level: String(firstClassLevel),
     })
+    if (selectedSpecies?.id) params.set('species_id', selectedSpecies.id)
     for (const subclassId of firstClassSubclassIds) params.append('subclass_id', subclassId)
 
     fetch(`/api/content/spells?${params.toString()}`)
       .then((response) => response.json())
       .then((data: SpellOption[]) => setSpellOptions(Array.isArray(data) ? data : []))
-  }, [campaignId, firstClassId, firstClassLevel, firstClassSubclassIds, selectedClass])
+  }, [campaignId, firstClassId, firstClassLevel, firstClassSubclassIds, selectedClass, selectedSpecies?.id])
 
   function handleStatChange(stat: string, value: number) {
     setStats((prev) => ({ ...prev, [stat]: value }))
@@ -357,12 +364,6 @@ export function CharacterSheet({
   const statusInfo = STATUS_LABELS[status] ?? STATUS_LABELS.draft
 
   // Racial bonuses from the currently selected species
-  const selectedSpecies =
-    speciesList.find((s) => s.id === speciesId) ??
-    (initial.species?.id === speciesId ? initial.species : null)
-  const selectedBackground =
-    backgroundList.find((b) => b.id === backgroundId) ??
-    (initial.background?.id === backgroundId ? initial.background : null)
   const racialBonuses: Partial<Record<string, number>> = {}
   if (selectedSpecies?.ability_score_bonuses) {
     ;(selectedSpecies.ability_score_bonuses as AbilityScoreBonus[]).forEach(({ ability, bonus }) => {
@@ -925,6 +926,7 @@ export function CharacterSheet({
           <SpellsCard
             classId={firstClassId}
             campaignId={campaignId}
+            speciesId={selectedSpecies?.id ?? null}
             subclassIds={firstClassSubclassIds}
             classLevel={firstClassLevel}
             derivedSpellcasting={derivedCharacter?.spellcasting}

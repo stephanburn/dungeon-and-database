@@ -99,6 +99,7 @@ function createContext(overrides: Partial<CharacterBuildContext> = {}): Characte
     },
     grantedSpellIds: [],
     freePreparedSpellIds: [],
+    speciesExpandedSpellIds: [],
     multiclassSpellSlotsByCasterLevel: {
       1: [2],
       2: [3],
@@ -777,6 +778,38 @@ test('subclass bonus spells stay legal and do not consume artificer preparation 
 
   assert.equal(result.checks.find((check) => check.key === 'spell_legality')?.passed, true)
   assert.equal(result.checks.find((check) => check.key === 'spell_selection_count')?.passed, true)
+})
+
+test('species spell-list expansion makes off-list class spells legal and counts them against the owning class cap', () => {
+  const result = runLegalityChecks(createContext({
+    allowedSources: ['SRD', 'EE'],
+    allSourceRuleSets: { SRD: '2014', EE: '2014' },
+    selectedSpells: [
+      {
+        id: 'detect-poison-and-disease',
+        name: 'Detect Poison and Disease',
+        level: 1,
+        classes: [],
+        source: 'EE',
+        grantedBySubclassIds: [],
+        owningClassId: 'wizard',
+        acquisitionMode: 'known',
+        sourceFeatureKey: null,
+        countsAgainstSelectionLimit: true,
+      },
+    ],
+    sourceCollections: {
+      classSources: ['SRD'],
+      subclassSources: ['SRD'],
+      spellSources: ['EE'],
+      featSources: [],
+    },
+    speciesExpandedSpellIds: ['detect-poison-and-disease'],
+  }))
+
+  assert.equal(result.checks.find((check) => check.key === 'spell_legality')?.passed, true)
+  assert.equal(result.checks.find((check) => check.key === 'spell_selection_count')?.passed, true)
+  assert.deepEqual(result.derived?.spellcasting.sources[0]?.selectedSpellCountsByLevel, { 1: 1 })
 })
 
 test('deriveCharacter exposes per-source spellcasting summaries for multiclass casters', () => {

@@ -48,6 +48,7 @@ export interface ClassDetail extends Class {
 
 export type SpellOption = Spell & {
   granted_by_subclasses?: string[]
+  expanded_by_species?: string[]
   counts_against_selection_limit?: boolean
 }
 
@@ -269,6 +270,9 @@ export function buildLocalCharacterContext({
         return freeFromOptions || freeFromSelection ? spellId : null
       })
       .filter((value): value is string => Boolean(value)),
+    speciesExpandedSpellIds: spellOptions
+      .filter((spell) => selectedSpecies?.id != null && (spell.expanded_by_species ?? []).includes(selectedSpecies.id))
+      .map((spell) => spell.id),
     multiclassSpellSlotsByCasterLevel: {},
   }
 }

@@ -255,12 +255,13 @@ export function LevelUpWizard({
       campaign_id: campaign.id,
       class_level: String(nextTargetLevel),
     })
+    if (character.species?.id) params.set('species_id', character.species.id)
     if (selectedSubclassId) params.append('subclass_id', selectedSubclassId)
 
     fetch(`/api/content/spells?${params.toString()}`)
       .then((response) => response.json())
       .then((data: SpellOption[]) => setSpellOptions(Array.isArray(data) ? data : []))
-  }, [campaign.id, nextTargetLevel, selectedClassDetail, selectedClassId, selectedSubclassId])
+  }, [campaign.id, character.species?.id, nextTargetLevel, selectedClassDetail, selectedClassId, selectedSubclassId])
 
   useEffect(() => {
     const existingSubclassId = baseLevels.find((level) => level.class_id === selectedClassId)?.subclass_id ?? null
@@ -893,6 +894,7 @@ export function LevelUpWizard({
               <SpellsCard
                 classId={selectedClassId}
                 campaignId={campaign.id}
+                speciesId={character.species?.id ?? null}
                 subclassIds={selectedSubclassId ? [selectedSubclassId] : []}
                 classLevel={nextTargetLevel}
                 derivedSpellcasting={nextDerived?.spellcasting}

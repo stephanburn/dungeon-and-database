@@ -222,6 +222,13 @@ export type SubclassBonusSpell = {
   counts_against_selection_limit: boolean
 }
 
+export type SpeciesBonusSpell = {
+  id: string
+  species_id: string
+  spell_id: string
+  created_at: string
+}
+
 export type Spell = {
   id: string
   name: string
@@ -424,6 +431,7 @@ export type Database = {
       subclasses: { Row: Subclass; Insert: Omit<Subclass, 'id'>; Update: Partial<Omit<Subclass, 'id'>>; Relationships: R }
       subclass_features: { Row: SubclassFeature; Insert: Omit<SubclassFeature, 'id'>; Update: Partial<Omit<SubclassFeature, 'id'>>; Relationships: R }
       subclass_bonus_spells: { Row: SubclassBonusSpell; Insert: Omit<SubclassBonusSpell, 'id'>; Update: Partial<Omit<SubclassBonusSpell, 'id'>>; Relationships: R }
+      species_bonus_spells: { Row: SpeciesBonusSpell; Insert: Omit<SpeciesBonusSpell, 'id' | 'created_at'>; Update: Partial<Omit<SpeciesBonusSpell, 'id' | 'created_at'>>; Relationships: R }
       spells: { Row: Spell; Insert: Omit<Spell, 'id'>; Update: Partial<Omit<Spell, 'id'>>; Relationships: R }
       feats: { Row: Feat; Insert: Omit<Feat, 'id'>; Update: Partial<Omit<Feat, 'id'>>; Relationships: R }
       backgrounds: { Row: Background; Insert: Omit<Background, 'id'>; Update: Partial<Omit<Background, 'id'>>; Relationships: R }

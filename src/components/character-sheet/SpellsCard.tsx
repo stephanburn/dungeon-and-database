@@ -16,6 +16,7 @@ const LEVEL_LABELS: Record<number, string> = {
 interface SpellsCardProps {
   classId: string
   campaignId: string
+  speciesId?: string | null
   subclassIds?: string[]
   classLevel?: number
   derivedSpellcasting?: Pick<
@@ -40,6 +41,7 @@ type SpellOption = Spell & {
 export function SpellsCard({
   classId,
   campaignId,
+  speciesId = null,
   subclassIds = [],
   classLevel = 0,
   derivedSpellcasting,
@@ -62,12 +64,13 @@ export function SpellsCard({
       campaign_id: campaignId,
       class_level: String(classLevel),
     })
+    if (speciesId) params.set('species_id', speciesId)
     for (const subclassId of subclassIds) params.append('subclass_id', subclassId)
 
     fetch(`/api/content/spells?${params.toString()}`)
       .then(r => r.json())
       .then(data => setSpells(Array.isArray(data) ? data : []))
-  }, [classId, campaignId, classLevel, subclassIds])
+  }, [classId, campaignId, classLevel, speciesId, subclassIds])
 
   const visibleSpells = spells.filter((spell) => spell.level === 0 || maxSpellLevel === undefined || spell.level <= maxSpellLevel)
   const filtered = search.trim()

@@ -15,6 +15,7 @@ import type {
   Species,
   Spell,
   SpellSlotTable,
+  SpeciesBonusSpell,
   Subclass,
   SubclassBonusSpell,
   SubclassFeature,
@@ -123,6 +124,7 @@ export async function buildCharacterBuildContext(
     spellSlotsResult,
     multiclassSlotsResult,
     subclassBonusSpellsResult,
+    speciesBonusSpellsResult,
     spellsResult,
     featsResult,
   ] = await Promise.all([
@@ -147,6 +149,9 @@ export async function buildCharacterBuildContext(
     supabase.from('multiclass_spell_slot_table').select('*'),
     subclassIds.length > 0
       ? supabase.from('subclass_bonus_spells').select('*').in('subclass_id', subclassIds)
+      : Promise.resolve({ data: [] }),
+    species?.id
+      ? supabase.from('species_bonus_spells').select('*').eq('species_id', species.id)
       : Promise.resolve({ data: [] }),
     spellIds.length > 0
       ? supabase.from('spells').select('*').in('id', Array.from(new Set(spellIds)))
@@ -186,6 +191,7 @@ export async function buildCharacterBuildContext(
     const matchingClass = buildClassesForLevelLookup(levels, row.subclass_id)
     return matchingClass !== null && matchingClass.level >= row.required_class_level
   })
+  const activeSpeciesBonusSpells = (speciesBonusSpellsResult.data ?? []) as SpeciesBonusSpell[]
   const bonusSpellRowsBySpellId = new Map<string, SubclassBonusSpell[]>()
   for (const row of activeSubclassBonusSpells) {
     const existing = bonusSpellRowsBySpellId.get(row.spell_id) ?? []
@@ -393,6 +399,7 @@ export async function buildCharacterBuildContext(
           .map((row) => row.spell_id),
       ]
     )),
+    speciesExpandedSpellIds: activeSpeciesBonusSpells.map((row) => row.spell_id),
     multiclassSpellSlotsByCasterLevel,
   }
 }

@@ -74,6 +74,7 @@ function createContext(overrides: Partial<CharacterBuildContext> = {}): Characte
     },
     grantedSpellIds: [],
     freePreparedSpellIds: [],
+    speciesExpandedSpellIds: [],
     multiclassSpellSlotsByCasterLevel: {
       1: [2],
       2: [3],
@@ -135,6 +136,7 @@ test('feat-granted off-list spells stay legal and out of class selection caps', 
     }],
     grantedSpellIds: ['chaos-bolt'],
     freePreparedSpellIds: ['chaos-bolt'],
+    speciesExpandedSpellIds: ['chaos-bolt'],
     sourceCollections: {
       classSources: ['SRD'],
       subclassSources: [],

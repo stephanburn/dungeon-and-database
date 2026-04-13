@@ -414,9 +414,19 @@ function checkFeatSlots(input: LegalityInput, derived: DerivedCharacter): Legali
 function checkSpellLegality(input: LegalityInput, derived: DerivedCharacter): LegalityCheck {
   const availableClassIds = new Set(input.classes.map((cls) => cls.classId))
   const grantedSpellIds = new Set(input.grantedSpellIds)
+  const speciesExpandedSpellIds = new Set(input.speciesExpandedSpellIds)
   const invalid = input.selectedSpells.filter((spell) => {
     const matchesClass =
+      (
+        spell.owningClassId !== null &&
+        availableClassIds.has(spell.owningClassId) &&
+        (
+          spell.classes.includes(spell.owningClassId) ||
+          speciesExpandedSpellIds.has(spell.id)
+        )
+      ) ||
       spell.classes.some((classId) => availableClassIds.has(classId)) ||
+      speciesExpandedSpellIds.has(spell.id) ||
       grantedSpellIds.has(spell.id) ||
       spell.grantedBySubclassIds.some((subclassId) =>
         input.classes.some((cls) => cls.subclass?.id === subclassId)
@@ -439,8 +449,12 @@ function checkSpellSelectionCount(input: LegalityInput, derived: DerivedCharacte
   const sourceViolations = derived.spellcasting.sources.flatMap((source) => {
     const sourceSelections = input.selectedSpells.filter((spell) => {
       if (!spell.countsAgainstSelectionLimit) return false
+      if (spell.owningClassId === source.classId) return true
       return (
-        spell.classes.includes(source.classId) ||
+        (
+          spell.owningClassId == null &&
+          spell.classes.includes(source.classId)
+        ) ||
         spell.grantedBySubclassIds.includes(
           input.classes.find((cls) => cls.classId === source.classId)?.subclass?.id ?? ''
         )
