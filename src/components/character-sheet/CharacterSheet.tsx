@@ -403,7 +403,6 @@ export function CharacterSheet({
     }),
     [
       activeFeatSpellFeats,
-      classList,
       derivedCharacter,
       featSpellChoices,
       featSpellOptions,

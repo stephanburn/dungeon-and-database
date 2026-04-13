@@ -438,6 +438,7 @@ export function LevelUpWizard({
     targetLevels,
     toolChoices,
     currentContext,
+    initialAbilityBonusChoices,
   ])
 
   const nextActiveFeatSpellFeats = useMemo(

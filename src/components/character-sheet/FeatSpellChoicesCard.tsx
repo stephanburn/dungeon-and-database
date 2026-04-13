@@ -76,7 +76,7 @@ export function FeatSpellChoicesCard({
       })
     ).then((entries) => {
       if (cancelled) return
-      const next = Object.fromEntries(entries)
+      const next: Record<string, SpellOption[]> = Object.fromEntries(entries)
       setOptionsByFeatureKey(next)
 
       const mergedById = new Map<string, SpellOption>()
