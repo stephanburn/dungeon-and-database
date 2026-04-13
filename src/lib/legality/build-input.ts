@@ -7,6 +7,7 @@ import type {
   Database,
   CharacterAbilityBonusChoice,
   CharacterFeatChoice,
+  CharacterFeatureOptionChoice,
   CharacterLanguageChoice,
   CharacterSpellSelection,
   CharacterToolChoice,
@@ -71,6 +72,7 @@ export async function buildCharacterBuildContext(
     abilityBonusChoicesResult,
     languageChoicesResult,
     toolChoicesResult,
+    featureOptionChoicesResult,
     speciesResult,
     backgroundResult,
     spellSelectionsResult,
@@ -85,6 +87,7 @@ export async function buildCharacterBuildContext(
     supabase.from('character_ability_bonus_choices').select('*').eq('character_id', characterId),
     supabase.from('character_language_choices').select('*').eq('character_id', characterId),
     supabase.from('character_tool_choices').select('*').eq('character_id', characterId),
+    supabase.from('character_feature_option_choices').select('*').eq('character_id', characterId).order('choice_order'),
     character.species_id
       ? supabase.from('species').select('*').eq('id', character.species_id).single()
       : Promise.resolve({ data: null }),
@@ -382,6 +385,16 @@ export async function buildCharacterBuildContext(
     classes: buildClasses,
     selectedSpells,
     selectedFeats,
+    selectedFeatureOptionChoices: ((featureOptionChoicesResult.data ?? []) as CharacterFeatureOptionChoice[]).map((row) => ({
+      optionGroupKey: row.option_group_key,
+      optionKey: row.option_key,
+      selectedValue: row.selected_value,
+      choiceOrder: row.choice_order,
+      characterLevelId: row.character_level_id,
+      sourceCategory: row.source_category,
+      sourceEntityId: row.source_entity_id,
+      sourceFeatureKey: row.source_feature_key,
+    })),
     sourceCollections,
     grantedSpellIds: Array.from(new Set([
       ...activeSubclassBonusSpells.map((row) => row.spell_id),

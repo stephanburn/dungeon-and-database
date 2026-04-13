@@ -120,6 +120,16 @@ export interface CharacterBuildContext {
   classes: BuildClassSummary[]
   selectedSpells: BuildSpellSummary[]
   selectedFeats: BuildFeatSummary[]
+  selectedFeatureOptionChoices: Array<{
+    optionGroupKey: string
+    optionKey: string
+    selectedValue: Record<string, unknown>
+    choiceOrder: number
+    characterLevelId: string | null
+    sourceCategory: string
+    sourceEntityId: string | null
+    sourceFeatureKey: string | null
+  }>
   sourceCollections: {
     classSources: string[]
     subclassSources: string[]

@@ -235,6 +235,7 @@ export function buildLocalCharacterContext({
         source: feat.source,
         prerequisites: feat.prerequisites,
       })),
+    selectedFeatureOptionChoices: [],
     sourceCollections: {
       classSources: classes.map((cls) => cls.source),
       subclassSources: classes

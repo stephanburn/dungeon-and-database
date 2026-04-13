@@ -397,6 +397,20 @@ export type CharacterAbilityBonusChoice = {
   created_at: string
 }
 
+export type CharacterFeatureOptionChoice = {
+  id: string
+  character_id: string
+  character_level_id: string | null
+  option_group_key: string
+  option_key: string
+  selected_value: Record<string, unknown>
+  choice_order: number
+  source_category: string
+  source_entity_id: string | null
+  source_feature_key: string | null
+  created_at: string
+}
+
 export type AuditLog = {
   id: string
   actor_user_id: string | null
@@ -445,6 +459,7 @@ export type Database = {
       character_language_choices: { Row: CharacterLanguageChoice; Insert: Omit<CharacterLanguageChoice, 'created_at'>; Update: Partial<Omit<CharacterLanguageChoice, 'created_at'>>; Relationships: R }
       character_tool_choices: { Row: CharacterToolChoice; Insert: Omit<CharacterToolChoice, 'created_at'>; Update: Partial<Omit<CharacterToolChoice, 'created_at'>>; Relationships: R }
       character_ability_bonus_choices: { Row: CharacterAbilityBonusChoice; Insert: Omit<CharacterAbilityBonusChoice, 'id' | 'created_at'>; Update: Partial<Omit<CharacterAbilityBonusChoice, 'id' | 'created_at'>>; Relationships: R }
+      character_feature_option_choices: { Row: CharacterFeatureOptionChoice; Insert: Omit<CharacterFeatureOptionChoice, 'id' | 'created_at'>; Update: Partial<Omit<CharacterFeatureOptionChoice, 'id' | 'created_at'>>; Relationships: R }
       character_skill_proficiencies: { Row: CharacterSkillProficiency; Insert: CharacterSkillProficiency; Update: Partial<CharacterSkillProficiency>; Relationships: R }
       audit_logs: { Row: AuditLog; Insert: Omit<AuditLog, 'id' | 'created_at'> & { details?: Record<string, unknown>; succeeded?: boolean }; Update: Partial<Omit<AuditLog, 'id' | 'created_at'>>; Relationships: R }
     }

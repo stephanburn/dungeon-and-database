@@ -4,6 +4,7 @@ import type {
   CharacterAbilityBonusChoice,
   Character,
   CharacterFeatChoice,
+  CharacterFeatureOptionChoice,
   CharacterLanguageChoice,
   CharacterLevel,
   CharacterSpellSelection,
@@ -33,6 +34,7 @@ export interface LoadedCharacterState {
   initialSpellChoices: string[]
   initialFeatSpellChoices: Record<string, string>
   initialFeatChoices: string[]
+  initialFeatureOptionChoices: CharacterFeatureOptionChoice[]
   legality: LegalityResult | null
 }
 
@@ -48,7 +50,7 @@ export async function loadCharacterState(
 
   if (!character) return null
 
-  const [speciesResult, backgroundResult, levelsResult, skillsResult, abilityBonusChoicesResult, languageChoicesResult, toolChoicesResult, typedSpellSelectionsResult, typedFeatChoicesResult, legalityInput] = await Promise.all([
+  const [speciesResult, backgroundResult, levelsResult, skillsResult, abilityBonusChoicesResult, languageChoicesResult, toolChoicesResult, typedSpellSelectionsResult, typedFeatChoicesResult, featureOptionChoicesResult, legalityInput] = await Promise.all([
     character.species_id
       ? supabase.from('species').select('*').eq('id', character.species_id).single()
       : Promise.resolve({ data: null }),
@@ -62,6 +64,7 @@ export async function loadCharacterState(
     supabase.from('character_tool_choices').select('*').eq('character_id', character.id),
     supabase.from('character_spell_selections').select('*').eq('character_id', character.id),
     supabase.from('character_feat_choices').select('*').eq('character_id', character.id),
+    supabase.from('character_feature_option_choices').select('*').eq('character_id', character.id).order('choice_order'),
     buildLegalityInput(supabase, character.id),
   ])
 
@@ -97,6 +100,7 @@ export async function loadCharacterState(
     initialSpellChoices: typedSpellChoices,
     initialFeatSpellChoices: extractFeatSpellChoiceMap(typedSpellSelections),
     initialFeatChoices: typedFeatChoices,
+    initialFeatureOptionChoices: (featureOptionChoicesResult.data ?? []) as CharacterFeatureOptionChoice[],
     legality: legalityInput ? runLegalityChecks(legalityInput) : null,
   }
 }

@@ -63,6 +63,18 @@ export type AbilityBonusChoiceInput =
       source_feature_key?: string | null
     }
 
+export type FeatureOptionChoiceInput =
+  | {
+      option_group_key: string
+      option_key: string
+      selected_value?: Record<string, unknown>
+      choice_order?: number
+      character_level_id?: string | null
+      source_category?: string
+      source_entity_id?: string | null
+      source_feature_key?: string | null
+    }
+
 function normalizeSpellChoice(choice: SpellChoiceInput) {
   if (typeof choice === 'string') {
     return {
@@ -173,6 +185,19 @@ function normalizeAbilityBonusChoice(choice: AbilityBonusChoiceInput) {
     bonus: choice.bonus ?? 1,
     character_level_id: choice.character_level_id ?? null,
     source_category: choice.source_category ?? 'manual',
+    source_entity_id: choice.source_entity_id ?? null,
+    source_feature_key: choice.source_feature_key ?? null,
+  }
+}
+
+function normalizeFeatureOptionChoice(choice: FeatureOptionChoiceInput) {
+  return {
+    option_group_key: choice.option_group_key,
+    option_key: choice.option_key,
+    selected_value: choice.selected_value ?? {},
+    choice_order: choice.choice_order ?? 0,
+    character_level_id: choice.character_level_id ?? null,
+    source_category: choice.source_category ?? 'feature',
     source_entity_id: choice.source_entity_id ?? null,
     source_feature_key: choice.source_feature_key ?? null,
   }
@@ -346,6 +371,32 @@ export async function replaceCharacterAbilityBonusChoices(
   const normalizedChoices = bonusChoices.map(normalizeAbilityBonusChoice)
 
   const { error } = await supabase.from('character_ability_bonus_choices').insert(
+    normalizedChoices.map((choice) => ({
+      character_id: characterId,
+      ...choice,
+    }))
+  )
+  return error
+}
+
+export async function replaceCharacterFeatureOptionChoices(
+  supabase: SupabaseClient<Database>,
+  characterId: string,
+  featureOptionChoices: FeatureOptionChoiceInput[]
+) {
+  const { error: deleteFeatureChoicesError } = await supabase
+    .from('character_feature_option_choices')
+    .delete()
+    .eq('character_id', characterId)
+  if (deleteFeatureChoicesError) return deleteFeatureChoicesError
+
+  const normalizedChoices = featureOptionChoices
+    .filter((choice) => choice.option_group_key.trim().length > 0 && choice.option_key.trim().length > 0)
+    .map(normalizeFeatureOptionChoice)
+
+  if (normalizedChoices.length === 0) return null
+
+  const { error } = await supabase.from('character_feature_option_choices').insert(
     normalizedChoices.map((choice) => ({
       character_id: characterId,
       ...choice,

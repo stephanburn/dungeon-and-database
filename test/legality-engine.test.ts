@@ -91,6 +91,7 @@ function createContext(overrides: Partial<CharacterBuildContext> = {}): Characte
       },
     ],
     selectedFeats: [],
+    selectedFeatureOptionChoices: [],
     sourceCollections: {
       classSources: ['SRD'],
       subclassSources: ['SRD'],

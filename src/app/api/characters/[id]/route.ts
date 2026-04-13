@@ -7,12 +7,14 @@ import { loadCharacterState } from '@/lib/characters/load-character'
 import {
   replaceCharacterAbilityBonusChoices,
   replaceCharacterFeatChoices,
+  replaceCharacterFeatureOptionChoices,
   replaceCharacterLanguageChoices,
   replaceCharacterSkillProficiencies,
   replaceCharacterSpellSelections,
   replaceCharacterToolChoices,
   type AbilityBonusChoiceInput,
   type FeatChoiceInput,
+  type FeatureOptionChoiceInput,
   type LanguageChoiceInput,
   type SkillProficiencyInput,
   type SpellChoiceInput,
@@ -87,6 +89,17 @@ const abilityBonusChoiceSchema = z.object({
   source_feature_key: z.string().nullable().optional(),
 })
 
+const featureOptionChoiceSchema = z.object({
+  option_group_key: z.string().min(1),
+  option_key: z.string().min(1),
+  selected_value: z.record(z.string(), z.unknown()).optional(),
+  choice_order: z.number().int().min(0).optional(),
+  character_level_id: z.string().uuid().nullable().optional(),
+  source_category: z.string().min(1).optional(),
+  source_entity_id: z.string().uuid().nullable().optional(),
+  source_feature_key: z.string().nullable().optional(),
+})
+
 const updateCharacterSchema = z.object({
   name: z.string().min(1).max(100).optional(),
   species_id: z.string().uuid().nullable().optional(),
@@ -108,6 +121,7 @@ const updateCharacterSchema = z.object({
   ability_bonus_choices: z.array(abilityBonusChoiceSchema).optional(),
   language_choices: z.array(languageChoiceSchema).optional(),
   tool_choices: z.array(toolChoiceSchema).optional(),
+  feature_option_choices: z.array(featureOptionChoiceSchema).optional(),
   // Spell choices: full replacement of the character's typed spell selections
   spell_choices: z.array(spellChoiceSchema).optional(),
   // Feat choices: full replacement of typed feat choices (empty string = ASI taken instead)
@@ -146,6 +160,7 @@ export async function GET(
     spell_choices: loadedState.initialSpellChoices,
     feat_spell_choices: loadedState.initialFeatSpellChoices,
     feat_choices: loadedState.initialFeatChoices,
+    feature_option_choices: loadedState.initialFeatureOptionChoices,
     legality: loadedState.legality,
     derived: loadedState.legality?.derived ?? null,
   })
@@ -177,7 +192,20 @@ export async function PUT(
   const parsed = updateCharacterSchema.safeParse(body)
   if (!parsed.success) return jsonError(parsed.error.message, 400)
 
-  const { levels, stat_rolls, skill_proficiencies, ability_bonus_choices, language_choices, tool_choices, spell_choices, feat_choices, character_type, dm_notes, ...characterFields } = parsed.data
+  const {
+    levels,
+    stat_rolls,
+    skill_proficiencies,
+    ability_bonus_choices,
+    language_choices,
+    tool_choices,
+    feature_option_choices,
+    spell_choices,
+    feat_choices,
+    character_type,
+    dm_notes,
+    ...characterFields
+  } = parsed.data
 
   // DM-only fields
   if (hasDmAccess(profile.role)) {
@@ -273,6 +301,15 @@ export async function PUT(
       supabase,
       params.id,
       tool_choices as ToolChoiceInput[]
+    )
+    if (error) return jsonError(error.message, 500)
+  }
+
+  if (feature_option_choices !== undefined) {
+    const error = await replaceCharacterFeatureOptionChoices(
+      supabase,
+      params.id,
+      feature_option_choices as FeatureOptionChoiceInput[]
     )
     if (error) return jsonError(error.message, 500)
   }
