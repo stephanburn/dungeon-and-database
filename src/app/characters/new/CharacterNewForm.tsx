@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -27,22 +27,35 @@ import type {
 } from '@/lib/types/database'
 import type { LegalityResult } from '@/lib/legality/engine'
 import { StatBlock } from '@/components/character-sheet/StatBlock'
+import { LanguagesToolsCard } from '@/components/character-sheet/LanguagesToolsCard'
+import { SpeciesAbilityBonusCard } from '@/components/character-sheet/SpeciesAbilityBonusCard'
 import { SkillsCard } from '@/components/character-sheet/SkillsCard'
 import { SpellsCard } from '@/components/character-sheet/SpellsCard'
 import { FeatsCard } from '@/components/character-sheet/FeatsCard'
+import { FeatSpellChoicesCard } from '@/components/character-sheet/FeatSpellChoicesCard'
 import { LegalityBadge, LegalitySummaryBadge } from '@/components/character-sheet/LegalityBadge'
 import {
-  deriveCharacterProgression,
-} from '@/lib/characters/build-context'
-import {
+  buildCombinedSpellSelections,
   buildLocalCharacterContext,
+  buildTypedAbilityBonusChoices,
+  buildTypedFeatChoices,
+  buildTypedLanguageChoices,
+  buildTypedSkillProficiencies,
+  buildTypedToolChoices,
   buildWizardHitDieRows,
   calculateCreationHpMax,
   ClassDetail,
+  deriveLocalCharacter,
   SpellOption,
   summarizeWizardLegality,
   type WizardLevel,
 } from '@/lib/characters/wizard-helpers'
+import {
+  buildSpeciesAbilityBonusMap,
+  getSpeciesAbilityChoiceLimit,
+  type AbilityKey as SpeciesChoiceAbilityKey,
+} from '@/lib/characters/species-ability-bonus-provenance'
+import { getFeatSpellChoiceDefinitions } from '@/lib/characters/feat-spell-options'
 
 interface CharacterNewFormProps {
   isDm: boolean
@@ -98,8 +111,13 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
   const [levels, setLevels] = useState<WizardLevel[]>([])
   const [stats, setStats] = useState({ str: 15, dex: 14, con: 13, int: 12, wis: 10, cha: 8 })
   const [skillProficiencies, setSkillProficiencies] = useState<string[]>([])
+  const [abilityBonusChoices, setAbilityBonusChoices] = useState<SpeciesChoiceAbilityKey[]>([])
+  const [languageChoices, setLanguageChoices] = useState<string[]>([])
+  const [toolChoices, setToolChoices] = useState<string[]>([])
   const [spellChoices, setSpellChoices] = useState<string[]>([])
   const [featChoices, setFeatChoices] = useState<string[]>([])
+  const [featSpellChoices, setFeatSpellChoices] = useState<Record<string, string>>({})
+  const [featSpellOptions, setFeatSpellOptions] = useState<SpellOption[]>([])
 
   useEffect(() => {
     fetch('/api/campaigns')
@@ -203,29 +221,87 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
   const backgroundFeat = selectedBackground?.background_feat_id
     ? featList.find((feat) => feat.id === selectedBackground.background_feat_id) ?? null
     : null
+  const activeFeatSpellFeats = useMemo(
+    () => [
+      ...featChoices
+        .map((featId) => featList.find((feat) => feat.id === featId))
+        .filter((feat): feat is Feat => Boolean(feat)),
+      ...(backgroundFeat ? [backgroundFeat] : []),
+    ],
+    [backgroundFeat, featChoices, featList]
+  )
+  const featSpellDefinitions = useMemo(
+    () => getFeatSpellChoiceDefinitions(activeFeatSpellFeats),
+    [activeFeatSpellFeats]
+  )
+  const combinedSpellSelections = useMemo(
+    () => buildCombinedSpellSelections({
+      classSpellChoices: spellChoices,
+      spellOptions: [...spellOptions, ...featSpellOptions],
+      owningClassId: firstClassId || null,
+      activeSubclassIds: firstClassSubclassIds,
+      derived: null,
+      featSpellChoices,
+      featList: activeFeatSpellFeats,
+    }),
+    [
+      activeFeatSpellFeats,
+      featSpellChoices,
+      featSpellOptions,
+      firstClassId,
+      firstClassSubclassIds,
+      spellChoices,
+      spellOptions,
+    ]
+  )
 
   const campaign = campaigns.find((entry) => entry.id === campaignId) ?? null
+  const creationHitDieRows = buildWizardHitDieRows(levels, classDetailMap)
+  const creationHpMax = calculateCreationHpMax(creationHitDieRows, stats.con)
   const localContext = buildLocalCharacterContext({
     campaign,
     allowedSources: [],
     allSourceRuleSets: {},
     statMethod,
+    persistedHpMax: creationHpMax,
     stats,
     selectedSpecies,
     selectedBackground,
     levels,
     classDetailMap,
     subclassMap,
-    spellOptions,
+    spellOptions: [...spellOptions, ...featSpellOptions],
     spellChoices,
+    spellSelections: combinedSpellSelections,
     featList,
     featChoices,
     skillProficiencies,
+    abilityBonusChoices,
+    languageChoices,
+    toolChoices,
   })
-  const derived = localContext ? deriveCharacterProgression(localContext) : null
-  const creationHitDieRows = buildWizardHitDieRows(levels, classDetailMap)
-  const creationHpMax = calculateCreationHpMax(creationHitDieRows, stats.con)
+  const derived = deriveLocalCharacter(localContext)
+  const persistedSpellSelections = buildCombinedSpellSelections({
+    classSpellChoices: spellChoices,
+    spellOptions: [...spellOptions, ...featSpellOptions],
+    owningClassId: firstClassId || null,
+    activeSubclassIds: firstClassSubclassIds,
+    derived,
+    featSpellChoices,
+    featList: activeFeatSpellFeats,
+  })
   const wizardLegalitySummary = summarizeWizardLegality(legalityResult)
+  const derivedBlockingIssues = legalityResult?.derived?.blockingIssues ?? []
+  const derivedWarnings = legalityResult?.derived?.warnings ?? []
+
+  useEffect(() => {
+    const allowedKeys = new Set(featSpellDefinitions.map((definition) => definition.sourceFeatureKey))
+    setFeatSpellChoices((prev) =>
+      Object.fromEntries(
+        Object.entries(prev).filter(([sourceFeatureKey]) => allowedKeys.has(sourceFeatureKey))
+      )
+    )
+  }, [featSpellDefinitions])
 
   function handleStatChange(stat: string, value: number) {
     setStats((prev) => ({ ...prev, [stat]: value }))
@@ -262,6 +338,13 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
           return `This build exceeds the campaign max level of ${localContext.campaignSettings.max_level}.`
         }
         return null
+      case 'stats': {
+        const speciesAbilityChoiceLimit = getSpeciesAbilityChoiceLimit(selectedSpecies)
+        if (speciesAbilityChoiceLimit > 0 && abilityBonusChoices.length < speciesAbilityChoiceLimit) {
+          return `Choose ${speciesAbilityChoiceLimit} flexible species ability bonus${speciesAbilityChoiceLimit === 1 ? '' : 'es'} to continue.`
+        }
+        return null
+      }
       case 'subclasses': {
         if (!derived) return null
         const missing = derived.subclassRequirements.find((entry) => entry.missingRequiredSubclass)
@@ -318,9 +401,28 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
         base_int: stats.int,
         base_wis: stats.wis,
         base_cha: stats.cha,
-        skill_proficiencies: skillProficiencies,
-        spell_choices: spellChoices,
-        feat_choices: featChoices,
+        skill_proficiencies: buildTypedSkillProficiencies({
+          skillProficiencies,
+          background: selectedBackground,
+          selectedClass,
+          species: selectedSpecies,
+        }),
+        ability_bonus_choices: buildTypedAbilityBonusChoices(
+          selectedSpecies,
+          abilityBonusChoices
+        ),
+        language_choices: buildTypedLanguageChoices({
+          languageChoices,
+          background: selectedBackground,
+          species: selectedSpecies,
+        }),
+        tool_choices: buildTypedToolChoices({
+          toolChoices,
+          selectedClass,
+          species: selectedSpecies,
+        }),
+        spell_choices: persistedSpellSelections,
+        feat_choices: buildTypedFeatChoices(featChoices, derived?.featSlotLabels),
       }),
     })
     const json = await response.json()
@@ -571,7 +673,7 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
                 {creationHitDieRows.length > 0 && (
                   <Alert className="border-white/10 bg-white/[0.03]">
                     <AlertDescription className="text-neutral-300">
-                      Creation HP preview: {creationHpMax}. The wizard uses full hit dice for each selected level at creation, and you can adjust HP later on the full sheet.
+                      Creation HP preview: {derived?.hitPoints.max ?? creationHpMax}. The wizard uses full hit dice for each selected level at creation, and you can adjust HP later on the full sheet.
                     </AlertDescription>
                   </Alert>
                 )}
@@ -624,23 +726,53 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
                 onChange={handleStatChange}
                 readOnly={false}
                 statMethod={statMethod}
-                racialBonuses={selectedSpecies?.ability_score_bonuses.reduce<Record<string, number>>((acc, bonus) => {
-                  acc[bonus.ability] = (acc[bonus.ability] ?? 0) + bonus.bonus
-                  return acc
-                }, {}) ?? {}}
+                racialBonuses={(() => {
+                  const fixedBonuses = selectedSpecies?.ability_score_bonuses.reduce<Record<string, number>>((acc, bonus) => {
+                    acc[bonus.ability] = (acc[bonus.ability] ?? 0) + bonus.bonus
+                    return acc
+                  }, {}) ?? {}
+                  const chosenBonuses = buildSpeciesAbilityBonusMap(selectedSpecies, abilityBonusChoices)
+                  const combined = { ...fixedBonuses }
+                  for (const [ability, bonus] of Object.entries(chosenBonuses)) {
+                    combined[ability] = (combined[ability] ?? 0) + bonus
+                  }
+                  return combined
+                })()}
+              />
+            )}
+
+            {currentStep.id === 'stats' && (
+              <SpeciesAbilityBonusCard
+                species={selectedSpecies}
+                selectedChoices={abilityBonusChoices}
+                canEdit
+                onChange={setAbilityBonusChoices}
               />
             )}
 
             {currentStep.id === 'skills' && (
-              <SkillsCard
-                stats={stats}
-                totalLevel={derived?.totalLevel ?? 0}
-                selectedClass={selectedClass}
-                background={selectedBackground}
-                skillProficiencies={skillProficiencies}
-                canEdit
-                onChange={setSkillProficiencies}
-              />
+              <div className="space-y-4">
+                <SkillsCard
+                  stats={stats}
+                  totalLevel={derived?.totalLevel ?? 0}
+                  selectedClass={selectedClass}
+                  species={selectedSpecies}
+                  background={selectedBackground}
+                  derived={derived ? { savingThrows: derived.savingThrows, skills: derived.skills } : undefined}
+                  skillProficiencies={skillProficiencies}
+                  canEdit
+                  onChange={setSkillProficiencies}
+                />
+                <LanguagesToolsCard
+                  species={selectedSpecies}
+                  background={selectedBackground}
+                  languageChoices={languageChoices}
+                  toolChoices={toolChoices}
+                  canEdit
+                  onLanguageChange={setLanguageChoices}
+                  onToolChange={setToolChoices}
+                />
+              </div>
             )}
 
             {currentStep.id === 'spells-feats' && (
@@ -651,6 +783,7 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
                     campaignId={campaignId}
                     subclassIds={firstClassSubclassIds}
                     classLevel={firstClassLevel}
+                    derivedSpellcasting={derived?.spellcasting}
                     spellChoices={spellChoices}
                     maxSpellLevel={derived?.maxSpellLevel}
                     spellLevelCaps={derived?.spellLevelCaps}
@@ -672,6 +805,16 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
                   canEdit
                   onChange={setFeatChoices}
                 />
+
+                <FeatSpellChoicesCard
+                  activeFeats={activeFeatSpellFeats}
+                  campaignId={campaignId}
+                  classList={classList}
+                  selectedChoices={featSpellChoices}
+                  canEdit
+                  onChange={setFeatSpellChoices}
+                  onOptionsLoaded={setFeatSpellOptions}
+                />
               </div>
             )}
 
@@ -692,7 +835,7 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
                   </div>
                   <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
                     <p className="text-sm text-neutral-500">Creation HP</p>
-                    <p className="text-neutral-100">{creationHpMax}</p>
+                    <p className="text-neutral-100">{derived?.hitPoints.max ?? creationHpMax}</p>
                     <p className="mt-1 text-xs text-neutral-500">
                       Full hit die at creation, including Constitution at each selected level.
                     </p>
@@ -708,14 +851,46 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
                 </div>
 
                 {derived && (
-                  <Alert className="border-white/10 bg-white/[0.03]">
-                    <AlertDescription className="text-neutral-300">
-                      Level {derived.totalLevel} build with {derived.totalAsiSlots} feat/ASI slots.
-                      {derived.spellSlots.length > 0 && ` Spell slots: ${derived.spellSlots.join(' / ')}.`}
-                      {spellChoices.length > 0 && ` ${spellChoices.length} spells selected.`}
-                      {featChoices.length > 0 && ` ${featChoices.length} feats selected.`}
-                    </AlertDescription>
-                  </Alert>
+                  <>
+                    <Alert className="border-white/10 bg-white/[0.03]">
+                      <AlertDescription className="text-neutral-300">
+                        Level {derived.totalLevel} build with {derived.totalAsiSlots} feat/ASI slots.
+                        {` HP ${derived.hitPoints.max}.`}
+                        {derived.spellSlots.length > 0 && ` Spell slots: ${derived.spellSlots.join(' / ')}.`}
+                        {spellChoices.length > 0 && ` ${spellChoices.length} spells selected.`}
+                        {featChoices.length > 0 && ` ${featChoices.length} feats selected.`}
+                      </AlertDescription>
+                    </Alert>
+
+                    {derived.spellcasting.sources.length > 0 && (
+                      <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                        <p className="text-sm font-medium text-neutral-100">Spellcasting Review</p>
+                        <div className="mt-3 space-y-3">
+                          {derived.spellcasting.sources.map((source) => (
+                            <div key={source.classId} className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
+                              <p className="text-sm text-neutral-100">{source.className} {source.classLevel}</p>
+                              {source.selectionSummary && (
+                                <p className="mt-1 text-sm text-neutral-400">{source.selectionSummary}</p>
+                              )}
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                {Object.entries(source.selectedSpellCountsByLevel).map(([level, count]) => (
+                                  <span
+                                    key={`${source.classId}-${level}`}
+                                    className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs text-neutral-300"
+                                  >
+                                    {level === '0' ? `${count} cantrip${count === 1 ? '' : 's'}` : `${count} level ${level} spell${count === 1 ? '' : 's'}`}
+                                  </span>
+                                ))}
+                                {source.selectedSpells.length === 0 && (
+                                  <span className="text-xs text-neutral-500">No currently selected spells from this source.</span>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
 
                 {legalityResult ? (
@@ -729,30 +904,30 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
                       </div>
                       <LegalitySummaryBadge
                         passed={legalityResult.passed}
-                        errorCount={legalityResult.checks.filter((check) => check.severity === 'error' && !check.passed).length}
+                        errorCount={derivedBlockingIssues.length}
                       />
                     </div>
 
-                    {wizardLegalitySummary.blockers.length > 0 && (
+                    {derivedBlockingIssues.length > 0 && (
                       <Alert className="border-rose-400/20 bg-rose-400/10">
                         <AlertDescription className="space-y-2 text-rose-50">
                           <p className="text-sm font-medium">Finish these before submission</p>
                           <ul className="space-y-1 text-sm text-rose-100">
-                            {wizardLegalitySummary.blockers.map((item) => (
-                              <li key={item}>• {item}</li>
+                            {derivedBlockingIssues.map((item) => (
+                              <li key={item.key}>• {item.message}</li>
                             ))}
                           </ul>
                         </AlertDescription>
                       </Alert>
                     )}
 
-                    {wizardLegalitySummary.warnings.length > 0 && (
+                    {derivedWarnings.length > 0 && (
                       <Alert className="border-amber-400/20 bg-amber-400/10">
                         <AlertDescription className="space-y-2 text-amber-50">
                           <p className="text-sm font-medium">Heads up</p>
                           <ul className="space-y-1 text-sm text-amber-100">
-                            {wizardLegalitySummary.warnings.map((item) => (
-                              <li key={item}>• {item}</li>
+                            {derivedWarnings.map((item) => (
+                              <li key={item.key}>• {item.message}</li>
                             ))}
                           </ul>
                         </AlertDescription>

@@ -8,12 +8,17 @@ export async function captureSnapshot(
   supabase: SupabaseClient<Database>,
   characterId: string
 ): Promise<void> {
-  const [characterResult, levelsResult, choicesResult, rollsResult, skillsResult] = await Promise.all([
+  const [characterResult, levelsResult, choicesResult, spellSelectionsResult, featChoicesResult, abilityBonusChoicesResult, languageChoicesResult, toolChoicesResult, rollsResult, skillsResult] = await Promise.all([
     supabase.from('characters').select('*').eq('id', characterId).single(),
     supabase.from('character_levels').select('*').eq('character_id', characterId),
     supabase.from('character_choices').select('*').eq('character_id', characterId),
+    supabase.from('character_spell_selections').select('*').eq('character_id', characterId),
+    supabase.from('character_feat_choices').select('*').eq('character_id', characterId),
+    supabase.from('character_ability_bonus_choices').select('*').eq('character_id', characterId),
+    supabase.from('character_language_choices').select('*').eq('character_id', characterId),
+    supabase.from('character_tool_choices').select('*').eq('character_id', characterId),
     supabase.from('character_stat_rolls').select('*').eq('character_id', characterId),
-    supabase.from('character_skill_proficiencies').select('skill, expertise').eq('character_id', characterId),
+    supabase.from('character_skill_proficiencies').select('*').eq('character_id', characterId),
   ])
 
   if (!characterResult.data) return
@@ -23,6 +28,11 @@ export async function captureSnapshot(
     character: characterResult.data,
     levels,
     choices: choicesResult.data ?? [],
+    spell_selections: spellSelectionsResult.data ?? [],
+    feat_choices: featChoicesResult.data ?? [],
+    ability_bonus_choices: abilityBonusChoicesResult.data ?? [],
+    language_choices: languageChoicesResult.data ?? [],
+    tool_choices: toolChoicesResult.data ?? [],
     stat_rolls: rollsResult.data ?? [],
     skill_proficiencies: skillsResult.data ?? [],
   }

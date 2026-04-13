@@ -1,11 +1,11 @@
 import type { CheckSeverity, FeatPrerequisite } from '@/lib/types/database'
 import {
-  collectKnownProficiencies,
-  deriveCharacterProgression,
+  deriveCharacter,
   getAdjustedAbilityScores,
+  type DerivedCharacter,
   type CharacterBuildContext,
-  type CharacterProgressionSummary,
 } from '@/lib/characters/build-context'
+import { getSpeciesAbilityBonusChoiceConfig } from '@/lib/characters/species-ability-bonus-provenance'
 import { normalizeSkillKey } from '@/lib/skills'
 
 export interface LegalityCheck {
@@ -18,7 +18,7 @@ export interface LegalityCheck {
 export interface LegalityResult {
   passed: boolean
   checks: LegalityCheck[]
-  derived?: CharacterProgressionSummary
+  derived?: DerivedCharacter
 }
 
 export type LegalityInput = CharacterBuildContext
@@ -171,7 +171,7 @@ function checkStatMethod(input: LegalityInput): LegalityCheck {
   }
 }
 
-function checkLevelCap(input: LegalityInput, derived: CharacterProgressionSummary): LegalityCheck {
+function checkLevelCap(input: LegalityInput, derived: DerivedCharacter): LegalityCheck {
   if (derived.totalLevel === 0) {
     return {
       key: 'level_cap',
@@ -191,7 +191,7 @@ function checkLevelCap(input: LegalityInput, derived: CharacterProgressionSummar
   }
 }
 
-function checkSkillProficiencies(input: LegalityInput, derived: CharacterProgressionSummary): LegalityCheck {
+function checkSkillProficiencies(input: LegalityInput, derived: DerivedCharacter): LegalityCheck {
   const classPool = new Set((input.classes[0]?.skillChoices.from ?? []).map(normalizeSkillKey))
   const backgroundPool = new Set(input.background?.skillChoiceFrom ?? [])
   const backgroundAuto = new Set(input.background?.skillProficiencies ?? [])
@@ -241,6 +241,79 @@ function checkSkillProficiencies(input: LegalityInput, derived: CharacterProgres
   }
 }
 
+function checkSpeciesAbilityBonusChoices(input: LegalityInput): LegalityCheck {
+  const config = getSpeciesAbilityBonusChoiceConfig(
+    input.speciesName && input.speciesSource
+      ? {
+          id: input.speciesName.toLowerCase(),
+          name: input.speciesName,
+          size: input.speciesSize ?? 'medium',
+          speed: input.speciesSpeed ?? 30,
+          ability_score_bonuses: [],
+          languages: input.speciesLanguages,
+          traits: [],
+          senses: input.speciesSenses,
+          damage_resistances: input.speciesDamageResistances,
+          condition_immunities: input.speciesConditionImmunities,
+          source: input.speciesSource,
+          amended: false,
+          amendment_note: null,
+        }
+      : null
+  )
+
+  const selectedAbilities = Object.entries(input.selectedAbilityBonuses)
+    .filter(([, bonus]) => (bonus ?? 0) > 0)
+    .map(([ability]) => ability)
+
+  if (!config) {
+    return {
+      key: 'species_ability_bonus_choices',
+      passed: selectedAbilities.length === 0,
+      message: selectedAbilities.length === 0
+        ? 'Species ability bonus choices are valid.'
+        : 'This species does not grant flexible ability score choices.',
+      severity: 'error',
+    }
+  }
+
+  if (selectedAbilities.length > config.count) {
+    return {
+      key: 'species_ability_bonus_choices',
+      passed: false,
+      message: `Too many flexible species ability bonuses selected: ${selectedAbilities.length}/${config.count}.`,
+      severity: 'error',
+    }
+  }
+
+  const invalidAbilities = selectedAbilities.filter((ability) => !config.allowedAbilities.includes(ability as typeof config.allowedAbilities[number]))
+  if (invalidAbilities.length > 0) {
+    return {
+      key: 'species_ability_bonus_choices',
+      passed: false,
+      message: `Invalid flexible species ability choices: ${invalidAbilities.join(', ')}.`,
+      severity: 'error',
+    }
+  }
+
+  const invalidBonusValue = selectedAbilities.some((ability) => (input.selectedAbilityBonuses[ability as keyof typeof input.selectedAbilityBonuses] ?? 0) !== config.bonus)
+  if (invalidBonusValue) {
+    return {
+      key: 'species_ability_bonus_choices',
+      passed: false,
+      message: `Flexible species ability bonuses must all be +${config.bonus}.`,
+      severity: 'error',
+    }
+  }
+
+  return {
+    key: 'species_ability_bonus_choices',
+    passed: true,
+    message: `Species ability bonus choices valid (${selectedAbilities.length}/${config.count}).`,
+    severity: 'error',
+  }
+}
+
 function checkMulticlassPrerequisites(input: LegalityInput): LegalityCheck {
   const adjustedScores = getAdjustedAbilityScores(input)
   const violations = input.classes
@@ -264,7 +337,7 @@ function checkMulticlassPrerequisites(input: LegalityInput): LegalityCheck {
   }
 }
 
-function checkSubclassTiming(derived: CharacterProgressionSummary): LegalityCheck {
+function checkSubclassTiming(derived: DerivedCharacter): LegalityCheck {
   const problems = derived.subclassRequirements.flatMap((entry) => {
     const messages: string[] = []
     if (entry.missingRequiredSubclass) {
@@ -286,9 +359,8 @@ function checkSubclassTiming(derived: CharacterProgressionSummary): LegalityChec
   }
 }
 
-function checkFeatPrerequisite(prerequisite: FeatPrerequisite, input: LegalityInput, derived: CharacterProgressionSummary): boolean {
+function checkFeatPrerequisite(prerequisite: FeatPrerequisite, input: LegalityInput, derived: DerivedCharacter): boolean {
   const adjustedScores = getAdjustedAbilityScores(input)
-  const knownProficiencies = collectKnownProficiencies(input)
   const unlockedFeatures = new Set(derived.unlockedFeatures.map((feature) => feature.toLowerCase()))
 
   switch (prerequisite.type) {
@@ -303,13 +375,13 @@ function checkFeatPrerequisite(prerequisite: FeatPrerequisite, input: LegalityIn
     case 'feature':
       return prerequisite.feature ? unlockedFeatures.has(prerequisite.feature.toLowerCase()) : true
     case 'proficiency':
-      return prerequisite.proficiency ? knownProficiencies.has(prerequisite.proficiency.toLowerCase()) : true
+      return prerequisite.proficiency ? derived.proficiencies.all.includes(prerequisite.proficiency.toLowerCase()) : true
     default:
       return true
   }
 }
 
-function checkFeatPrerequisites(input: LegalityInput, derived: CharacterProgressionSummary): LegalityCheck {
+function checkFeatPrerequisites(input: LegalityInput, derived: DerivedCharacter): LegalityCheck {
   const invalid = input.selectedFeats.filter((feat) =>
     feat.prerequisites.some((prerequisite) => !checkFeatPrerequisite(prerequisite, input, derived))
   )
@@ -324,7 +396,7 @@ function checkFeatPrerequisites(input: LegalityInput, derived: CharacterProgress
   }
 }
 
-function checkFeatSlots(input: LegalityInput, derived: CharacterProgressionSummary): LegalityCheck {
+function checkFeatSlots(input: LegalityInput, derived: DerivedCharacter): LegalityCheck {
   const selectedCount = input.selectedFeats.length
   const backgroundFeatCount = input.backgroundFeat ? 1 : 0
   const effectiveCount = selectedCount + backgroundFeatCount
@@ -339,7 +411,7 @@ function checkFeatSlots(input: LegalityInput, derived: CharacterProgressionSumma
   }
 }
 
-function checkSpellLegality(input: LegalityInput, derived: CharacterProgressionSummary): LegalityCheck {
+function checkSpellLegality(input: LegalityInput, derived: DerivedCharacter): LegalityCheck {
   const availableClassIds = new Set(input.classes.map((cls) => cls.classId))
   const grantedSpellIds = new Set(input.grantedSpellIds)
   const invalid = input.selectedSpells.filter((spell) => {
@@ -363,7 +435,41 @@ function checkSpellLegality(input: LegalityInput, derived: CharacterProgressionS
   }
 }
 
-function checkSpellSelectionCount(input: LegalityInput, derived: CharacterProgressionSummary): LegalityCheck {
+function checkSpellSelectionCount(input: LegalityInput, derived: DerivedCharacter): LegalityCheck {
+  const sourceViolations = derived.spellcasting.sources.flatMap((source) => {
+    const sourceSelections = input.selectedSpells.filter((spell) => {
+      if (!spell.countsAgainstSelectionLimit) return false
+      return (
+        spell.classes.includes(source.classId) ||
+        spell.grantedBySubclassIds.includes(
+          input.classes.find((cls) => cls.classId === source.classId)?.subclass?.id ?? ''
+        )
+      )
+    })
+
+    const leveledSelected = sourceSelections.filter((spell) => spell.level > 0).length
+    const cantripsSelected = sourceSelections.filter((spell) => spell.level === 0).length
+
+    if (source.cantripSelectionCap !== null && cantripsSelected > source.cantripSelectionCap) {
+      return [`${source.className} selected ${cantripsSelected} cantrips but the cap is ${source.cantripSelectionCap}.`]
+    }
+    if (leveledSelected > source.leveledSpellSelectionCap) {
+      return [`${source.className} selected ${leveledSelected} leveled spells but the cap is ${source.leveledSpellSelectionCap}.`]
+    }
+    return []
+  })
+
+  if (derived.spellcasting.sources.length > 0) {
+    return {
+      key: 'spell_selection_count',
+      passed: sourceViolations.length === 0,
+      message: sourceViolations.length === 0
+        ? `Spell selections fit current source caps for ${derived.spellcasting.sources.map((source) => source.className).join(', ')}.`
+        : sourceViolations.join(' '),
+      severity: 'error',
+    }
+  }
+
   const cappedSelections = input.selectedSpells.filter((spell) => spell.countsAgainstSelectionLimit)
   const leveledSpells = cappedSelections.filter((spell) => spell.level > 0)
   const cantrips = cappedSelections.filter((spell) => spell.level === 0)
@@ -389,25 +495,44 @@ function checkSpellSelectionCount(input: LegalityInput, derived: CharacterProgre
 }
 
 export function runLegalityChecks(input: LegalityInput): LegalityResult {
-  const derived = deriveCharacterProgression(input)
+  const baseDerived = deriveCharacter(input)
   const checks: LegalityCheck[] = [
     checkSourceAllowlist(input),
     checkRuleSetConsistency(input),
     checkStatMethodConsistency(input),
     checkStatMethod(input),
-    checkLevelCap(input, derived),
-    checkSkillProficiencies(input, derived),
+    checkLevelCap(input, baseDerived),
+    checkSkillProficiencies(input, baseDerived),
+    checkSpeciesAbilityBonusChoices(input),
     checkMulticlassPrerequisites(input),
-    checkSubclassTiming(derived),
-    checkFeatPrerequisites(input, derived),
-    checkFeatSlots(input, derived),
-    checkSpellLegality(input, derived),
-    checkSpellSelectionCount(input, derived),
+    checkSubclassTiming(baseDerived),
+    checkFeatPrerequisites(input, baseDerived),
+    checkFeatSlots(input, baseDerived),
+    checkSpellLegality(input, baseDerived),
+    checkSpellSelectionCount(input, baseDerived),
   ]
 
   const passed = checks
     .filter((check) => check.severity === 'error')
     .every((check) => check.passed)
+
+  const derived: DerivedCharacter = {
+    ...baseDerived,
+    blockingIssues: checks
+      .filter((check) => !check.passed && check.severity === 'error')
+      .map((check) => ({
+        key: check.key,
+        message: check.message,
+        severity: check.severity,
+      })),
+    warnings: checks
+      .filter((check) => !check.passed && check.severity === 'warning')
+      .map((check) => ({
+        key: check.key,
+        message: check.message,
+        severity: check.severity,
+      })),
+  }
 
   return { passed, checks, derived }
 }

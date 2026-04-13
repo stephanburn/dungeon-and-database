@@ -2,9 +2,12 @@
 
 import { Circle, Disc, Lock } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { SKILLS, SAVING_THROW_NAMES, normalizeSkillKey } from '@/lib/skills'
+import { SKILLS, SAVING_THROW_NAMES } from '@/lib/skills'
 import type { AbilityKey, SkillKey } from '@/lib/skills'
-import type { Class, Background } from '@/lib/types/database'
+import type { DerivedCharacter } from '@/lib/characters/build-context'
+import { abilityModifier, proficiencyBonusFromLevel } from '@/lib/characters/derived'
+import { deriveSkillChoiceBuckets } from '@/lib/characters/skill-provenance'
+import type { Class, Background, Species } from '@/lib/types/database'
 
 interface Stats {
   str: number; dex: number; con: number
@@ -16,14 +19,14 @@ interface SkillsCardProps {
   totalLevel: number
   selectedClass: Class | null
   background: Background | null
+  species?: Species | null
+  derived?: Pick<DerivedCharacter, 'savingThrows' | 'skills'>
   // All actively-chosen skill proficiencies (class + background choices combined)
   skillProficiencies: string[]
   canEdit: boolean
   onChange: (skills: string[]) => void
 }
 
-function mod(score: number) { return Math.floor((score - 10) / 2) }
-function profBonus(level: number) { return Math.floor((Math.max(level, 1) - 1) / 4) + 2 }
 function fmtMod(n: number) { return n >= 0 ? `+${n}` : `${n}` }
 
 function SkillStateIcon({
@@ -40,33 +43,32 @@ function SkillStateIcon({
 
 export function SkillsCard({
   stats, totalLevel, selectedClass, background,
+  species = null,
+  derived,
   skillProficiencies, canEdit, onChange,
 }: SkillsCardProps) {
-  const pb = profBonus(totalLevel)
-
-  // Background: auto-granted (locked)
-  const bgAutoSkills = new Set(
-    (background?.skill_proficiencies ?? []).map((s) => normalizeSkillKey(s))
+  const pb = proficiencyBonusFromLevel(totalLevel)
+  const {
+    bgAutoSkills,
+    bgChoiceFrom,
+    bgChoiceCount,
+    classChoiceFrom,
+    classChoiceCount,
+    speciesChoiceFrom,
+    speciesChoiceCount,
+    bgChosen,
+    classChosen,
+    speciesChosen,
+    manualChosen,
+  } = deriveSkillChoiceBuckets({
+    skillProficiencies,
+    background,
+    selectedClass,
+    species,
+  })
+  const allChosen = new Set(
+    Array.from(classChosen).concat(Array.from(bgChosen), Array.from(speciesChosen), Array.from(manualChosen))
   )
-
-  // Background: choosable pool
-  const bgChoiceFrom = new Set(
-    (background?.skill_choice_from ?? []).map((s) => normalizeSkillKey(s))
-  )
-  const bgChoiceCount = background?.skill_choice_count ?? 0
-
-  // Class skill choices config
-  const rawChoices = selectedClass?.skill_choices as { count?: number; from?: string[] } | null
-  const classChoiceCount = rawChoices?.count ?? 0
-  const classChoiceFrom = new Set((rawChoices?.from ?? []).map(normalizeSkillKey))
-
-  // All actively chosen (excludes auto-granted)
-  const allChosen = new Set(skillProficiencies.filter((s) => !bgAutoSkills.has(s as SkillKey)))
-
-  // Count bg-chosen: in bgChoiceFrom, NOT in classChoiceFrom (class takes priority on overlap)
-  const allChosenArr = Array.from(allChosen)
-  const bgChosen = new Set(allChosenArr.filter((s) => bgChoiceFrom.has(s as SkillKey) && !classChoiceFrom.has(s as SkillKey)))
-  const classChosen = new Set(allChosenArr.filter((s) => classChoiceFrom.has(s as SkillKey)))
 
   function isProficient(key: SkillKey) {
     return bgAutoSkills.has(key) || allChosen.has(key)
@@ -105,6 +107,7 @@ export function SkillsCard({
   const choiceCountLabel = [
     classChoiceCount > 0 ? `${classChosen.size}/${classChoiceCount} class` : null,
     bgChoiceCount > 0 ? `${bgChosen.size}/${bgChoiceCount} background` : null,
+    speciesChoiceCount > 0 ? `${speciesChosen.size}/${speciesChoiceCount} species` : null,
   ].filter(Boolean).join(' · ')
 
   return (
@@ -119,8 +122,9 @@ export function SkillsCard({
           <p className="mb-3 text-xs font-semibold uppercase tracking-[0.12em] text-neutral-500">Saving Throws</p>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
             {abilities.map((ability) => {
-              const proficient = savingThrows.has(ability)
-              const modifier = mod(stats[ability]) + (proficient ? pb : 0)
+              const derivedSave = derived?.savingThrows.find((save) => save.ability === ability)
+              const proficient = derivedSave?.proficient ?? savingThrows.has(ability)
+              const modifier = derivedSave?.modifier ?? (abilityModifier(stats[ability]) + (proficient ? pb : 0))
               return (
                 <div key={ability} className="flex items-center gap-3 rounded-xl border border-white/8 bg-white/[0.02] px-3 py-2 text-sm">
                   <span className={`h-2 w-2 rounded-full flex-shrink-0 ${proficient ? 'bg-emerald-400' : 'bg-neutral-600'}`} />
@@ -144,20 +148,32 @@ export function SkillsCard({
           </div>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {SKILLS.map((skill) => {
-              const proficient = isProficient(skill.key)
-              const abilityMod = mod(stats[skill.ability])
-              const modifier = abilityMod + (proficient ? pb : 0)
+              const derivedSkill = derived?.skills.find((entry) => entry.key === skill.key)
+              const proficient = derivedSkill?.proficient ?? isProficient(skill.key)
+              const abilityMod = abilityModifier(stats[skill.ability])
+              const modifier = derivedSkill?.modifier ?? (abilityMod + (proficient ? pb : 0))
               const fromBgAuto = bgAutoSkills.has(skill.key)
               const fromBgChoice = bgChosen.has(skill.key)
               const fromClassChoice = classChosen.has(skill.key)
+              const fromSpeciesChoice = speciesChosen.has(skill.key)
 
               const isClassChoosable = canEdit && classChoiceFrom.has(skill.key) && !fromBgAuto
               const isBgChoosable = canEdit && bgChoiceFrom.has(skill.key) && !classChoiceFrom.has(skill.key) && !fromBgAuto
-              const isChoosable = isClassChoosable || isBgChoosable
+              const isSpeciesChoosable =
+                canEdit &&
+                speciesChoiceFrom.has(skill.key) &&
+                !classChoiceFrom.has(skill.key) &&
+                !bgChoiceFrom.has(skill.key) &&
+                !fromBgAuto
+              const isChoosable = isClassChoosable || isBgChoosable || isSpeciesChoosable
 
               const atClassLimit = classChosen.size >= classChoiceCount && !fromClassChoice
               const atBgLimit = bgChosen.size >= bgChoiceCount && !fromBgChoice
-              const atLimit = (isClassChoosable && atClassLimit) && (!isBgChoosable || atBgLimit)
+              const atSpeciesLimit = speciesChosen.size >= speciesChoiceCount && !fromSpeciesChoice
+              const atLimit =
+                (isClassChoosable && atClassLimit) ||
+                (isBgChoosable && atBgLimit) ||
+                (isSpeciesChoosable && atSpeciesLimit)
 
               const isEligible = isChoosable && !atLimit
 
@@ -185,6 +201,11 @@ export function SkillsCard({
                       BG
                     </span>
                   )}
+                  {fromSpeciesChoice && (
+                    <span className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-emerald-100">
+                      Species
+                    </span>
+                  )}
                   <span className="ml-auto text-xs text-neutral-600">{skill.ability.toUpperCase()}</span>
                 </button>
               )
@@ -192,7 +213,7 @@ export function SkillsCard({
           </div>
           {canEdit && (
             <p className="mt-2 text-xs text-neutral-500">
-              Filled = selected. Lock = granted by background. BG = chosen from background options.
+              Filled = selected. Lock = granted by background. BG = chosen from background options. Species = chosen from a species feature.
             </p>
           )}
         </div>

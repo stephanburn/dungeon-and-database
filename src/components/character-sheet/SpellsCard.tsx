@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import type { DerivedCharacter } from '@/lib/characters/build-context'
 import type { Spell } from '@/lib/types/database'
 
 const LEVEL_LABELS: Record<number, string> = {
@@ -17,6 +18,10 @@ interface SpellsCardProps {
   campaignId: string
   subclassIds?: string[]
   classLevel?: number
+  derivedSpellcasting?: Pick<
+    DerivedCharacter['spellcasting'],
+    'selectedSpells' | 'selectedSpellCountsByLevel' | 'leveledSpellSelectionCap' | 'cantripSelectionCap' | 'selectionSummary' | 'sources'
+  >
   spellChoices: string[]
   maxSpellLevel?: number
   spellLevelCaps?: Record<number, number>
@@ -37,6 +42,7 @@ export function SpellsCard({
   campaignId,
   subclassIds = [],
   classLevel = 0,
+  derivedSpellcasting,
   spellChoices,
   maxSpellLevel,
   spellLevelCaps = {},
@@ -77,9 +83,21 @@ export function SpellsCard({
   const selectedVisibleSpells = spellChoices
     .map((id) => visibleSpells.find((spell) => spell.id === id))
     .filter((spell): spell is SpellOption => spell !== undefined)
-  const cappedSelections = selectedVisibleSpells.filter((spell) => spell.counts_against_selection_limit !== false)
-  const leveledSelectionCount = cappedSelections.filter((spell) => spell.level > 0).length
-  const cantripSelectionCount = cappedSelections.filter((spell) => spell.level === 0).length
+  const activeDerivedSource = derivedSpellcasting?.sources?.find((source) => source.classId === classId)
+  const fallbackCappedSelections = selectedVisibleSpells.filter((spell) => spell.counts_against_selection_limit !== false)
+  const effectiveSelectedSpellCountsByLevel = activeDerivedSource?.selectedSpellCountsByLevel ?? derivedSpellcasting?.selectedSpellCountsByLevel
+  const leveledSelectionCount = effectiveSelectedSpellCountsByLevel
+    ? Object.entries(effectiveSelectedSpellCountsByLevel)
+        .filter(([level]) => Number(level) > 0)
+        .reduce((sum, [, count]) => sum + count, 0)
+    : fallbackCappedSelections.filter((spell) => spell.level > 0).length
+  const cantripSelectionCount = effectiveSelectedSpellCountsByLevel?.[0] ?? fallbackCappedSelections.filter((spell) => spell.level === 0).length
+  const effectiveLeveledSpellSelectionCap = activeDerivedSource?.leveledSpellSelectionCap ?? derivedSpellcasting?.leveledSpellSelectionCap ?? leveledSpellSelectionCap
+  const effectiveCantripSelectionCap = activeDerivedSource?.cantripSelectionCap ?? derivedSpellcasting?.cantripSelectionCap ?? cantripSelectionCap
+  const effectiveSelectionSummary = activeDerivedSource?.selectionSummary ?? derivedSpellcasting?.selectionSummary ?? selectionSummary
+  const derivedSelectedSpellMap = new Map(
+    (derivedSpellcasting?.selectedSpells ?? []).map((spell) => [spell.id, spell])
+  )
 
   function toggle(spellId: string) {
     if (!canEdit) return
@@ -92,15 +110,15 @@ export function SpellsCard({
       if (spell.level === 0) {
         if (
           spell.counts_against_selection_limit !== false &&
-          cantripSelectionCap !== null &&
-          cantripSelectionCap !== undefined &&
-          cantripSelectionCount >= cantripSelectionCap
+          effectiveCantripSelectionCap !== null &&
+          effectiveCantripSelectionCap !== undefined &&
+          cantripSelectionCount >= effectiveCantripSelectionCap
         ) {
           return
         }
       }
       if (spell.level > 0 && spell.counts_against_selection_limit !== false) {
-        const atTotalCap = leveledSpellSelectionCap !== undefined && leveledSelectionCount >= leveledSpellSelectionCap
+        const atTotalCap = effectiveLeveledSpellSelectionCap !== undefined && leveledSelectionCount >= effectiveLeveledSpellSelectionCap
         if (atTotalCap) return
       }
       onChange([...spellChoices, spellId])
@@ -138,12 +156,12 @@ export function SpellsCard({
         {canEdit && (
           <div className="space-y-1 text-xs text-neutral-500">
             <p>Choose the spells this character can actively use right now.</p>
-            {selectionSummary && <p>{selectionSummary}</p>}
-            {leveledSpellSelectionCap !== undefined && (
-              <p>Leveled spells: {leveledSelectionCount}/{leveledSpellSelectionCap} selected. Cantrips are shown separately.</p>
+            {effectiveSelectionSummary && <p>{effectiveSelectionSummary}</p>}
+            {effectiveLeveledSpellSelectionCap !== undefined && (
+              <p>Leveled spells: {leveledSelectionCount}/{effectiveLeveledSpellSelectionCap} selected. Cantrips are shown separately.</p>
             )}
-            {cantripSelectionCap !== null && cantripSelectionCap !== undefined && (
-              <p>Cantrips: {cantripSelectionCount}/{cantripSelectionCap} selected.</p>
+            {effectiveCantripSelectionCap !== null && effectiveCantripSelectionCap !== undefined && (
+              <p>Cantrips: {cantripSelectionCount}/{effectiveCantripSelectionCap} selected.</p>
             )}
           </div>
         )}
@@ -158,28 +176,29 @@ export function SpellsCard({
                   {spellLevelCaps[level] ?? 0} slots available
                 </span>
               )}
-              {level === 0 && cantripSelectionCap !== null && cantripSelectionCap !== undefined && (
+              {level === 0 && effectiveCantripSelectionCap !== null && effectiveCantripSelectionCap !== undefined && (
                 <span className="text-[11px] text-neutral-500">
-                  {cantripSelectionCount}/{cantripSelectionCap} selected
+                  {cantripSelectionCount}/{effectiveCantripSelectionCap} selected
                 </span>
               )}
             </div>
             <div className="space-y-2">
               {byLevel[level].map(spell => {
+                const derivedSelectedSpell = derivedSelectedSpellMap.get(spell.id)
                 const chosen = spellChoices.includes(spell.id)
                 const atTotalCap =
                   spell.level > 0 &&
                   spell.counts_against_selection_limit !== false &&
                   !chosen &&
-                  leveledSpellSelectionCap !== undefined &&
-                  leveledSelectionCount >= leveledSpellSelectionCap
+                  effectiveLeveledSpellSelectionCap !== undefined &&
+                  leveledSelectionCount >= effectiveLeveledSpellSelectionCap
                 const atCantripCap =
                   spell.level === 0 &&
                   spell.counts_against_selection_limit !== false &&
                   !chosen &&
-                  cantripSelectionCap !== null &&
-                  cantripSelectionCap !== undefined &&
-                  cantripSelectionCount >= cantripSelectionCap
+                  effectiveCantripSelectionCap !== null &&
+                  effectiveCantripSelectionCap !== undefined &&
+                  cantripSelectionCount >= effectiveCantripSelectionCap
                 const disabled = !canEdit || atTotalCap || atCantripCap
                 return (
                   <button
@@ -199,9 +218,9 @@ export function SpellsCard({
                       <span className={`h-2 w-2 rounded-full shrink-0 ${chosen ? 'bg-blue-300' : 'bg-neutral-600'}`} />
                       <span className="font-medium">{spell.name}</span>
                       <span className="text-xs text-neutral-500">{spell.school}</span>
-                      {spell.granted_by_subclasses?.length ? (
+                      {derivedSelectedSpell?.granted || spell.granted_by_subclasses?.length ? (
                         <span className="rounded-full border border-emerald-300/20 px-2 py-0.5 text-[10px] text-emerald-200">
-                          Bonus
+                          Free
                         </span>
                       ) : null}
                       {spell.ritual && <span className="rounded-full border border-white/10 px-2 py-0.5 text-[10px] text-neutral-400">Ritual</span>}

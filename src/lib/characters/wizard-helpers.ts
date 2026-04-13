@@ -12,13 +12,34 @@ import type {
   Subclass,
 } from '@/lib/types/database'
 import type { LegalityResult } from '@/lib/legality/engine'
+import type {
+  FeatChoiceInput,
+  SpellChoiceInput,
+} from '@/lib/characters/choice-persistence'
+import {
+  buildTypedLanguageChoices,
+  buildTypedToolChoices,
+} from '@/lib/characters/language-tool-provenance'
+import {
+  buildSpeciesAbilityBonusMap,
+  buildTypedAbilityBonusChoices,
+  type AbilityKey as SpeciesChoiceAbilityKey,
+} from '@/lib/characters/species-ability-bonus-provenance'
+import { buildTypedSkillProficiencies } from '@/lib/characters/skill-provenance'
+import {
+  buildTypedFeatSpellChoices,
+  getFeatSpellChoiceDefinitions,
+} from '@/lib/characters/feat-spell-options'
 import {
   createBuildBackgroundSummary,
+  deriveCharacter,
   normalizeToolProficiencies,
   progressionRowToSummary,
   type BuildClassSummary,
   type CharacterBuildContext,
+  type DerivedCharacter,
 } from '@/lib/characters/build-context'
+import { hitPointGainFromRoll } from '@/lib/characters/derived'
 
 export interface ClassDetail extends Class {
   progression: ClassFeatureProgression[]
@@ -34,6 +55,7 @@ export type WizardLevel = {
   class_id: string
   level: number
   subclass_id: string | null
+  hp_roll?: number | null
 }
 
 export type WizardLegalitySummary = {
@@ -47,6 +69,7 @@ type LocalBuildContextArgs = {
   allowedSources: string[]
   allSourceRuleSets: Record<string, RuleSet>
   statMethod: StatMethod
+  persistedHpMax?: number
   stats: Record<'str' | 'dex' | 'con' | 'int' | 'wis' | 'cha', number>
   selectedSpecies: Species | null
   selectedBackground: Background | null
@@ -55,9 +78,13 @@ type LocalBuildContextArgs = {
   subclassMap: Record<string, Subclass[]>
   spellOptions: SpellOption[]
   spellChoices: string[]
+  spellSelections?: SpellChoiceInput[]
   featList: Feat[]
   featChoices: string[]
   skillProficiencies: string[]
+  abilityBonusChoices: SpeciesChoiceAbilityKey[]
+  languageChoices: string[]
+  toolChoices: string[]
 }
 
 export function buildLocalCharacterContext({
@@ -65,6 +92,7 @@ export function buildLocalCharacterContext({
   allowedSources,
   allSourceRuleSets,
   statMethod,
+  persistedHpMax = 0,
   stats,
   selectedSpecies,
   selectedBackground,
@@ -73,9 +101,13 @@ export function buildLocalCharacterContext({
   subclassMap,
   spellOptions,
   spellChoices,
+  spellSelections,
   featList,
   featChoices,
   skillProficiencies,
+  abilityBonusChoices,
+  languageChoices,
+  toolChoices,
 }: LocalBuildContextArgs): CharacterBuildContext | null {
   if (!campaign) return null
 
@@ -91,6 +123,8 @@ export function buildLocalCharacterContext({
       classId: detail.id,
       name: detail.name,
       level: level.level,
+      hitDie: detail.hit_die,
+      hpRoll: level.hp_roll ?? null,
       source: detail.source,
       spellcastingType: detail.spellcasting_type,
       spellcastingProgression: detail.spellcasting_progression,
@@ -122,6 +156,15 @@ export function buildLocalCharacterContext({
   const backgroundFeat = selectedBackground?.background_feat_id
     ? featById.get(selectedBackground.background_feat_id) ?? null
     : null
+  const typedSpellSelections = spellSelections ?? spellChoices.map((spellId) => ({
+    spell_id: spellId,
+    character_level_id: null,
+    owning_class_id: null,
+    granting_subclass_id: null,
+    acquisition_mode: 'known',
+    counts_against_selection_limit: true,
+    source_feature_key: null,
+  }))
 
   return {
     allowedSources,
@@ -129,14 +172,25 @@ export function buildLocalCharacterContext({
     campaignRuleSet: campaign.rule_set as RuleSet,
     allSourceRuleSets,
     statMethod,
+    persistedHpMax,
     baseStats: stats,
     statRolls: [],
     skillProficiencies,
+    selectedAbilityBonuses: buildSpeciesAbilityBonusMap(selectedSpecies, abilityBonusChoices),
+    speciesName: selectedSpecies?.name ?? null,
+    selectedLanguages: languageChoices,
+    selectedTools: toolChoices,
     speciesSource: selectedSpecies?.source ?? null,
     speciesAbilityBonuses: selectedSpecies?.ability_score_bonuses.reduce<Record<string, number>>((acc, bonus) => {
       acc[bonus.ability] = (acc[bonus.ability] ?? 0) + bonus.bonus
       return acc
     }, {}) ?? {},
+    speciesSpeed: selectedSpecies?.speed ?? null,
+    speciesSize: selectedSpecies?.size ?? null,
+    speciesLanguages: selectedSpecies?.languages ?? [],
+    speciesSenses: selectedSpecies?.senses ?? [],
+    speciesDamageResistances: selectedSpecies?.damage_resistances ?? [],
+    speciesConditionImmunities: selectedSpecies?.condition_immunities ?? [],
     background,
     backgroundFeat: backgroundFeat
       ? {
@@ -147,17 +201,29 @@ export function buildLocalCharacterContext({
         }
       : null,
     classes,
-    selectedSpells: spellChoices
-      .map((spellId) => spellById.get(spellId))
-      .filter((spell): spell is SpellOption => Boolean(spell))
-      .map((spell) => ({
+    selectedSpells: typedSpellSelections
+      .map((selection) => {
+        const spellId = typeof selection === 'string' ? selection : selection.spell_id
+        const spell = spellById.get(spellId)
+        if (!spell) return null
+
+        return {
+          spell,
+          selection: typeof selection === 'string' ? null : selection,
+        }
+      })
+      .filter((entry): entry is { spell: SpellOption; selection: Exclude<SpellChoiceInput, string> | null } => Boolean(entry))
+      .map(({ spell, selection }) => ({
         id: spell.id,
         name: spell.name,
         level: spell.level,
         classes: spell.classes,
         source: spell.source,
         grantedBySubclassIds: spell.granted_by_subclasses ?? [],
-        countsAgainstSelectionLimit: spell.counts_against_selection_limit !== false,
+        owningClassId: selection?.owning_class_id ?? null,
+        acquisitionMode: selection?.acquisition_mode ?? 'known',
+        sourceFeatureKey: selection?.source_feature_key ?? null,
+        countsAgainstSelectionLimit: selection?.counts_against_selection_limit ?? spell.counts_against_selection_limit !== false,
       })),
     selectedFeats: featChoices
       .map((featId) => featById.get(featId))
@@ -173,8 +239,8 @@ export function buildLocalCharacterContext({
       subclassSources: classes
         .map((cls) => cls.subclass?.source)
         .filter((value): value is string => Boolean(value)),
-      spellSources: spellChoices
-        .map((spellId) => spellById.get(spellId)?.source)
+      spellSources: typedSpellSelections
+        .map((selection) => spellById.get(typeof selection === 'string' ? selection : selection.spell_id)?.source)
         .filter((value): value is string => Boolean(value)),
       featSources: [
         ...featChoices
@@ -183,16 +249,28 @@ export function buildLocalCharacterContext({
         ...(backgroundFeat ? [backgroundFeat.source] : []),
       ],
     },
-    grantedSpellIds: spellChoices
-      .filter((spellId) => (spellById.get(spellId)?.granted_by_subclasses?.length ?? 0) > 0),
-    freePreparedSpellIds: spellChoices
-      .filter((spellId) => spellById.get(spellId)?.counts_against_selection_limit === false),
+    grantedSpellIds: typedSpellSelections
+      .map((selection) => {
+        const spellId = typeof selection === 'string' ? selection : selection.spell_id
+        const spell = spellById.get(spellId)
+        const grantedBySubclass = (spell?.granted_by_subclasses?.length ?? 0) > 0
+        const grantedByFeature = typeof selection !== 'string' && (
+          selection.acquisition_mode === 'granted' || Boolean(selection.source_feature_key)
+        )
+        return grantedBySubclass || grantedByFeature ? spellId : null
+      })
+      .filter((value): value is string => Boolean(value)),
+    freePreparedSpellIds: typedSpellSelections
+      .map((selection) => {
+        const spellId = typeof selection === 'string' ? selection : selection.spell_id
+        const spell = spellById.get(spellId)
+        const freeFromOptions = spell?.counts_against_selection_limit === false
+        const freeFromSelection = typeof selection !== 'string' && selection.counts_against_selection_limit === false
+        return freeFromOptions || freeFromSelection ? spellId : null
+      })
+      .filter((value): value is string => Boolean(value)),
     multiclassSpellSlotsByCasterLevel: {},
   }
-}
-
-function abilityModifier(score: number): number {
-  return Math.floor((score - 10) / 2)
 }
 
 export function buildWizardHitDieRows(
@@ -216,7 +294,7 @@ export function calculateCreationHpMax(
   levels: Array<WizardLevel & { hitDie: number }>,
   constitution: number
 ): number {
-  const conMod = abilityModifier(constitution)
+  const conMod = Math.floor((constitution - 10) / 2)
   return levels.reduce((total, level) => total + Math.max(1, level.hitDie + conMod), 0)
 }
 
@@ -225,11 +303,7 @@ export function calculateLevelUpHpGain(
   constitution: number,
   hpGainRoll: number
 ): number {
-  return Math.max(1, hpGainRoll + abilityModifier(constitution))
-}
-
-export function getFixedHpGainValue(hitDie: number): number {
-  return Math.floor(hitDie / 2) + 1
+  return hitPointGainFromRoll(hitDie, Math.floor((constitution - 10) / 2), hpGainRoll)
 }
 
 export function getMulticlassSkillChoiceConfig(cls: Class | ClassDetail | null): { count: number; from: string[] } | null {
@@ -247,6 +321,86 @@ export function getMulticlassSkillChoiceConfig(cls: Class | ClassDetail | null):
 
   return count > 0 && from.length > 0 ? { count, from } : null
 }
+
+export function deriveLocalCharacter(
+  context: CharacterBuildContext | null
+): DerivedCharacter | null {
+  return context ? deriveCharacter(context) : null
+}
+
+export function buildTypedSpellChoices(args: {
+  spellChoices: string[]
+  spellOptions: SpellOption[]
+  owningClassId: string | null
+  activeSubclassIds?: string[]
+  derived: DerivedCharacter | null
+}): SpellChoiceInput[] {
+  const { spellChoices, spellOptions, owningClassId, activeSubclassIds = [], derived } = args
+  const byId = new Map(spellOptions.map((spell) => [spell.id, spell]))
+  const sourceSummary = owningClassId
+    ? derived?.spellcasting.sources.find((source) => source.classId === owningClassId) ?? null
+    : null
+
+  return spellChoices.map((spellId) => {
+    const spell = byId.get(spellId)
+    const grantingSubclassId = spell?.granted_by_subclasses?.find((subclassId) => activeSubclassIds.includes(subclassId)) ?? null
+    return {
+      spell_id: spellId,
+      character_level_id: null,
+      owning_class_id: owningClassId,
+      granting_subclass_id: grantingSubclassId,
+      acquisition_mode: grantingSubclassId ? 'granted' : (sourceSummary?.mode ?? derived?.spellcasting.mode ?? 'known'),
+      counts_against_selection_limit: spell?.counts_against_selection_limit !== false,
+      source_feature_key: grantingSubclassId ? `subclass_bonus_spell:${grantingSubclassId}` : null,
+    }
+  })
+}
+
+export function buildCombinedSpellSelections(args: {
+  classSpellChoices: string[]
+  spellOptions: SpellOption[]
+  owningClassId: string | null
+  activeSubclassIds?: string[]
+  derived: DerivedCharacter | null
+  featSpellChoices: Record<string, string>
+  featList: Feat[]
+}): SpellChoiceInput[] {
+  const featSpellDefinitions = getFeatSpellChoiceDefinitions(args.featList)
+
+  return [
+    ...buildTypedSpellChoices({
+      spellChoices: args.classSpellChoices,
+      spellOptions: args.spellOptions,
+      owningClassId: args.owningClassId,
+      activeSubclassIds: args.activeSubclassIds,
+      derived: args.derived,
+    }),
+    ...buildTypedFeatSpellChoices({
+      featSpellChoices: args.featSpellChoices,
+      definitions: featSpellDefinitions,
+    }),
+  ]
+}
+
+export function buildTypedFeatChoices(
+  featChoices: string[],
+  featSlotLabels: string[] | undefined
+): FeatChoiceInput[] {
+  return featChoices.map((featId, index) => {
+    if (!featId) return ''
+
+    return {
+      feat_id: featId,
+      character_level_id: null,
+      choice_kind: 'feat',
+      source_feature_key: featSlotLabels?.[index] ? `asi_slot:${featSlotLabels[index]}` : null,
+    }
+  })
+}
+
+export { buildTypedSkillProficiencies }
+export { buildTypedLanguageChoices, buildTypedToolChoices }
+export { buildTypedAbilityBonusChoices }
 
 export function summarizeWizardLegality(result: LegalityResult | null): WizardLegalitySummary {
   if (!result) {
@@ -293,6 +447,8 @@ function humanizeLegalityCheck(check: LegalityResult['checks'][number]): string 
       return 'This build goes past the campaign level cap.'
     case 'skill_proficiencies':
       return 'One or more selected skills are not available to this build.'
+    case 'species_ability_bonus_choices':
+      return 'A flexible species ability bonus is missing or assigned to an invalid ability.'
     case 'multiclass_prerequisites':
       return 'A multiclass choice is missing the required ability scores.'
     case 'subclass_timing':

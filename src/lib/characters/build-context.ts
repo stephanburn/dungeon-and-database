@@ -4,12 +4,22 @@ import type {
   ClassFeatureProgression,
   FeatPrerequisite,
   RuleSet,
+  Sense,
   SkillChoices,
+  SizeCategory,
   SpellcastingProgression,
   SpellcastingType,
   StatMethod,
 } from '@/lib/types/database'
-import { normalizeSkillKey } from '@/lib/skills'
+import {
+  abilityModifier,
+  deriveAbilityScores,
+  deriveCharacterCore,
+  type CharacterAggregate,
+  type DerivedCharacterCore,
+} from '@/lib/characters/derived'
+import { getFixedBackgroundLanguages } from '@/lib/characters/language-tool-provenance'
+import { normalizeSkillKey, SAVING_THROW_NAMES, SKILLS, type SkillKey } from '@/lib/skills'
 
 export type AbilityKey = 'str' | 'dex' | 'con' | 'int' | 'wis' | 'cha'
 
@@ -31,6 +41,8 @@ export interface BuildClassSummary {
   classId: string
   name: string
   level: number
+  hitDie: number
+  hpRoll: number | null
   source: string
   spellcastingType: SpellcastingType | null
   spellcastingProgression: SpellcastingProgression | null
@@ -54,6 +66,7 @@ export interface BuildBackgroundSummary {
   skillChoiceCount: number
   skillChoiceFrom: string[]
   toolProficiencies: string[]
+  fixedLanguages: string[]
   backgroundFeatId: string | null
 }
 
@@ -64,6 +77,9 @@ export interface BuildSpellSummary {
   classes: string[]
   source: string
   grantedBySubclassIds: string[]
+  owningClassId?: string | null
+  acquisitionMode?: string
+  sourceFeatureKey?: string | null
   countsAgainstSelectionLimit: boolean
 }
 
@@ -80,14 +96,25 @@ export interface CharacterBuildContext {
   campaignRuleSet: RuleSet
   allSourceRuleSets: Record<string, RuleSet>
   statMethod: StatMethod
+  persistedHpMax: number
   baseStats: Record<AbilityKey, number>
   statRolls: Array<{
     assigned_to: string
     roll_set: number[]
   }>
   skillProficiencies: string[]
+  selectedAbilityBonuses: Partial<Record<AbilityKey, number>>
+  speciesName: string | null
+  selectedLanguages: string[]
+  selectedTools: string[]
   speciesSource: string | null
   speciesAbilityBonuses: Partial<Record<AbilityKey, number>>
+  speciesSpeed: number | null
+  speciesSize: SizeCategory | null
+  speciesLanguages: string[]
+  speciesSenses: Sense[]
+  speciesDamageResistances: string[]
+  speciesConditionImmunities: string[]
   background: BuildBackgroundSummary | null
   backgroundFeat: BuildFeatSummary | null
   classes: BuildClassSummary[]
@@ -138,6 +165,122 @@ export interface CharacterProgressionSummary {
   }
 }
 
+export interface DerivedSavingThrowSummary {
+  ability: AbilityKey
+  name: string
+  proficient: boolean
+  modifier: number
+}
+
+export interface DerivedSkillSummary {
+  key: SkillKey
+  name: string
+  ability: AbilityKey
+  proficient: boolean
+  modifier: number
+}
+
+export interface DerivedProficiencySummary {
+  skills: string[]
+  savingThrows: string[]
+  armor: string[]
+  weapons: string[]
+  tools: string[]
+  all: string[]
+}
+
+export interface DerivedAcSummary {
+  value: number
+  formula: string
+}
+
+export interface DerivedSubclassState {
+  classId: string
+  className: string
+  currentLevel: number
+  requiredAt: number
+  subclassId: string | null
+  subclassName: string | null
+  status: 'not_yet_available' | 'available_unselected' | 'selected' | 'selected_too_early'
+}
+
+export interface DerivedFeatureSummary {
+  classId: string
+  className: string
+  level: number
+  name: string
+  subclassName: string | null
+}
+
+export interface DerivedSpellcastingSourceSummary {
+  classId: string
+  className: string
+  classLevel: number
+  spellcastingType: SpellcastingType | null
+  mode: CharacterProgressionSummary['spellSelectionMode']
+  cantripSelectionCap: number | null
+  leveledSpellSelectionCap: number
+  selectionSummary: string | null
+  selectedSpellCountsByLevel: Record<number, number>
+  selectedSpells: Array<{
+    id: string
+    name: string
+    level: number
+    source: string
+    granted: boolean
+    countsAgainstSelectionLimit: boolean
+  }>
+}
+
+export interface DerivedSpellcastingSummary {
+  className: string | null
+  mode: CharacterProgressionSummary['spellSelectionMode']
+  maxSpellLevel: number
+  spellSlots: number[]
+  pactSpellSlots: Array<{ classId: string; className: string; slots: number[] }>
+  cantripSelectionCap: number | null
+  leveledSpellSelectionCap: number
+  selectionSummary: string | null
+  selectedSpells: Array<{
+    id: string
+    name: string
+    level: number
+    source: string
+    granted: boolean
+    countsAgainstSelectionLimit: boolean
+  }>
+  selectedSpellCountsByLevel: Record<number, number>
+  freePreparedSpellIds: string[]
+  grantedSpellIds: string[]
+  sources: DerivedSpellcastingSourceSummary[]
+}
+
+export interface DerivedIssueSummary {
+  key: string
+  message: string
+  severity: 'error' | 'warning'
+}
+
+export type DerivedCharacter = DerivedCharacterCore & CharacterProgressionSummary & {
+  savingThrows: DerivedSavingThrowSummary[]
+  skills: DerivedSkillSummary[]
+  proficiencies: DerivedProficiencySummary
+  initiative: number
+  passivePerception: number
+  speed: number | null
+  size: SizeCategory | null
+  languages: string[]
+  senses: Sense[]
+  damageResistances: string[]
+  conditionImmunities: string[]
+  armorClass: DerivedAcSummary
+  subclassStates: DerivedSubclassState[]
+  features: DerivedFeatureSummary[]
+  spellcasting: DerivedSpellcastingSummary
+  blockingIssues: DerivedIssueSummary[]
+  warnings: DerivedIssueSummary[]
+}
+
 export function progressionRowToSummary(
   row: ClassFeatureProgression,
   featureNames: string[]
@@ -165,16 +308,14 @@ function spellcastingContribution(type: SpellcastingType | null, level: number):
     case 'full':
       return level
     case 'half':
+      // 2014 multiclass slot progression rounds half-caster levels down when combining caster levels.
       return Math.floor(level / 2)
     case 'third':
+      // 2014 multiclass slot progression also rounds third-caster levels down.
       return Math.floor(level / 3)
     default:
       return 0
   }
-}
-
-function abilityModifier(score: number): number {
-  return Math.floor((score - 10) / 2)
 }
 
 function resolvePreparedBase(formula: SpellcastingProgression['prepared_formula'], classLevel: number, fixed = 0): number {
@@ -203,6 +344,24 @@ function maxUnlockedSpellLevel(slots: number[]): number {
   return 0
 }
 
+function buildSpellSelectionSummary(
+  className: string,
+  classLevel: number,
+  mode: CharacterProgressionSummary['spellSelectionMode'],
+  leveledCap: number
+): string | null {
+  if (mode === 'known') {
+    return `${className} knows ${leveledCap} leveled spells at level ${classLevel}.`
+  }
+  if (mode === 'spellbook') {
+    return `${className} can prepare ${leveledCap} spells from its spellbook.`
+  }
+  if (mode === 'prepared') {
+    return `${className} can prepare ${leveledCap} spells.`
+  }
+  return null
+}
+
 export function deriveCharacterProgression(context: CharacterBuildContext): CharacterProgressionSummary {
   const totalLevel = context.classes.reduce((sum, cls) => sum + cls.level, 0)
   const totalAsiSlots = context.classes.reduce(
@@ -228,6 +387,7 @@ export function deriveCharacterProgression(context: CharacterBuildContext): Char
   if (nonPactClasses.length === 1 && context.classes.length === 1) {
     spellSlots = nonPactClasses[0].spellSlots
   } else if (multiclassCasterLevel > 0) {
+    // Pact Magic stays on its own track in 2014, so only non-pact casters feed the shared multiclass slot table.
     spellSlots = context.multiclassSpellSlotsByCasterLevel[multiclassCasterLevel] ?? []
   }
 
@@ -277,6 +437,8 @@ export function deriveCharacterProgression(context: CharacterBuildContext): Char
   const primarySpellcastingClass = context.classes.find(
     (cls) => cls.spellcastingType && cls.spellcastingType !== 'none' && cls.spellcastingProgression?.mode && cls.spellcastingProgression.mode !== 'none'
   ) ?? null
+  // Batch 1 intentionally exposes a single primary selection model here.
+  // Multiclass builds with multiple distinct preparation/known systems will need a richer per-source summary later.
   const spellcastingProfile = primarySpellcastingClass?.spellcastingProgression ?? null
   const cantripSelectionCap = spellcastingProfile?.cantrips_known_by_level?.[Math.max((primarySpellcastingClass?.level ?? 1) - 1, 0)] ?? null
 
@@ -288,7 +450,6 @@ export function deriveCharacterProgression(context: CharacterBuildContext): Char
     spellSelectionMode = spellcastingProfile.mode
     if (spellcastingProfile.mode === 'known') {
       leveledCapFromProgression = spellcastingProfile.spells_known_by_level?.[primarySpellcastingClass.level - 1] ?? 0
-      spellSelectionSummary = `${primarySpellcastingClass.name} knows ${leveledCapFromProgression} leveled spells at level ${primarySpellcastingClass.level}.`
     } else if (spellcastingProfile.mode === 'prepared' || spellcastingProfile.mode === 'spellbook') {
       const ability = spellcastingProfile.spellcasting_ability
       const abilityMod = ability ? abilityModifier(adjustedScores[ability]) : 0
@@ -299,11 +460,13 @@ export function deriveCharacterProgression(context: CharacterBuildContext): Char
       )
       const totalPrepared = preparedBase + (spellcastingProfile.prepared_add_ability_mod ? abilityMod : 0)
       leveledCapFromProgression = Math.max(spellcastingProfile.prepared_min ?? 0, totalPrepared)
-      spellSelectionSummary =
-        spellcastingProfile.mode === 'spellbook'
-          ? `${primarySpellcastingClass.name} can prepare ${leveledCapFromProgression} spells from its spellbook.`
-          : `${primarySpellcastingClass.name} can prepare ${leveledCapFromProgression} spells.`
     }
+    spellSelectionSummary = buildSpellSelectionSummary(
+      primarySpellcastingClass.name,
+      primarySpellcastingClass.level,
+      spellcastingProfile.mode,
+      leveledCapFromProgression
+    )
   }
 
   return {
@@ -334,41 +497,288 @@ export function deriveCharacterProgression(context: CharacterBuildContext): Char
 export function getAdjustedAbilityScores(
   context: CharacterBuildContext
 ): Record<AbilityKey, number> {
+  const abilities = deriveAbilityScores(context.baseStats, combineAbilityBonuses(context))
+
   return {
-    str: context.baseStats.str + (context.speciesAbilityBonuses.str ?? 0),
-    dex: context.baseStats.dex + (context.speciesAbilityBonuses.dex ?? 0),
-    con: context.baseStats.con + (context.speciesAbilityBonuses.con ?? 0),
-    int: context.baseStats.int + (context.speciesAbilityBonuses.int ?? 0),
-    wis: context.baseStats.wis + (context.speciesAbilityBonuses.wis ?? 0),
-    cha: context.baseStats.cha + (context.speciesAbilityBonuses.cha ?? 0),
+    str: abilities.str.adjusted,
+    dex: abilities.dex.adjusted,
+    con: abilities.con.adjusted,
+    int: abilities.int.adjusted,
+    wis: abilities.wis.adjusted,
+    cha: abilities.cha.adjusted,
+  }
+}
+
+export function toCharacterAggregate(context: CharacterBuildContext): CharacterAggregate {
+  return {
+    baseStats: context.baseStats,
+    speciesAbilityBonuses: combineAbilityBonuses(context),
+    persistedHpMax: context.persistedHpMax,
+    classes: context.classes.map((cls) => ({
+      classId: cls.classId,
+      className: cls.name,
+      level: cls.level,
+      hitDie: cls.hitDie,
+      hpRoll: cls.hpRoll,
+    })),
+  }
+}
+
+export function deriveCharacter(context: CharacterBuildContext): DerivedCharacter {
+  const core = deriveCharacterCore(toCharacterAggregate(context))
+  const progression = deriveCharacterProgression(context)
+  const adjustedScores = getAdjustedAbilityScores(context)
+  const proficiencyBonus = core.proficiencyBonus
+
+  const selectedSkillProficiencies = new Set<string>(context.skillProficiencies.map(normalizeSkillKey))
+  const backgroundSkillProficiencies = new Set<string>((context.background?.skillProficiencies ?? []).map(normalizeSkillKey))
+  const savingThrowProficiencies = new Set<string>(
+    context.classes.flatMap((cls) => cls.savingThrowProficiencies.map((save) => save.toLowerCase()))
+  )
+  const armorProficiencies = new Set<string>(
+    context.classes.flatMap((cls) => cls.armorProficiencies.map((item) => item.toLowerCase()))
+  )
+  const weaponProficiencies = new Set<string>(
+    context.classes.flatMap((cls) => cls.weaponProficiencies.map((item) => item.toLowerCase()))
+  )
+  const toolProficiencies = new Set<string>(
+    context.classes.flatMap((cls) => cls.toolProficiencies.map((item) => item.toLowerCase()))
+  )
+
+  for (const item of context.background?.toolProficiencies ?? []) {
+    toolProficiencies.add(item.toLowerCase())
+  }
+  for (const item of context.selectedTools) {
+    toolProficiencies.add(item.toLowerCase())
+  }
+
+  const skills = SKILLS.map((skill) => {
+    const proficient = backgroundSkillProficiencies.has(skill.key) || selectedSkillProficiencies.has(skill.key)
+
+    return {
+      key: skill.key,
+      name: skill.name,
+      ability: skill.ability,
+      proficient,
+      modifier: abilityModifier(adjustedScores[skill.ability]) + (proficient ? proficiencyBonus : 0),
+    }
+  })
+
+  const savingThrows: DerivedSavingThrowSummary[] = (['str', 'dex', 'con', 'int', 'wis', 'cha'] as AbilityKey[]).map((ability) => ({
+    ability,
+    name: SAVING_THROW_NAMES[ability],
+    proficient: savingThrowProficiencies.has(ability),
+    modifier: abilityModifier(adjustedScores[ability]) + (savingThrowProficiencies.has(ability) ? proficiencyBonus : 0),
+  }))
+
+  const proficiencies: DerivedProficiencySummary = {
+    skills: Array.from(new Set(skills.filter((skill) => skill.proficient).map((skill) => skill.key))),
+    savingThrows: Array.from(savingThrowProficiencies),
+    armor: Array.from(armorProficiencies),
+    weapons: Array.from(weaponProficiencies),
+    tools: Array.from(toolProficiencies),
+    all: Array.from(
+      new Set([
+        ...skills.filter((skill) => skill.proficient).map((skill) => skill.key),
+        ...Array.from(savingThrowProficiencies),
+        ...Array.from(armorProficiencies),
+        ...Array.from(weaponProficiencies),
+        ...Array.from(toolProficiencies),
+      ])
+    ),
+  }
+
+  const passivePerception = 10 + (skills.find((skill) => skill.key === 'perception')?.modifier ?? abilityModifier(adjustedScores.wis))
+  const dexModifier = abilityModifier(adjustedScores.dex)
+  const conModifier = abilityModifier(adjustedScores.con)
+  const wisModifier = abilityModifier(adjustedScores.wis)
+  const classNames = context.classes.map((cls) => cls.name)
+  const subclassStates: DerivedSubclassState[] = context.classes.map((cls) => {
+    const available = cls.level >= cls.subclassChoiceLevel
+    let status: DerivedSubclassState['status'] = 'not_yet_available'
+
+    if (cls.subclass && cls.level < cls.subclassChoiceLevel) {
+      status = 'selected_too_early'
+    } else if (cls.subclass) {
+      status = 'selected'
+    } else if (available) {
+      status = 'available_unselected'
+    }
+
+    return {
+      classId: cls.classId,
+      className: cls.name,
+      currentLevel: cls.level,
+      requiredAt: cls.subclassChoiceLevel,
+      subclassId: cls.subclass?.id ?? null,
+      subclassName: cls.subclass?.name ?? null,
+      status,
+    }
+  })
+
+  const features: DerivedFeatureSummary[] = context.classes.flatMap((cls) =>
+    cls.progression.flatMap((row) =>
+      row.featureNames.map((name) => ({
+        classId: cls.classId,
+        className: cls.name,
+        level: row.level,
+        name,
+        subclassName: cls.subclass?.name ?? null,
+      }))
+    )
+  )
+
+  const armorClass = (() => {
+    const warforgedIntegratedBonus = context.speciesName === 'Warforged' && context.speciesSource === 'ERftLW' ? 1 : 0
+    if (classNames.includes('Barbarian')) {
+      return {
+        value: 10 + dexModifier + conModifier + warforgedIntegratedBonus,
+        formula: warforgedIntegratedBonus > 0
+          ? '10 + DEX + CON + 1 (Unarmored Defense, Integrated Protection)'
+          : '10 + DEX + CON (Unarmored Defense)',
+      }
+    }
+    if (classNames.includes('Monk')) {
+      return {
+        value: 10 + dexModifier + wisModifier + warforgedIntegratedBonus,
+        formula: warforgedIntegratedBonus > 0
+          ? '10 + DEX + WIS + 1 (Unarmored Defense, Integrated Protection)'
+          : '10 + DEX + WIS (Unarmored Defense)',
+      }
+    }
+    return {
+      value: 10 + dexModifier + warforgedIntegratedBonus,
+      formula: warforgedIntegratedBonus > 0
+        ? '10 + DEX + 1 (Unarmored, Integrated Protection)'
+        : '10 + DEX (Unarmored)',
+    }
+  })()
+
+  const selectedSpellEntries = context.selectedSpells
+    .filter((spell) => spell.level === 0 || spell.level <= progression.maxSpellLevel)
+    .map((spell) => ({
+      id: spell.id,
+      name: spell.name,
+      level: spell.level,
+      source: spell.source,
+      granted:
+        spell.acquisitionMode === 'granted' ||
+        context.grantedSpellIds.includes(spell.id) ||
+        context.freePreparedSpellIds.includes(spell.id),
+      countsAgainstSelectionLimit: spell.countsAgainstSelectionLimit,
+    }))
+
+  const selectedSpellCountsByLevel = Object.fromEntries(
+    Array.from({ length: 10 }, (_, level) => [
+      level,
+      selectedSpellEntries.filter((spell) => spell.level === level).length,
+    ])
+      .filter(([, count]) => count > 0)
+  )
+
+  const spellcastingSources: DerivedSpellcastingSourceSummary[] = context.classes.flatMap((cls) => {
+    const profile = cls.spellcastingProgression
+    if (!cls.spellcastingType || cls.spellcastingType === 'none' || !profile || !profile.mode || profile.mode === 'none') {
+      return []
+    }
+
+    const cantripCap = profile.cantrips_known_by_level?.[Math.max(cls.level - 1, 0)] ?? null
+    let leveledCap = 0
+
+    if (profile.mode === 'known') {
+      leveledCap = profile.spells_known_by_level?.[cls.level - 1] ?? 0
+    } else if (profile.mode === 'prepared' || profile.mode === 'spellbook') {
+      const ability = profile.spellcasting_ability
+      const abilityMod = ability ? abilityModifier(adjustedScores[ability]) : 0
+      const preparedBase = resolvePreparedBase(
+        profile.prepared_formula,
+        cls.level,
+        profile.prepared_fixed ?? 0
+      )
+      const totalPrepared = preparedBase + (profile.prepared_add_ability_mod ? abilityMod : 0)
+      leveledCap = Math.max(profile.prepared_min ?? 0, totalPrepared)
+    }
+
+    const sourceSelectedSpells = selectedSpellEntries.filter((spell) =>
+      context.selectedSpells.some((selected) =>
+        selected.id === spell.id && (
+          selected.owningClassId === cls.classId ||
+          (
+            selected.owningClassId == null &&
+            !selected.sourceFeatureKey?.startsWith('feat_spell:') &&
+            selected.classes.includes(cls.classId)
+          ) ||
+          selected.grantedBySubclassIds.includes(cls.subclass?.id ?? '')
+        )
+      )
+    )
+
+    const sourceSelectedSpellCountsByLevel = Object.fromEntries(
+      Array.from({ length: 10 }, (_, level) => [
+        level,
+        sourceSelectedSpells.filter((spell) => spell.level === level).length,
+      ]).filter(([, count]) => count > 0)
+    )
+
+    return [{
+      classId: cls.classId,
+      className: cls.name,
+      classLevel: cls.level,
+      spellcastingType: cls.spellcastingType,
+      mode: profile.mode,
+      cantripSelectionCap: cantripCap,
+      leveledSpellSelectionCap: leveledCap,
+      selectionSummary: buildSpellSelectionSummary(cls.name, cls.level, profile.mode, leveledCap),
+      selectedSpellCountsByLevel: sourceSelectedSpellCountsByLevel,
+      selectedSpells: sourceSelectedSpells,
+    }]
+  })
+
+  return {
+    ...core,
+    ...progression,
+    savingThrows,
+    skills,
+    proficiencies,
+    initiative: abilityModifier(adjustedScores.dex),
+    passivePerception,
+    speed: context.speciesSpeed,
+    size: context.speciesSize,
+    languages: Array.from(new Set([
+      ...context.speciesLanguages,
+      ...(context.background?.fixedLanguages ?? []),
+      ...context.selectedLanguages,
+    ])),
+    senses: context.speciesSenses,
+    damageResistances: context.speciesDamageResistances,
+    conditionImmunities: context.speciesConditionImmunities,
+    armorClass,
+    subclassStates,
+    features,
+    spellcasting: {
+      className: context.classes.find(
+        (cls) => cls.spellcastingType && cls.spellcastingType !== 'none' && cls.spellcastingProgression?.mode && cls.spellcastingProgression.mode !== 'none'
+      )?.name ?? null,
+      mode: progression.spellSelectionMode,
+      maxSpellLevel: progression.maxSpellLevel,
+      spellSlots: progression.spellSlots,
+      pactSpellSlots: progression.pactSpellSlots,
+      cantripSelectionCap: progression.cantripSelectionCap,
+      leveledSpellSelectionCap: progression.leveledSpellSelectionCap,
+      selectionSummary: progression.spellSelectionSummary,
+      selectedSpells: selectedSpellEntries,
+      selectedSpellCountsByLevel,
+      freePreparedSpellIds: context.freePreparedSpellIds,
+      grantedSpellIds: context.grantedSpellIds,
+      sources: spellcastingSources,
+    },
+    blockingIssues: [],
+    warnings: [],
   }
 }
 
 export function collectKnownProficiencies(context: CharacterBuildContext): Set<string> {
-  const proficiencies = new Set<string>()
-  const background = context.background
-
-  for (const skill of context.skillProficiencies) {
-    proficiencies.add(normalizeSkillKey(skill))
-  }
-  for (const cls of context.classes) {
-    for (const save of cls.savingThrowProficiencies) proficiencies.add(save.toLowerCase())
-    for (const item of cls.armorProficiencies) proficiencies.add(item.toLowerCase())
-    for (const item of cls.weaponProficiencies) proficiencies.add(item.toLowerCase())
-    for (const item of cls.toolProficiencies) proficiencies.add(item.toLowerCase())
-  }
-  if (background) {
-    for (const skill of background.skillProficiencies) {
-      proficiencies.add(normalizeSkillKey(skill))
-    }
-    for (const skill of background.skillChoiceFrom) {
-      if (context.skillProficiencies.includes(normalizeSkillKey(skill))) {
-        proficiencies.add(normalizeSkillKey(skill))
-      }
-    }
-    for (const item of background.toolProficiencies) proficiencies.add(item.toLowerCase())
-  }
-  return proficiencies
+  return new Set(deriveCharacter(context).proficiencies.all)
 }
 
 export function createBuildBackgroundSummary(background: Background | null): BuildBackgroundSummary | null {
@@ -381,8 +791,21 @@ export function createBuildBackgroundSummary(background: Background | null): Bui
     skillChoiceCount: background.skill_choice_count,
     skillChoiceFrom: background.skill_choice_from.map(normalizeSkillKey),
     toolProficiencies: background.tool_proficiencies,
+    fixedLanguages: getFixedBackgroundLanguages(background),
     backgroundFeatId: background.background_feat_id,
   }
+}
+
+function combineAbilityBonuses(context: Pick<CharacterBuildContext, 'speciesAbilityBonuses' | 'selectedAbilityBonuses'>) {
+  const combined: Partial<Record<AbilityKey, number>> = { ...context.speciesAbilityBonuses }
+
+  for (const ability of ['str', 'dex', 'con', 'int', 'wis', 'cha'] as AbilityKey[]) {
+    if ((context.selectedAbilityBonuses[ability] ?? 0) > 0) {
+      combined[ability] = (combined[ability] ?? 0) + (context.selectedAbilityBonuses[ability] ?? 0)
+    }
+  }
+
+  return combined
 }
 
 export { normalizeToolProficiencies }

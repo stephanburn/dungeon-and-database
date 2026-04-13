@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -19,14 +19,29 @@ import { Separator } from '@/components/ui/separator'
 import { StatBlock } from './StatBlock'
 import { StatBlockView } from './StatBlockView'
 import { SkillsCard } from './SkillsCard'
+import { LanguagesToolsCard } from './LanguagesToolsCard'
+import { SpeciesAbilityBonusCard } from './SpeciesAbilityBonusCard'
 import { SpellsCard } from './SpellsCard'
 import { FeatsCard } from './FeatsCard'
+import { FeatSpellChoicesCard } from './FeatSpellChoicesCard'
 import { CharacterSheetHeader } from './CharacterSheetHeader'
 import { LegalityBadge } from './LegalityBadge'
 import { SourceTag } from '@/components/shared/SourceTag'
 import { useToast } from '@/hooks/use-toast'
+import {
+  buildCombinedSpellSelections,
+  buildTypedFeatChoices,
+  buildTypedAbilityBonusChoices,
+  buildTypedLanguageChoices,
+  buildTypedSkillProficiencies,
+  buildTypedToolChoices,
+  type SpellOption,
+} from '@/lib/characters/wizard-helpers'
+import { deriveCharacterCore, type DerivedCharacterCore } from '@/lib/characters/derived'
+import { buildSpeciesAbilityBonusMap, type AbilityKey as SpeciesChoiceAbilityKey } from '@/lib/characters/species-ability-bonus-provenance'
+import type { CharacterWithRelations } from '@/lib/characters/load-character'
 import type {
-  Character, CharacterLevel, Species, Background,
+  Species, Background,
   Class, Subclass, Feat, Alignment, StatMethod, AbilityScoreBonus,
 } from '@/lib/types/database'
 import type { LegalityResult } from '@/lib/legality/engine'
@@ -49,18 +64,17 @@ const ALIGNMENT_LABELS: Record<Alignment, string> = {
 
 // ── Types ──────────────────────────────────────────────────
 
-interface CharacterWithRelations extends Character {
-  species: Species | null
-  background: Background | null
-  character_levels: CharacterLevel[]
-}
-
 interface CharacterSheetProps {
   character: CharacterWithRelations
   campaignId: string
   initialSkillProficiencies?: string[]
+  initialAbilityBonusChoices?: SpeciesChoiceAbilityKey[]
+  initialLanguageChoices?: string[]
+  initialToolChoices?: string[]
   initialSpellChoices?: string[]
+  initialFeatSpellChoices?: Record<string, string>
   initialFeatChoices?: string[]
+  initialLegalityResult?: LegalityResult | null
   readOnly?: boolean
   isDm?: boolean
 }
@@ -115,8 +129,13 @@ export function CharacterSheet({
   character: initial,
   campaignId,
   initialSkillProficiencies = [],
+  initialAbilityBonusChoices = [],
+  initialLanguageChoices = [],
+  initialToolChoices = [],
   initialSpellChoices = [],
+  initialFeatSpellChoices = {},
   initialFeatChoices = [],
+  initialLegalityResult = null,
   readOnly = false,
   isDm = false,
 }: CharacterSheetProps) {
@@ -154,19 +173,31 @@ export function CharacterSheet({
   const [classList, setClassList] = useState<Class[]>([])
   const [subclassMap, setSubclassMap] = useState<Record<string, Subclass[]>>({})
   const [featList, setFeatList] = useState<Feat[]>([])
+  const [spellOptions, setSpellOptions] = useState<SpellOption[]>([])
 
   const [skillProficiencies, setSkillProficiencies] = useState<string[]>(initialSkillProficiencies)
+  const [abilityBonusChoices, setAbilityBonusChoices] = useState<SpeciesChoiceAbilityKey[]>(initialAbilityBonusChoices)
+  const [languageChoices, setLanguageChoices] = useState<string[]>(initialLanguageChoices)
+  const [toolChoices, setToolChoices] = useState<string[]>(initialToolChoices)
   const [spellChoices, setSpellChoices] = useState<string[]>(initialSpellChoices)
   const [featChoices, setFeatChoices] = useState<string[]>(initialFeatChoices)
+  const [featSpellChoices, setFeatSpellChoices] = useState<Record<string, string>>(initialFeatSpellChoices)
+  const [featSpellOptions, setFeatSpellOptions] = useState<SpellOption[]>([])
 
   // UI state
   const [saving, setSaving] = useState(false)
   const [submitting, setSubmitting] = useState(false)
-  const [legalityResult, setLegalityResult] = useState<LegalityResult | null>(null)
+  const [legalityResult, setLegalityResult] = useState<LegalityResult | null>(initialLegalityResult)
   const [status, setStatus] = useState(initial.status)
   const [dmNotes, setDmNotes] = useState(initial.dm_notes ?? '')
   const [highlightedSection, setHighlightedSection] = useState<SectionId | null>(null)
   const highlightTimerRef = useRef<number | null>(null)
+  const firstClassId = levels[0]?.class_id
+  const firstClassLevel = levels[0]?.level ?? 0
+  const firstClassSubclassIds = levels
+    .filter((level) => level.class_id === firstClassId && level.subclass_id)
+    .map((level) => level.subclass_id as string)
+  const selectedClass = classList.find((c) => c.id === firstClassId) ?? null
 
   // Load content options filtered by campaign allowlist
   useEffect(() => {
@@ -207,6 +238,24 @@ export function CharacterSheet({
     })
   }, [levels, campaignId, subclassMap])
 
+  useEffect(() => {
+    if (!firstClassId || !selectedClass?.spellcasting_type || selectedClass.spellcasting_type === 'none') {
+      setSpellOptions([])
+      return
+    }
+
+    const params = new URLSearchParams({
+      campaign_id: campaignId,
+      class_id: firstClassId,
+      class_level: String(firstClassLevel),
+    })
+    for (const subclassId of firstClassSubclassIds) params.append('subclass_id', subclassId)
+
+    fetch(`/api/content/spells?${params.toString()}`)
+      .then((response) => response.json())
+      .then((data: SpellOption[]) => setSpellOptions(Array.isArray(data) ? data : []))
+  }, [campaignId, firstClassId, firstClassLevel, firstClassSubclassIds, selectedClass])
+
   function handleStatChange(stat: string, value: number) {
     setStats((prev) => ({ ...prev, [stat]: value }))
   }
@@ -243,9 +292,28 @@ export function CharacterSheet({
           species_id: speciesId || null,
           background_id: backgroundId || null,
           levels,
-          skill_proficiencies: skillProficiencies,
-          spell_choices: spellChoices,
-          feat_choices: featChoices,
+          skill_proficiencies: buildTypedSkillProficiencies({
+            skillProficiencies,
+            background: selectedBackground,
+            selectedClass,
+            species: selectedSpecies,
+          }),
+          ability_bonus_choices: buildTypedAbilityBonusChoices(
+            selectedSpecies,
+            abilityBonusChoices
+          ),
+          language_choices: buildTypedLanguageChoices({
+            languageChoices,
+            background: selectedBackground,
+            species: selectedSpecies,
+          }),
+          tool_choices: buildTypedToolChoices({
+            toolChoices,
+            selectedClass,
+            species: selectedSpecies,
+          }),
+          spell_choices: combinedSpellSelections,
+          feat_choices: buildTypedFeatChoices(featChoices, derivedProgression?.featSlotLabels),
           ...(isDm ? { dm_notes: dmNotes } : {}),
         }),
       })
@@ -286,40 +354,87 @@ export function CharacterSheet({
     }
   }
 
-  const totalLevel = levels.reduce((sum, l) => sum + l.level, 0)
   const statusInfo = STATUS_LABELS[status] ?? STATUS_LABELS.draft
 
   // Racial bonuses from the currently selected species
   const selectedSpecies =
     speciesList.find((s) => s.id === speciesId) ??
     (initial.species?.id === speciesId ? initial.species : null)
+  const selectedBackground =
+    backgroundList.find((b) => b.id === backgroundId) ??
+    (initial.background?.id === backgroundId ? initial.background : null)
   const racialBonuses: Partial<Record<string, number>> = {}
   if (selectedSpecies?.ability_score_bonuses) {
     ;(selectedSpecies.ability_score_bonuses as AbilityScoreBonus[]).forEach(({ ability, bonus }) => {
       racialBonuses[ability] = (racialBonuses[ability] ?? 0) + bonus
     })
   }
-  // First class (used for skill choices and saving throws)
-  const firstClassId = levels[0]?.class_id
-  const firstClassLevel = levels[0]?.level ?? 0
-  const firstClassSubclassIds = levels
-    .filter((level) => level.class_id === firstClassId && level.subclass_id)
-    .map((level) => level.subclass_id as string)
-  const selectedClass = classList.find((c) => c.id === firstClassId) ?? null
+  const chosenSpeciesBonuses = buildSpeciesAbilityBonusMap(selectedSpecies, abilityBonusChoices)
+  ;(Object.entries(chosenSpeciesBonuses) as Array<[string, number]>).forEach(([ability, bonus]) => {
+    racialBonuses[ability] = (racialBonuses[ability] ?? 0) + bonus
+  })
+  const selectedBg = backgroundList.find((b) => b.id === backgroundId) ?? initial.background
+  const backgroundFeat = selectedBg?.background_feat_id
+    ? (featList.find((f) => f.id === selectedBg.background_feat_id) ?? null)
+    : null
 
   const failedChecks = legalityResult?.checks.filter((c) => !c.passed) ?? []
+  const derivedCharacter = legalityResult?.derived ?? null
   const derivedProgression = legalityResult?.derived ?? null
+  const activeFeatSpellFeats = useMemo(
+    () => [
+      ...featChoices
+        .map((featId) => featList.find((feat) => feat.id === featId))
+        .filter((feat): feat is Feat => Boolean(feat)),
+      ...(backgroundFeat ? [backgroundFeat] : []),
+    ],
+    [backgroundFeat, featChoices, featList]
+  )
+  const combinedSpellSelections = useMemo(
+    () => buildCombinedSpellSelections({
+      classSpellChoices: spellChoices,
+      spellOptions: [...spellOptions, ...featSpellOptions],
+      owningClassId: firstClassId ?? null,
+      activeSubclassIds: firstClassSubclassIds,
+      derived: derivedCharacter,
+      featSpellChoices,
+      featList: activeFeatSpellFeats,
+    }),
+    [
+      activeFeatSpellFeats,
+      classList,
+      derivedCharacter,
+      featSpellChoices,
+      featSpellOptions,
+      firstClassId,
+      firstClassSubclassIds,
+      spellChoices,
+      spellOptions,
+    ]
+  )
+  const derivedCore: DerivedCharacterCore = deriveCharacterCore({
+    baseStats: stats,
+    speciesAbilityBonuses: racialBonuses as Partial<Record<'str' | 'dex' | 'con' | 'int' | 'wis' | 'cha', number>>,
+    persistedHpMax: hpMax,
+    classes: levels.map((level) => {
+      const classDetail = classList.find((cls) => cls.id === level.class_id)
+
+      return {
+        classId: level.class_id,
+        className: classDetail?.name ?? 'Class',
+        level: level.level,
+        hitDie: classDetail?.hit_die ?? null,
+        hpRoll: level.hp_roll,
+      }
+    }),
+  })
   const canEdit = !readOnly && (status === 'draft' || status === 'changes_requested' || isDm)
   const canSubmit = !readOnly && (status === 'draft' || status === 'changes_requested')
-  const errorCount = failedChecks.filter((c) => c.severity === 'error').length
+  const errorCount = derivedCharacter?.blockingIssues.length ?? failedChecks.filter((c) => c.severity === 'error').length
 
-  const mod = (base: number, racial: number) => Math.floor((base + racial - 10) / 2)
-  const profBonus = totalLevel > 0 ? Math.floor((totalLevel - 1) / 4) + 2 : 2
-  const dexMod = mod(stats.dex, racialBonuses['dex'] ?? 0)
-  const wisMod = mod(stats.wis, racialBonuses['wis'] ?? 0)
   const perceptionProf = skillProficiencies.includes('perception')
-  const passivePerception = 10 + wisMod + (perceptionProf ? profBonus : 0)
-  const speed = selectedSpecies?.speed ?? null
+  const passivePerception = derivedCharacter?.passivePerception ?? (10 + derivedCore.abilities.wis.modifier + (perceptionProf ? derivedCore.proficiencyBonus : 0))
+  const speed = derivedCharacter?.speed ?? selectedSpecies?.speed ?? null
   const fmt = (n: number) => (n >= 0 ? `+${n}` : `${n}`)
 
   const checkSectionMap: Record<string, SectionId> = {
@@ -330,6 +445,7 @@ export function CharacterSheet({
     level_cap: 'identity-class',
     multiclass_skill_validation: 'stats-skills',
     skill_proficiencies: 'stats-skills',
+    species_ability_bonus_choices: 'stats-skills',
     multiclass_prerequisites: 'identity-class',
     subclass_timing: 'identity-class',
     feat_prerequisites: 'spells-feats',
@@ -362,14 +478,14 @@ export function CharacterSheet({
     <div className="space-y-6">
       <CharacterSheetHeader
         name={name}
-        totalLevel={totalLevel}
+        totalLevel={derivedCore.totalLevel}
         campaignId={campaignId}
         statusLabel={statusInfo.label}
         statusClassName={statusInfo.colour}
         legalityPassed={legalityResult?.passed ?? null}
         legalityErrorCount={errorCount}
-        hpMax={hpMax}
-        initiative={fmt(dexMod)}
+        hpMax={derivedCore.hitPoints.max}
+        initiative={fmt(derivedCharacter?.initiative ?? derivedCore.abilities.dex.modifier)}
         speed={speed !== null ? `${speed} ft` : '—'}
         passivePerception={passivePerception}
         canEdit={canEdit}
@@ -390,22 +506,25 @@ export function CharacterSheet({
       )}
 
       {/* Legality errors */}
-      {legalityResult && failedChecks.length > 0 && (
+      {legalityResult && ((derivedCharacter?.blockingIssues.length ?? 0) > 0 || (derivedCharacter?.warnings.length ?? 0) > 0) && (
         <Card className="border-rose-500/20 bg-rose-500/10">
           <CardHeader className="pb-2">
           <CardTitle className="text-sm text-rose-100">What needs attention</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
-          {failedChecks.map((check) => (
-            <button
-              key={check.key}
-              type="button"
-              onClick={() => jumpToCheck(check.key)}
-              className="block text-left"
-            >
-              <LegalityBadge check={check} />
-            </button>
-          ))}
+          {[...(derivedCharacter?.blockingIssues ?? []), ...(derivedCharacter?.warnings ?? [])].map((issue) => {
+            const check = legalityResult.checks.find((entry) => entry.key === issue.key)
+            return (
+              <button
+                key={issue.key}
+                type="button"
+                onClick={() => jumpToCheck(issue.key)}
+                className="block text-left"
+              >
+                <LegalityBadge check={check} />
+              </button>
+            )
+          })}
         </CardContent>
       </Card>
       )}
@@ -611,7 +730,7 @@ export function CharacterSheet({
               </div>
             )
           })}
-          <div className="text-sm text-neutral-400 pt-1">Total level: {totalLevel}</div>
+          <div className="text-sm text-neutral-400 pt-1">Total level: {derivedCore.totalLevel}</div>
         </CardContent>
       </div>
       </CollapsibleSection>
@@ -649,15 +768,34 @@ export function CharacterSheet({
         </CardContent>
       </div>
 
+      <SpeciesAbilityBonusCard
+        species={selectedSpecies}
+        selectedChoices={abilityBonusChoices}
+        canEdit={canEdit}
+        onChange={setAbilityBonusChoices}
+      />
+
       {/* Skills & Proficiencies */}
       <SkillsCard
         stats={stats}
-        totalLevel={totalLevel}
+        totalLevel={derivedCore.totalLevel}
         selectedClass={selectedClass}
+        species={selectedSpecies}
         background={backgroundList.find((b) => b.id === backgroundId) ?? initial.background}
+        derived={derivedCharacter ? { savingThrows: derivedCharacter.savingThrows, skills: derivedCharacter.skills } : undefined}
         skillProficiencies={skillProficiencies}
         canEdit={canEdit}
         onChange={setSkillProficiencies}
+      />
+
+      <LanguagesToolsCard
+        species={selectedSpecies}
+        background={backgroundList.find((b) => b.id === backgroundId) ?? initial.background}
+        languageChoices={languageChoices}
+        toolChoices={toolChoices}
+        canEdit={canEdit}
+        onLanguageChange={setLanguageChoices}
+        onToolChange={setToolChoices}
       />
       </CollapsibleSection>
 
@@ -668,6 +806,43 @@ export function CharacterSheet({
         defaultOpen={selectedClass?.spellcasting_type != null && selectedClass.spellcasting_type !== 'none'}
         highlighted={highlightedSection === 'spells-feats'}
       >
+        {derivedCharacter && (
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+              <p className="text-sm font-medium text-neutral-200">Subclass State</p>
+              <div className="mt-3 space-y-2 text-sm text-neutral-400">
+                {derivedCharacter.subclassStates.map((entry) => (
+                  <p key={entry.classId}>
+                    <span className="text-neutral-200">{entry.className}</span>{' '}
+                    {entry.status === 'selected' && entry.subclassName
+                      ? `uses ${entry.subclassName}.`
+                      : entry.status === 'available_unselected'
+                        ? `needs a subclass at level ${entry.requiredAt}.`
+                        : entry.status === 'selected_too_early'
+                          ? `${entry.subclassName ?? 'A subclass'} is selected too early.`
+                          : `unlocks a subclass at level ${entry.requiredAt}.`}
+                  </p>
+                ))}
+              </div>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+              <p className="text-sm font-medium text-neutral-200">Unlocked Features</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {derivedCharacter.features.length > 0 ? derivedCharacter.features.map((feature) => (
+                  <span
+                    key={`${feature.classId}-${feature.level}-${feature.name}`}
+                    className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs text-neutral-300"
+                  >
+                    {feature.className} {feature.level}: {feature.name}
+                  </span>
+                )) : (
+                  <span className="text-sm text-neutral-500">No class features unlocked yet.</span>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {derivedProgression && (derivedProgression.spellSlots.length > 0 || derivedProgression.pactSpellSlots.length > 0) && (
           <Alert className="border-white/10 bg-white/[0.03]">
             <AlertDescription className="text-neutral-300">
@@ -677,12 +852,82 @@ export function CharacterSheet({
           </Alert>
         )}
 
+        {derivedCharacter?.spellcasting.selectionSummary && derivedCharacter.spellcasting.sources.length <= 1 && (
+          <Alert className="border-white/10 bg-white/[0.03]">
+            <AlertDescription className="text-neutral-300">
+              {derivedCharacter.spellcasting.selectionSummary}
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {derivedCharacter && derivedCharacter.spellcasting.sources.length > 1 && (
+          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+            <p className="text-sm font-medium text-neutral-200">Spellcasting Sources</p>
+            <div className="mt-3 space-y-3">
+              {derivedCharacter.spellcasting.sources.map((source) => (
+                <div key={source.classId} className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
+                  <p className="text-sm text-neutral-100">{source.className} {source.classLevel}</p>
+                  {source.selectionSummary && (
+                    <p className="mt-1 text-sm text-neutral-400">{source.selectionSummary}</p>
+                  )}
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {Object.entries(source.selectedSpellCountsByLevel).map(([level, count]) => (
+                      <span
+                        key={`${source.classId}-${level}`}
+                        className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs text-neutral-300"
+                      >
+                        {level === '0' ? `${count} cantrip${count === 1 ? '' : 's'}` : `${count} level ${level} spell${count === 1 ? '' : 's'}`}
+                      </span>
+                    ))}
+                    {source.selectedSpellCountsByLevel[0] === undefined && source.selectedSpells.length === 0 && (
+                      <span className="text-xs text-neutral-500">No currently selected spells from this source.</span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {derivedCharacter && derivedCharacter.spellcasting.selectedSpells.length > 0 && (
+          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+            <p className="text-sm font-medium text-neutral-200">Current Spellcasting Summary</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {Object.entries(derivedCharacter.spellcasting.selectedSpellCountsByLevel).map(([level, count]) => (
+                <span
+                  key={level}
+                  className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs text-neutral-300"
+                >
+                  {level === '0' ? `${count} cantrip${count === 1 ? '' : 's'}` : `${count} level ${level} spell${count === 1 ? '' : 's'}`}
+                </span>
+              ))}
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {derivedCharacter.spellcasting.selectedSpells.map((spell) => (
+                <span
+                  key={spell.id}
+                  className={`rounded-full border px-3 py-1 text-xs ${
+                    spell.granted
+                      ? 'border-emerald-400/20 bg-emerald-400/10 text-emerald-100'
+                      : 'border-white/10 bg-white/[0.03] text-neutral-300'
+                  }`}
+                >
+                  {spell.name}
+                  {spell.level === 0 ? ' (cantrip)' : ` (L${spell.level})`}
+                  {spell.granted ? ' free' : ''}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
         {selectedClass?.spellcasting_type != null && selectedClass.spellcasting_type !== 'none' && (
           <SpellsCard
             classId={firstClassId}
             campaignId={campaignId}
             subclassIds={firstClassSubclassIds}
             classLevel={firstClassLevel}
+            derivedSpellcasting={derivedCharacter?.spellcasting}
             spellChoices={spellChoices}
             maxSpellLevel={derivedProgression?.maxSpellLevel}
             spellLevelCaps={derivedProgression?.spellLevelCaps}
@@ -694,24 +939,26 @@ export function CharacterSheet({
           />
         )}
 
-        {(() => {
-          const selectedBg = backgroundList.find((b) => b.id === backgroundId) ?? initial.background
-          const backgroundFeat = selectedBg?.background_feat_id
-            ? (featList.find((f) => f.id === selectedBg.background_feat_id) ?? null)
-            : null
-          return (
-            <FeatsCard
-              background={selectedBg ?? null}
-              backgroundFeat={backgroundFeat}
-              availableFeats={featList}
-              featChoices={featChoices}
-              totalLevel={totalLevel}
-              featSlotLabels={derivedProgression?.featSlotLabels}
-              canEdit={canEdit}
-              onChange={setFeatChoices}
-            />
-          )
-        })()}
+        <FeatsCard
+          background={selectedBg ?? null}
+          backgroundFeat={backgroundFeat}
+          availableFeats={featList}
+          featChoices={featChoices}
+          totalLevel={derivedCore.totalLevel}
+          featSlotLabels={derivedProgression?.featSlotLabels}
+          canEdit={canEdit}
+          onChange={setFeatChoices}
+        />
+
+        <FeatSpellChoicesCard
+          activeFeats={activeFeatSpellFeats}
+          campaignId={campaignId}
+          classList={classList}
+          selectedChoices={featSpellChoices}
+          canEdit={canEdit}
+          onChange={setFeatSpellChoices}
+          onOptionsLoaded={setFeatSpellOptions}
+        />
       </CollapsibleSection>
 
       <CollapsibleSection
@@ -724,7 +971,7 @@ export function CharacterSheet({
         <CardHeader>
           <CardTitle className="text-neutral-200">Hit Points</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
           <div className="flex items-center gap-3">
             <Label className="text-neutral-300 w-16">HP Max</Label>
             {canEdit ? (
@@ -735,6 +982,49 @@ export function CharacterSheet({
               />
             ) : (
               <span className="text-2xl font-bold text-neutral-100">{hpMax}</span>
+            )}
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+              <p className="text-[11px] uppercase tracking-[0.12em] text-neutral-500">Stored Max</p>
+              <p className="mt-2 text-lg font-semibold text-neutral-100">{derivedCore.hitPoints.max}</p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+              <p className="text-[11px] uppercase tracking-[0.12em] text-neutral-500">Estimated From Levels</p>
+              <p className="mt-2 text-lg font-semibold text-neutral-100">
+                {derivedCore.hitPoints.estimatedFromLevels ?? '—'}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+              <p className="text-[11px] uppercase tracking-[0.12em] text-neutral-500">Possible Range</p>
+              <p className="mt-2 text-lg font-semibold text-neutral-100">
+                {derivedCore.hitPoints.minimumPossible !== null && derivedCore.hitPoints.maximumPossible !== null
+                  ? `${derivedCore.hitPoints.minimumPossible}-${derivedCore.hitPoints.maximumPossible}`
+                  : '—'}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+              <p className="text-[11px] uppercase tracking-[0.12em] text-neutral-500">CON Per Level</p>
+              <p className="mt-2 text-lg font-semibold text-neutral-100">
+                {fmt(derivedCore.hitPoints.constitutionModifier)}
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-2 text-sm text-neutral-400">
+            <p>
+              Hit dice: {derivedCore.hitPoints.hitDice.length > 0
+                ? derivedCore.hitPoints.hitDice
+                    .map((entry) => `${entry.level}d${entry.dieSize ?? '?'} ${entry.className}`)
+                    .join(' · ')
+                : '—'}
+            </p>
+            {derivedCore.hitPoints.usesInferredLevels && (
+              <p>
+                HP estimate infers {derivedCore.hitPoints.inferredLevelCount} level
+                {derivedCore.hitPoints.inferredLevelCount === 1 ? '' : 's'} using fixed average because the current schema only stores one HP roll per class.
+              </p>
             )}
           </div>
         </CardContent>
@@ -760,6 +1050,7 @@ export function CharacterSheet({
       {/* Stat Block — DM only, built from live form state */}
       {isDm && (
         <StatBlockView
+          derived={derivedCharacter ?? derivedCore}
           character={{
             ...initial,
             name,

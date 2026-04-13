@@ -5,6 +5,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import type { Character, Species, Background, CharacterLevel, Sense, Class, Feat } from '@/lib/types/database'
+import type { DerivedCharacter } from '@/lib/characters/build-context'
+import { abilityModifier, type DerivedCharacterCore } from '@/lib/characters/derived'
 import { SKILLS, normalizeSkillKey } from '@/lib/skills'
 import type { AbilityKey } from '@/lib/skills'
 
@@ -16,18 +18,15 @@ interface CharacterWithRelations extends Character {
 
 interface StatBlockViewProps {
   character: CharacterWithRelations
+  derived: DerivedCharacterCore & Partial<Pick<DerivedCharacter, 'savingThrows' | 'skills' | 'speed' | 'size' | 'languages' | 'senses' | 'damageResistances' | 'conditionImmunities' | 'armorClass'>>
   classNames?: string[]
   selectedClass?: Class | null
   skillProficiencies?: string[]
   feats?: Feat[]
 }
 
-function mod(score: number): number {
-  return Math.floor((score - 10) / 2)
-}
-
 function modStr(score: number): string {
-  const m = mod(score)
+  const m = abilityModifier(score)
   return m >= 0 ? `+${m}` : `${m}`
 }
 
@@ -35,18 +34,16 @@ function fmtMod(n: number): string {
   return n >= 0 ? `+${n}` : `${n}`
 }
 
-function proficiencyBonus(totalLevel: number): number {
-  return Math.floor((Math.max(totalLevel, 1) - 1) / 4) + 2
-}
-
 function computeUnarmoredAc(
   dex: number, con: number, wis: number,
-  classNames: string[]
+  classNames: string[],
+  species: Species | null
 ): number {
-  const dexMod = mod(dex)
-  if (classNames.includes('Barbarian')) return 10 + dexMod + mod(con)
-  if (classNames.includes('Monk'))      return 10 + dexMod + mod(wis)
-  return 10 + dexMod
+  const dexMod = abilityModifier(dex)
+  const warforgedBonus = species?.name === 'Warforged' && species.source === 'ERftLW' ? 1 : 0
+  if (classNames.includes('Barbarian')) return 10 + dexMod + abilityModifier(con) + warforgedBonus
+  if (classNames.includes('Monk'))      return 10 + dexMod + abilityModifier(wis) + warforgedBonus
+  return 10 + dexMod + warforgedBonus
 }
 
 function formatSenses(senses: Sense[]): string {
@@ -55,63 +52,90 @@ function formatSenses(senses: Sense[]): string {
     .join(', ')
 }
 
-export function StatBlockView({ character, classNames = [], selectedClass = null, skillProficiencies = [], feats = [] }: StatBlockViewProps) {
-  const computedAc = computeUnarmoredAc(
-    character.base_dex,
-    character.base_con,
-    character.base_wis,
+export function StatBlockView({ character, derived, classNames = [], selectedClass = null, skillProficiencies = [], feats = [] }: StatBlockViewProps) {
+  const fallbackAc = computeUnarmoredAc(
+    derived.abilities.dex.adjusted,
+    derived.abilities.con.adjusted,
+    derived.abilities.wis.adjusted,
     classNames,
+    character.species,
   )
   const [acOverride, setAcOverride] = useState('')
   const [open, setOpen] = useState(false)
   const [copied, setCopied] = useState(false)
 
+  const computedAc = derived.armorClass?.value ?? fallbackAc
   const displayAc = acOverride || String(computedAc)
   const acLabel = acOverride
     ? displayAc
-    : `${computedAc} (unarmored)`
+    : derived.armorClass?.formula
+      ? `${computedAc} (${derived.armorClass.formula})`
+      : `${computedAc} (unarmored)`
 
-  const totalLevel = character.character_levels.reduce((sum, l) => sum + l.level, 0)
-  const pb = proficiencyBonus(totalLevel)
+  const pb = derived.proficiencyBonus
 
   const scores = [
-    { abbr: 'STR', value: character.base_str },
-    { abbr: 'DEX', value: character.base_dex },
-    { abbr: 'CON', value: character.base_con },
-    { abbr: 'INT', value: character.base_int },
-    { abbr: 'WIS', value: character.base_wis },
-    { abbr: 'CHA', value: character.base_cha },
+    { abbr: 'STR', value: derived.abilities.str.adjusted },
+    { abbr: 'DEX', value: derived.abilities.dex.adjusted },
+    { abbr: 'CON', value: derived.abilities.con.adjusted },
+    { abbr: 'INT', value: derived.abilities.int.adjusted },
+    { abbr: 'WIS', value: derived.abilities.wis.adjusted },
+    { abbr: 'CHA', value: derived.abilities.cha.adjusted },
   ]
 
-  // Saving throws with proficiency bonus
-  const savingThrowProfs = new Set(
-    (selectedClass?.saving_throw_proficiencies ?? []).map((s) => s.toLowerCase() as AbilityKey)
-  )
-  const abilityKeys: AbilityKey[] = ['str', 'dex', 'con', 'int', 'wis', 'cha']
-  const abilityScores: Record<AbilityKey, number> = {
-    str: character.base_str, dex: character.base_dex, con: character.base_con,
-    int: character.base_int, wis: character.base_wis, cha: character.base_cha,
-  }
-  const proficientSaves = abilityKeys
-    .filter((a) => savingThrowProfs.has(a))
-    .map((a) => `${a.charAt(0).toUpperCase() + a.slice(1)} ${fmtMod(mod(abilityScores[a]) + pb)}`)
+  const proficientSaves = derived.savingThrows
+    ? derived.savingThrows
+        .filter((save) => save.proficient)
+        .map((save) => `${save.name} ${fmtMod(save.modifier)}`)
+    : (() => {
+        const savingThrowProfs = new Set(
+          (selectedClass?.saving_throw_proficiencies ?? []).map((s) => s.toLowerCase() as AbilityKey)
+        )
+        const abilityKeys: AbilityKey[] = ['str', 'dex', 'con', 'int', 'wis', 'cha']
+        const abilityScores: Record<AbilityKey, number> = {
+          str: derived.abilities.str.adjusted,
+          dex: derived.abilities.dex.adjusted,
+          con: derived.abilities.con.adjusted,
+          int: derived.abilities.int.adjusted,
+          wis: derived.abilities.wis.adjusted,
+          cha: derived.abilities.cha.adjusted,
+        }
 
-  // Skills with proficiency
-  const bgSkillKeys = new Set(
-    (character.background?.skill_proficiencies ?? []).map(normalizeSkillKey)
-  )
-  const classSkillKeys = new Set(skillProficiencies)
-  const proficientSkills = SKILLS
-    .filter((s) => bgSkillKeys.has(s.key) || classSkillKeys.has(s.key))
-    .map((s) => `${s.name} ${fmtMod(mod(abilityScores[s.ability]) + pb)}`)
+        return abilityKeys
+          .filter((ability) => savingThrowProfs.has(ability))
+          .map((ability) => `${ability.charAt(0).toUpperCase() + ability.slice(1)} ${fmtMod(abilityModifier(abilityScores[ability]) + pb)}`)
+      })()
 
-  const size = character.species?.size ?? 'medium'
-  const speed = character.species?.speed ?? 30
-  const languages = character.species?.languages ?? []
+  const proficientSkills = derived.skills
+    ? derived.skills
+        .filter((skill) => skill.proficient)
+        .map((skill) => `${skill.name} ${fmtMod(skill.modifier)}`)
+    : (() => {
+        const bgSkillKeys = new Set(
+          (character.background?.skill_proficiencies ?? []).map(normalizeSkillKey)
+        )
+        const classSkillKeys = new Set(skillProficiencies)
+        const abilityScores: Record<AbilityKey, number> = {
+          str: derived.abilities.str.adjusted,
+          dex: derived.abilities.dex.adjusted,
+          con: derived.abilities.con.adjusted,
+          int: derived.abilities.int.adjusted,
+          wis: derived.abilities.wis.adjusted,
+          cha: derived.abilities.cha.adjusted,
+        }
+
+        return SKILLS
+          .filter((skill) => bgSkillKeys.has(skill.key) || classSkillKeys.has(skill.key))
+          .map((skill) => `${skill.name} ${fmtMod(abilityModifier(abilityScores[skill.ability]) + pb)}`)
+      })()
+
+  const size = derived.size ?? character.species?.size ?? 'medium'
+  const speed = derived.speed ?? character.species?.speed ?? 30
+  const languages = derived.languages ?? character.species?.languages ?? []
   const speciesName = character.species?.name ?? null
-  const derivedSenses = character.species?.senses ?? []
-  const damageResistances = character.species?.damage_resistances ?? []
-  const conditionImmunities = character.species?.condition_immunities ?? []
+  const derivedSenses = derived.senses ?? character.species?.senses ?? []
+  const damageResistances = derived.damageResistances ?? character.species?.damage_resistances ?? []
+  const conditionImmunities = derived.conditionImmunities ?? character.species?.condition_immunities ?? []
   const allSenses = derivedSenses.length > 0 ? formatSenses(derivedSenses as Sense[]) : ''
 
   const typeLineSpecies = speciesName ? ` (${speciesName})` : ''
@@ -121,7 +145,7 @@ export function StatBlockView({ character, classNames = [], selectedClass = null
     lines.push(`**Name:** ${character.name}`)
     lines.push(`**Size:** ${size.charAt(0).toUpperCase() + size.slice(1)}  **Type:** Humanoid${typeLineSpecies}  **Alignment:** ${character.alignment ?? '—'}`)
     lines.push(`**AC:** ${displayAc}`)
-    lines.push(`**HP:** ${character.hp_max}`)
+    lines.push(`**HP:** ${derived.hitPoints.max}`)
     lines.push(`**Speed:** ${speed} ft.`)
     lines.push(`**Proficiency Bonus:** +${pb}`)
     if (allSenses) lines.push(`**Senses:** ${allSenses}`)
@@ -199,7 +223,7 @@ export function StatBlockView({ character, classNames = [], selectedClass = null
           <div className="grid grid-cols-2 gap-x-6 border-b border-[#9c1b1b] pb-2 mb-2">
             <div className="space-y-0.5 text-sm">
               <p><span className="font-bold">Armor Class</span> {acLabel}</p>
-              <p><span className="font-bold">Hit Points</span> {character.hp_max}</p>
+              <p><span className="font-bold">Hit Points</span> {derived.hitPoints.max}</p>
               <p><span className="font-bold">Speed</span> {speed} ft.</p>
               <p><span className="font-bold">Proficiency Bonus</span> +{pb}</p>
               {proficientSaves.length > 0 && (

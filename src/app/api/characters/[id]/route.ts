@@ -3,8 +3,89 @@ import { requireAuth, jsonError, readJsonBody } from '@/lib/api-helpers'
 import { hasDmAccess } from '@/lib/auth/roles'
 import { buildLegalityInput } from '@/lib/legality/build-input'
 import { runLegalityChecks } from '@/lib/legality/engine'
+import { loadCharacterState } from '@/lib/characters/load-character'
+import {
+  replaceCharacterAbilityBonusChoices,
+  replaceCharacterFeatChoices,
+  replaceCharacterLanguageChoices,
+  replaceCharacterSkillProficiencies,
+  replaceCharacterSpellSelections,
+  replaceCharacterToolChoices,
+  type AbilityBonusChoiceInput,
+  type FeatChoiceInput,
+  type LanguageChoiceInput,
+  type SkillProficiencyInput,
+  type SpellChoiceInput,
+  type ToolChoiceInput,
+} from '@/lib/characters/choice-persistence'
 import { captureSnapshot } from '@/lib/snapshots'
 import { z } from 'zod'
+
+const spellChoiceSchema = z.union([
+  z.string().uuid(),
+  z.object({
+    spell_id: z.string().uuid(),
+    character_level_id: z.string().uuid().nullable().optional(),
+    owning_class_id: z.string().uuid().nullable().optional(),
+    granting_subclass_id: z.string().uuid().nullable().optional(),
+    acquisition_mode: z.string().min(1).optional(),
+    counts_against_selection_limit: z.boolean().optional(),
+    source_feature_key: z.string().nullable().optional(),
+  }),
+])
+
+const featChoiceSchema = z.union([
+  z.string(),
+  z.object({
+    feat_id: z.string().uuid(),
+    character_level_id: z.string().uuid().nullable().optional(),
+    choice_kind: z.string().min(1).optional(),
+    source_feature_key: z.string().nullable().optional(),
+  }),
+])
+
+const skillProficiencySchema = z.union([
+  z.string(),
+  z.object({
+    skill: z.string().min(1),
+    expertise: z.boolean().optional(),
+    character_level_id: z.string().uuid().nullable().optional(),
+    source_category: z.string().min(1).optional(),
+    source_entity_id: z.string().uuid().nullable().optional(),
+    source_feature_key: z.string().nullable().optional(),
+  }),
+])
+
+const languageChoiceSchema = z.union([
+  z.string().min(1),
+  z.object({
+    language: z.string().min(1),
+    character_level_id: z.string().uuid().nullable().optional(),
+    source_category: z.string().min(1).optional(),
+    source_entity_id: z.string().uuid().nullable().optional(),
+    source_feature_key: z.string().nullable().optional(),
+  }),
+])
+
+const toolChoiceSchema = z.union([
+  z.string().min(1),
+  z.object({
+    tool: z.string().min(1),
+    character_level_id: z.string().uuid().nullable().optional(),
+    source_category: z.string().min(1).optional(),
+    source_entity_id: z.string().uuid().nullable().optional(),
+    source_feature_key: z.string().nullable().optional(),
+  }),
+])
+
+const abilityBonusChoiceSchema = z.object({
+  ability: z.enum(['str', 'dex', 'con', 'int', 'wis', 'cha']),
+  bonus: z.number().int().min(1).optional(),
+  character_level_id: z.string().uuid().nullable().optional(),
+  source_category: z.string().min(1).optional(),
+  source_entity_id: z.string().uuid().nullable().optional(),
+  source_feature_key: z.string().nullable().optional(),
+})
 
 const updateCharacterSchema = z.object({
   name: z.string().min(1).max(100).optional(),
@@ -22,12 +103,15 @@ const updateCharacterSchema = z.object({
   hp_max: z.number().int().min(0).optional(),
   character_type: z.enum(['pc', 'npc', 'test']).optional(),
   dm_notes: z.string().max(2000).optional(),
-  // Skill proficiencies: class-chosen skills (canonical keys)
-  skill_proficiencies: z.array(z.string()).optional(),
-  // Spell choices: full replacement of spell_known choices
-  spell_choices: z.array(z.string().uuid()).optional(),
-  // Feat choices: full replacement of feat choices (empty string = ASI taken instead)
-  feat_choices: z.array(z.string()).optional(),
+  // Skill proficiencies: chosen skill rows, optionally with provenance metadata
+  skill_proficiencies: z.array(skillProficiencySchema).optional(),
+  ability_bonus_choices: z.array(abilityBonusChoiceSchema).optional(),
+  language_choices: z.array(languageChoiceSchema).optional(),
+  tool_choices: z.array(toolChoiceSchema).optional(),
+  // Spell choices: full replacement of the character's typed spell selections
+  spell_choices: z.array(spellChoiceSchema).optional(),
+  // Feat choices: full replacement of typed feat choices (empty string = ASI taken instead)
+  feat_choices: z.array(featChoiceSchema).optional(),
   // Levels: full replacement of the character's class levels
   levels: z.array(z.object({
     class_id: z.string().uuid(),
@@ -50,28 +134,20 @@ export async function GET(
   if (auth instanceof NextResponse) return auth
   const { supabase } = auth
 
-  const { data, error } = await supabase
-    .from('characters')
-    .select(`
-      *,
-      species:species_id(*),
-      background:background_id(*),
-      character_levels(*),
-      character_choices(*),
-      character_stat_rolls(*)
-    `)
-    .eq('id', params.id)
-    .single()
-
-  if (error || !data) return jsonError('Character not found', 404)
-
-  const legalityInput = await buildLegalityInput(supabase, params.id)
-  const legalityResult = legalityInput ? runLegalityChecks(legalityInput) : null
+  const loadedState = await loadCharacterState(supabase, params.id)
+  if (!loadedState) return jsonError('Character not found', 404)
 
   return NextResponse.json({
-    ...(data as Record<string, unknown>),
-    legality: legalityResult,
-    derived: legalityResult?.derived ?? null,
+    ...loadedState.character,
+    skill_proficiencies: loadedState.initialSkillProficiencies,
+    ability_bonus_choices: loadedState.initialAbilityBonusChoices,
+    language_choices: loadedState.initialLanguageChoices,
+    tool_choices: loadedState.initialToolChoices,
+    spell_choices: loadedState.initialSpellChoices,
+    feat_spell_choices: loadedState.initialFeatSpellChoices,
+    feat_choices: loadedState.initialFeatChoices,
+    legality: loadedState.legality,
+    derived: loadedState.legality?.derived ?? null,
   })
 }
 
@@ -101,7 +177,7 @@ export async function PUT(
   const parsed = updateCharacterSchema.safeParse(body)
   if (!parsed.success) return jsonError(parsed.error.message, 400)
 
-  const { levels, stat_rolls, skill_proficiencies, spell_choices, feat_choices, character_type, dm_notes, ...characterFields } = parsed.data
+  const { levels, stat_rolls, skill_proficiencies, ability_bonus_choices, language_choices, tool_choices, spell_choices, feat_choices, character_type, dm_notes, ...characterFields } = parsed.data
 
   // DM-only fields
   if (hasDmAccess(profile.role)) {
@@ -166,55 +242,59 @@ export async function PUT(
 
   // Replace skill proficiencies if provided
   if (skill_proficiencies !== undefined) {
-    const { error: deleteSkillsError } = await supabase
-      .from('character_skill_proficiencies')
-      .delete()
-      .eq('character_id', params.id)
-    if (deleteSkillsError) return jsonError(deleteSkillsError.message, 500)
-    if (skill_proficiencies.length > 0) {
-      const rows = skill_proficiencies.map((skill) => ({ character_id: params.id, skill, expertise: false }))
-      const { error } = await supabase.from('character_skill_proficiencies').insert(rows)
-      if (error) return jsonError(error.message, 500)
-    }
+    const error = await replaceCharacterSkillProficiencies(
+      supabase,
+      params.id,
+      skill_proficiencies as SkillProficiencyInput[]
+    )
+    if (error) return jsonError(error.message, 500)
+  }
+
+  if (ability_bonus_choices !== undefined) {
+    const error = await replaceCharacterAbilityBonusChoices(
+      supabase,
+      params.id,
+      ability_bonus_choices as AbilityBonusChoiceInput[]
+    )
+    if (error) return jsonError(error.message, 500)
+  }
+
+  if (language_choices !== undefined) {
+    const error = await replaceCharacterLanguageChoices(
+      supabase,
+      params.id,
+      language_choices as LanguageChoiceInput[]
+    )
+    if (error) return jsonError(error.message, 500)
+  }
+
+  if (tool_choices !== undefined) {
+    const error = await replaceCharacterToolChoices(
+      supabase,
+      params.id,
+      tool_choices as ToolChoiceInput[]
+    )
+    if (error) return jsonError(error.message, 500)
   }
 
   // Replace spell choices if provided
   if (spell_choices !== undefined) {
-    const { error: deleteSpellChoicesError } = await supabase.from('character_choices').delete()
-      .eq('character_id', params.id).eq('choice_type', 'spell_known')
-    if (deleteSpellChoicesError) return jsonError(deleteSpellChoicesError.message, 500)
-
-    if (spell_choices.length > 0) {
-      const rows = spell_choices.map((spell_id) => ({
-        character_id: params.id,
-        character_level_id: null,
-        choice_type: 'spell_known' as const,
-        choice_value: { spell_id },
-      }))
-      const { error } = await supabase.from('character_choices').insert(rows)
-      if (error) return jsonError(error.message, 500)
-    }
+    const error = await replaceCharacterSpellSelections(
+      supabase,
+      params.id,
+      spell_choices as SpellChoiceInput[]
+    )
+    if (error) return jsonError(error.message, 500)
   }
 
   // Replace feat choices if provided (empty strings = ASI taken, skip those)
   if (feat_choices !== undefined) {
-    const { error: deleteFeatChoicesError } = await supabase.from('character_choices').delete()
-      .eq('character_id', params.id).eq('choice_type', 'feat')
-    if (deleteFeatChoicesError) return jsonError(deleteFeatChoicesError.message, 500)
-
-    const featRows = feat_choices
-      .filter((id) => id && id.length > 0)
-      .map((feat_id) => ({
-        character_id: params.id,
-        character_level_id: null,
-        choice_type: 'feat' as const,
-        choice_value: { feat_id },
-      }))
-
-    if (featRows.length > 0) {
-      const { error } = await supabase.from('character_choices').insert(featRows)
-      if (error) return jsonError(error.message, 500)
-    }
+    const error = await replaceCharacterFeatChoices(
+      supabase,
+      params.id,
+      feat_choices as FeatChoiceInput[]
+    )
+    if (error) return jsonError(error.message, 500)
   }
 
   // Capture snapshot and run legality check

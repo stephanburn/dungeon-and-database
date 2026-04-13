@@ -16,11 +16,11 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { FeatsCard } from '@/components/character-sheet/FeatsCard'
+import { FeatSpellChoicesCard } from '@/components/character-sheet/FeatSpellChoicesCard'
 import { LegalityBadge, LegalitySummaryBadge } from '@/components/character-sheet/LegalityBadge'
 import { SpellsCard } from '@/components/character-sheet/SpellsCard'
 import { SkillsCard } from '@/components/character-sheet/SkillsCard'
 import { useToast } from '@/hooks/use-toast'
-import { deriveCharacterProgression } from '@/lib/characters/build-context'
 import { runLegalityChecks, type LegalityResult } from '@/lib/legality/engine'
 import type {
   Background,
@@ -37,15 +37,23 @@ import type {
   Subclass,
 } from '@/lib/types/database'
 import {
+  buildCombinedSpellSelections,
   buildLocalCharacterContext,
+  buildTypedAbilityBonusChoices,
+  buildTypedFeatChoices,
+  buildTypedLanguageChoices,
+  buildTypedSkillProficiencies,
+  buildTypedToolChoices,
   calculateLevelUpHpGain,
   ClassDetail,
-  getFixedHpGainValue,
+  deriveLocalCharacter,
   getMulticlassSkillChoiceConfig,
-  summarizeWizardLegality,
   type SpellOption,
   type WizardLevel,
 } from '@/lib/characters/wizard-helpers'
+import { buildSpeciesAbilityBonusMap } from '@/lib/characters/species-ability-bonus-provenance'
+import { getFeatSpellChoiceDefinitions } from '@/lib/characters/feat-spell-options'
+import { getFixedHpGainValue } from '@/lib/characters/derived'
 
 type CharacterWithRelations = Character & {
   species: Species | null
@@ -61,7 +69,11 @@ type LevelUpWizardProps = {
   allowedSources: string[]
   allSourceRuleSets: Record<string, RuleSet>
   initialSkillProficiencies: string[]
+  initialAbilityBonusChoices: Array<'str' | 'dex' | 'con' | 'int' | 'wis' | 'cha'>
+  initialLanguageChoices: string[]
+  initialToolChoices: string[]
   initialSpellChoices: string[]
+  initialFeatSpellChoices: Record<string, string>
   initialSpellSelections: Spell[]
   initialFeatChoices: string[]
   isDm: boolean
@@ -69,7 +81,10 @@ type LevelUpWizardProps = {
 
 type HpMode = 'fixed' | 'max' | 'manual'
 
-function getAdjustedStats(character: CharacterWithRelations) {
+function getAdjustedStats(
+  character: CharacterWithRelations,
+  abilityBonusChoices: Array<'str' | 'dex' | 'con' | 'int' | 'wis' | 'cha'>
+) {
   const bonuses = character.species?.ability_score_bonuses ?? []
   const totals = bonuses.reduce<Record<'str' | 'dex' | 'con' | 'int' | 'wis' | 'cha', number>>(
     (acc, bonus) => {
@@ -78,6 +93,10 @@ function getAdjustedStats(character: CharacterWithRelations) {
     },
     { str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 }
   )
+  const chosenBonuses = buildSpeciesAbilityBonusMap(character.species, abilityBonusChoices)
+  for (const [ability, bonus] of Object.entries(chosenBonuses)) {
+    totals[ability as keyof typeof totals] += bonus
+  }
 
   return {
     str: character.base_str + totals.str,
@@ -114,7 +133,11 @@ export function LevelUpWizard({
   allowedSources,
   allSourceRuleSets,
   initialSkillProficiencies,
+  initialAbilityBonusChoices,
+  initialLanguageChoices,
+  initialToolChoices,
   initialSpellChoices,
+  initialFeatSpellChoices,
   initialSpellSelections,
   initialFeatChoices,
   isDm,
@@ -141,8 +164,12 @@ export function LevelUpWizard({
   const [selectedClassId, setSelectedClassId] = useState(baseLevels[0]?.class_id ?? '')
   const [selectedSubclassId, setSelectedSubclassId] = useState<string | null>(null)
   const [skillProficiencies, setSkillProficiencies] = useState<string[]>(initialSkillProficiencies)
+  const [languageChoices] = useState<string[]>(initialLanguageChoices)
+  const [toolChoices] = useState<string[]>(initialToolChoices)
   const [spellChoices, setSpellChoices] = useState<string[]>(initialSpellChoices)
   const [featChoices] = useState<string[]>(initialFeatChoices)
+  const [featSpellChoices, setFeatSpellChoices] = useState<Record<string, string>>(initialFeatSpellChoices)
+  const [featSpellOptions, setFeatSpellOptions] = useState<SpellOption[]>([])
   const [newFeatChoice, setNewFeatChoice] = useState('')
   const [hpMode, setHpMode] = useState<HpMode>('fixed')
   const [manualHpRoll, setManualHpRoll] = useState<number>(1)
@@ -211,7 +238,10 @@ export function LevelUpWizard({
   const currentTargetLevel = baseLevels.find((level) => level.class_id === selectedClassId)?.level ?? 0
   const nextTargetLevel = currentTargetLevel > 0 ? currentTargetLevel + 1 : 1
   const enteringNewClass = currentTargetLevel === 0
-  const adjustedStats = useMemo(() => getAdjustedStats(character), [character])
+  const adjustedStats = useMemo(
+    () => getAdjustedStats(character, initialAbilityBonusChoices),
+    [character, initialAbilityBonusChoices]
+  )
 
   useEffect(() => {
     if (!selectedClassDetail) return
@@ -245,8 +275,11 @@ export function LevelUpWizard({
     for (const spell of spellOptions) {
       byId.set(spell.id, spell)
     }
+    for (const spell of featSpellOptions) {
+      byId.set(spell.id, spell)
+    }
     return Array.from(byId.values())
-  }, [initialSpellSelections, spellOptions])
+  }, [featSpellOptions, initialSpellSelections, spellOptions])
 
   const targetLevels = useMemo<WizardLevel[]>(() => {
     if (!selectedClassId) {
@@ -286,11 +319,28 @@ export function LevelUpWizard({
     return next
   }, [baseLevels, selectedClassId, selectedSubclassId])
 
+  const backgroundFeat = useMemo(
+    () => character.background?.background_feat_id
+      ? featList.find((feat) => feat.id === character.background?.background_feat_id) ?? null
+      : null,
+    [character.background, featList]
+  )
+  const currentActiveFeatSpellFeats = useMemo(
+    () => [
+      ...initialFeatChoices
+        .map((featId) => featList.find((feat) => feat.id === featId))
+        .filter((feat): feat is Feat => Boolean(feat)),
+      ...(backgroundFeat ? [backgroundFeat] : []),
+    ],
+    [backgroundFeat, featList, initialFeatChoices]
+  )
+
   const currentContext = buildLocalCharacterContext({
     campaign,
     allowedSources,
     allSourceRuleSets,
     statMethod: character.stat_method as StatMethod,
+    persistedHpMax: character.hp_max,
     stats: {
       str: character.base_str,
       dex: character.base_dex,
@@ -306,19 +356,34 @@ export function LevelUpWizard({
     subclassMap,
     spellOptions: mergedSpellOptions,
     spellChoices: initialSpellChoices,
+    spellSelections: buildCombinedSpellSelections({
+      classSpellChoices: initialSpellChoices,
+      spellOptions: mergedSpellOptions,
+      owningClassId: baseLevels[0]?.class_id ?? null,
+      activeSubclassIds: baseLevels
+        .filter((level) => level.class_id === (baseLevels[0]?.class_id ?? '') && level.subclass_id)
+        .map((level) => level.subclass_id as string),
+      derived: null,
+      featSpellChoices: initialFeatSpellChoices,
+      featList: currentActiveFeatSpellFeats,
+    }),
     featList,
     featChoices: initialFeatChoices,
     skillProficiencies: initialSkillProficiencies,
+    abilityBonusChoices: initialAbilityBonusChoices,
+    languageChoices: initialLanguageChoices,
+    toolChoices: initialToolChoices,
   })
 
   const nextFeatChoices = useMemo(() => {
     const next = [...featChoices]
-    const currentSlots = currentContext ? deriveCharacterProgression(currentContext).totalAsiSlots : 0
+    const currentSlots = deriveLocalCharacter(currentContext)?.totalAsiSlots ?? 0
     const previewContext = buildLocalCharacterContext({
       campaign,
       allowedSources,
       allSourceRuleSets,
       statMethod: character.stat_method as StatMethod,
+      persistedHpMax: character.hp_max,
       stats: {
         str: character.base_str,
         dex: character.base_dex,
@@ -337,8 +402,11 @@ export function LevelUpWizard({
       featList,
       featChoices: next,
       skillProficiencies,
+      abilityBonusChoices: initialAbilityBonusChoices,
+      languageChoices,
+      toolChoices,
     })
-    const nextSlots = previewContext ? deriveCharacterProgression(previewContext).totalAsiSlots : currentSlots
+    const nextSlots = deriveLocalCharacter(previewContext)?.totalAsiSlots ?? currentSlots
     if (nextSlots > currentSlots) {
       next[currentSlots] = newFeatChoice === 'asi' ? '' : newFeatChoice
     }
@@ -348,6 +416,7 @@ export function LevelUpWizard({
     allowedSources,
     campaign,
     character.background,
+    character.hp_max,
     character.base_cha,
     character.base_con,
     character.base_dex,
@@ -361,18 +430,63 @@ export function LevelUpWizard({
     featList,
     mergedSpellOptions,
     newFeatChoice,
+    languageChoices,
     skillProficiencies,
     spellChoices,
     subclassMap,
     targetLevels,
+    toolChoices,
     currentContext,
   ])
+
+  const nextActiveFeatSpellFeats = useMemo(
+    () => [
+      ...nextFeatChoices
+        .map((featId) => featList.find((feat) => feat.id === featId))
+        .filter((feat): feat is Feat => Boolean(feat)),
+      ...(backgroundFeat ? [backgroundFeat] : []),
+    ],
+    [backgroundFeat, featList, nextFeatChoices]
+  )
+  const nextFeatSpellDefinitions = useMemo(
+    () => getFeatSpellChoiceDefinitions(nextActiveFeatSpellFeats),
+    [nextActiveFeatSpellFeats]
+  )
+
+  useEffect(() => {
+    const allowedKeys = new Set(nextFeatSpellDefinitions.map((definition) => definition.sourceFeatureKey))
+    setFeatSpellChoices((prev) =>
+      Object.fromEntries(
+        Object.entries(prev).filter(([sourceFeatureKey]) => allowedKeys.has(sourceFeatureKey))
+      )
+    )
+  }, [nextFeatSpellDefinitions])
+
+  const hitDie = selectedClassDetail?.hit_die ?? 0
+  const fixedHpGain = hitDie > 0 ? getFixedHpGainValue(hitDie) : 1
+  const resolvedHpRoll = hpMode === 'manual'
+    ? manualHpRoll
+    : hpMode === 'max'
+      ? hitDie
+      : fixedHpGain
+  const hpGainTotal = hitDie > 0 ? calculateLevelUpHpGain(hitDie, character.base_con, resolvedHpRoll) : 0
+  const nextHpMax = character.hp_max + hpGainTotal
+  const nextCombinedSpellSelections = buildCombinedSpellSelections({
+    classSpellChoices: spellChoices,
+    spellOptions: mergedSpellOptions,
+    owningClassId: selectedClassId || null,
+    activeSubclassIds: selectedSubclassId ? [selectedSubclassId] : [],
+    derived: null,
+    featSpellChoices,
+    featList: nextActiveFeatSpellFeats,
+  })
 
   const nextContext = buildLocalCharacterContext({
     campaign,
     allowedSources,
     allSourceRuleSets,
     statMethod: character.stat_method as StatMethod,
+    persistedHpMax: nextHpMax,
     stats: {
       str: character.base_str,
       dex: character.base_dex,
@@ -388,15 +502,30 @@ export function LevelUpWizard({
     subclassMap,
     spellOptions: mergedSpellOptions,
     spellChoices,
+    spellSelections: nextCombinedSpellSelections,
     featList,
     featChoices: nextFeatChoices,
     skillProficiencies,
+    abilityBonusChoices: initialAbilityBonusChoices,
+    languageChoices,
+    toolChoices,
   })
 
-  const currentDerived = currentContext ? deriveCharacterProgression(currentContext) : null
-  const nextDerived = nextContext ? deriveCharacterProgression(nextContext) : null
+  const currentDerived = deriveLocalCharacter(currentContext)
+  const nextDerived = deriveLocalCharacter(nextContext)
+  const persistedNextSpellSelections = buildCombinedSpellSelections({
+    classSpellChoices: spellChoices,
+    spellOptions: mergedSpellOptions,
+    owningClassId: selectedClassId || null,
+    activeSubclassIds: selectedSubclassId ? [selectedSubclassId] : [],
+    derived: nextDerived,
+    featSpellChoices,
+    featList: nextActiveFeatSpellFeats,
+  })
   const localLegality = nextContext ? runLegalityChecks(nextContext) : null
-  const legalitySummary = summarizeWizardLegality(savedLegality ?? localLegality)
+  const canonicalIssues = (savedLegality ?? localLegality)?.derived
+  const canonicalBlockingIssues = canonicalIssues?.blockingIssues ?? []
+  const canonicalWarnings = canonicalIssues?.warnings ?? []
 
   const targetLevelRow = targetLevels.find((level) => level.class_id === selectedClassId) ?? null
   const subclassRequired = Boolean(
@@ -442,16 +571,6 @@ export function LevelUpWizard({
       setsDiffer(nextGrantedSpells, currentGrantedSpells)
     )
   )
-
-  const hitDie = selectedClassDetail?.hit_die ?? 0
-  const fixedHpGain = hitDie > 0 ? getFixedHpGainValue(hitDie) : 1
-  const resolvedHpRoll = hpMode === 'manual'
-    ? manualHpRoll
-    : hpMode === 'max'
-      ? hitDie
-      : fixedHpGain
-  const hpGainTotal = hitDie > 0 ? calculateLevelUpHpGain(hitDie, character.base_con, resolvedHpRoll) : 0
-  const nextHpMax = character.hp_max + hpGainTotal
 
   const steps = useMemo<Array<{ id: StepId; label: string }>>(() => {
     const nextSteps: Array<{ id: StepId; label: string }> = [
@@ -547,9 +666,28 @@ export function LevelUpWizard({
         body: JSON.stringify({
           hp_max: nextHpMax,
           levels: levelsPayload,
-          skill_proficiencies: skillProficiencies,
-          spell_choices: spellChoices,
-          feat_choices: nextFeatChoices,
+          skill_proficiencies: buildTypedSkillProficiencies({
+            skillProficiencies,
+            background: character.background,
+            selectedClass: selectedClassDetail,
+            species: character.species,
+          }),
+          ability_bonus_choices: buildTypedAbilityBonusChoices(
+            character.species,
+            initialAbilityBonusChoices
+          ),
+          language_choices: buildTypedLanguageChoices({
+            languageChoices,
+            background: character.background,
+            species: character.species,
+          }),
+          tool_choices: buildTypedToolChoices({
+            toolChoices,
+            selectedClass: selectedClassDetail,
+            species: character.species,
+          }),
+          spell_choices: persistedNextSpellSelections,
+          feat_choices: buildTypedFeatChoices(nextFeatChoices, nextDerived?.featSlotLabels),
         }),
       })
 
@@ -680,10 +818,10 @@ export function LevelUpWizard({
                 </Alert>
               )}
 
-              {enteringNewClass && legalitySummary.blockers.some((item) => item.includes('multiclass')) && (
+              {enteringNewClass && localLegality?.checks.some((check) => check.key === 'multiclass_prerequisites' && !check.passed) && (
                 <Alert className="border-rose-400/20 bg-rose-400/10">
                   <AlertDescription className="text-rose-100">
-                    {legalitySummary.blockers.find((item) => item.includes('multiclass'))}
+                    {localLegality.checks.find((check) => check.key === 'multiclass_prerequisites' && !check.passed)?.message}
                   </AlertDescription>
                 </Alert>
               )}
@@ -728,7 +866,9 @@ export function LevelUpWizard({
                 }}
                 totalLevel={nextDerived?.totalLevel ?? totalLevelAfter}
                 selectedClass={selectedClassDetail}
+                species={character.species}
                 background={character.background}
+                derived={nextDerived ? { savingThrows: nextDerived.savingThrows, skills: nextDerived.skills } : undefined}
                 skillProficiencies={skillProficiencies}
                 canEdit
                 onChange={(nextSkills) => {
@@ -755,6 +895,7 @@ export function LevelUpWizard({
                 campaignId={campaign.id}
                 subclassIds={selectedSubclassId ? [selectedSubclassId] : []}
                 classLevel={nextTargetLevel}
+                derivedSpellcasting={nextDerived?.spellcasting}
                 spellChoices={spellChoices}
                 maxSpellLevel={nextDerived?.maxSpellLevel}
                 spellLevelCaps={nextDerived?.spellLevelCaps}
@@ -776,9 +917,7 @@ export function LevelUpWizard({
               </Alert>
               <FeatsCard
                 background={character.background}
-                backgroundFeat={character.background?.background_feat_id
-                  ? featList.find((feat) => feat.id === character.background?.background_feat_id) ?? null
-                  : null}
+                backgroundFeat={backgroundFeat}
                 availableFeats={featList}
                 featChoices={nextFeatChoices}
                 totalLevel={nextDerived?.totalLevel ?? totalLevelAfter}
@@ -788,6 +927,15 @@ export function LevelUpWizard({
                   const nextChoice = choices[currentFeatSlotCount] ?? ''
                   setNewFeatChoice(nextChoice === '' ? 'asi' : nextChoice)
                 }}
+              />
+              <FeatSpellChoicesCard
+                activeFeats={nextActiveFeatSpellFeats}
+                campaignId={campaign.id}
+                classList={classList}
+                selectedChoices={featSpellChoices}
+                canEdit
+                onChange={setFeatSpellChoices}
+                onOptionsLoaded={setFeatSpellOptions}
               />
             </div>
           )}
@@ -837,7 +985,7 @@ export function LevelUpWizard({
 
               <Alert className="border-white/10 bg-white/[0.03]">
                 <AlertDescription className="text-neutral-300">
-                  HP gain for this level: {hpGainTotal}. Current HP max {character.hp_max} → {nextHpMax}.
+                  HP gain for this level: {hpGainTotal}. Current HP max {character.hp_max} → {nextDerived?.hitPoints.max ?? nextHpMax}.
                 </AlertDescription>
               </Alert>
             </div>
@@ -860,7 +1008,7 @@ export function LevelUpWizard({
                 </div>
                 <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
                   <p className="text-sm text-neutral-500">HP after level-up</p>
-                  <p className="mt-1 text-neutral-100">{nextHpMax}</p>
+                  <p className="mt-1 text-neutral-100">{nextDerived?.hitPoints.max ?? nextHpMax}</p>
                   <p className="mt-1 text-xs text-neutral-500">
                     +{hpGainTotal} from this level using {hpMode === 'manual' ? `a roll of ${resolvedHpRoll}` : hpMode === 'max' ? 'max hit die' : 'fixed average'}.
                   </p>
@@ -868,12 +1016,43 @@ export function LevelUpWizard({
               </div>
 
               {nextDerived && (
-                <Alert className="border-white/10 bg-white/[0.03]">
-                  <AlertDescription className="text-neutral-300">
-                    Level {nextDerived.totalLevel} build with {nextDerived.totalAsiSlots} feat / ASI slot{nextDerived.totalAsiSlots === 1 ? '' : 's'}.
-                    {nextDerived.spellSlots.length > 0 && ` Spell slots: ${nextDerived.spellSlots.join(' / ')}.`}
-                  </AlertDescription>
-                </Alert>
+                <>
+                  <Alert className="border-white/10 bg-white/[0.03]">
+                    <AlertDescription className="text-neutral-300">
+                      HP {nextDerived.hitPoints.max}. Level {nextDerived.totalLevel} build with {nextDerived.totalAsiSlots} feat / ASI slot{nextDerived.totalAsiSlots === 1 ? '' : 's'}.
+                      {nextDerived.spellSlots.length > 0 && ` Spell slots: ${nextDerived.spellSlots.join(' / ')}.`}
+                    </AlertDescription>
+                  </Alert>
+
+                  {nextDerived.spellcasting.sources.length > 0 && (
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                      <p className="text-sm font-medium text-neutral-100">Spellcasting Review</p>
+                      <div className="mt-3 space-y-3">
+                        {nextDerived.spellcasting.sources.map((source) => (
+                          <div key={source.classId} className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
+                            <p className="text-sm text-neutral-100">{source.className} {source.classLevel}</p>
+                            {source.selectionSummary && (
+                              <p className="mt-1 text-sm text-neutral-400">{source.selectionSummary}</p>
+                            )}
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {Object.entries(source.selectedSpellCountsByLevel).map(([level, count]) => (
+                                <span
+                                  key={`${source.classId}-${level}`}
+                                  className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs text-neutral-300"
+                                >
+                                  {level === '0' ? `${count} cantrip${count === 1 ? '' : 's'}` : `${count} level ${level} spell${count === 1 ? '' : 's'}`}
+                                </span>
+                              ))}
+                              {source.selectedSpells.length === 0 && (
+                                <span className="text-xs text-neutral-500">No currently selected spells from this source.</span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
 
               <div className="space-y-4">
@@ -887,31 +1066,31 @@ export function LevelUpWizard({
                   {(savedLegality ?? localLegality) && (
                     <LegalitySummaryBadge
                       passed={(savedLegality ?? localLegality)?.passed ?? false}
-                      errorCount={(savedLegality ?? localLegality)?.checks.filter((check) => check.severity === 'error' && !check.passed).length ?? 0}
+                      errorCount={canonicalBlockingIssues.length}
                     />
                   )}
                 </div>
 
-                {legalitySummary.blockers.length > 0 && (
+                {canonicalBlockingIssues.length > 0 && (
                   <Alert className="border-rose-400/20 bg-rose-400/10">
                     <AlertDescription className="space-y-2 text-rose-50">
                       <p className="text-sm font-medium">Blocking items</p>
                       <ul className="space-y-1 text-sm text-rose-100">
-                        {legalitySummary.blockers.map((item) => (
-                          <li key={item}>• {item}</li>
+                        {canonicalBlockingIssues.map((item) => (
+                          <li key={item.key}>• {item.message}</li>
                         ))}
                       </ul>
                     </AlertDescription>
                   </Alert>
                 )}
 
-                {legalitySummary.warnings.length > 0 && (
+                {canonicalWarnings.length > 0 && (
                   <Alert className="border-amber-400/20 bg-amber-400/10">
                     <AlertDescription className="space-y-2 text-amber-50">
                       <p className="text-sm font-medium">Warnings</p>
                       <ul className="space-y-1 text-sm text-amber-100">
-                        {legalitySummary.warnings.map((item) => (
-                          <li key={item}>• {item}</li>
+                        {canonicalWarnings.map((item) => (
+                          <li key={item.key}>• {item.message}</li>
                         ))}
                       </ul>
                     </AlertDescription>
