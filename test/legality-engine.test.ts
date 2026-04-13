@@ -1043,6 +1043,37 @@ test('ERftLW mark of detection species spell-list expansion is also treated as l
   assert.equal(result.checks.find((check) => check.key === 'spell_legality')?.passed, true)
 })
 
+test('mark of warding species spell-list expansion is treated as legal class access', () => {
+  const result = runLegalityChecks(createContext({
+    allowedSources: ['SRD', 'ERftLW'],
+    allSourceRuleSets: { SRD: '2014', ERftLW: '2014' },
+    selectedSpells: [
+      {
+        id: 'armor-of-agathys',
+        name: 'Armor of Agathys',
+        level: 1,
+        classes: [],
+        source: 'ERftLW',
+        grantedBySubclassIds: [],
+        owningClassId: 'wizard',
+        acquisitionMode: 'known',
+        sourceFeatureKey: null,
+        countsAgainstSelectionLimit: true,
+      },
+    ],
+    sourceCollections: {
+      classSources: ['SRD'],
+      subclassSources: ['SRD'],
+      spellSources: ['ERftLW'],
+      featSources: [],
+    },
+    speciesExpandedSpellIds: ['armor-of-agathys'],
+  }))
+
+  assert.equal(result.checks.find((check) => check.key === 'spell_legality')?.passed, true)
+  assert.equal(result.checks.find((check) => check.key === 'spell_selection_count')?.passed, true)
+})
+
 test('deriveCharacter exposes per-source spellcasting summaries for multiclass casters', () => {
   const derived = deriveCharacter(createContext({
     baseStats: { str: 10, dex: 14, con: 13, int: 16, wis: 14, cha: 8 },
