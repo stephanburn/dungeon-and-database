@@ -48,6 +48,17 @@ export function getSpeciesAbilityBonusChoiceConfig(species: Species | null): Spe
     }
   }
 
+  if (species.name === 'Half-Elf (Mark of Detection)' && species.source === 'ERftLW') {
+    return {
+      count: 1,
+      bonus: 1,
+      allowedAbilities: ALL_ABILITIES.filter((ability) => ability !== 'wis'),
+      sourceCategory: 'species_choice',
+      sourceEntityId: species.id,
+      sourceFeatureKey: 'species_asi:mark_of_detection_flexible_bonus',
+    }
+  }
+
   return null
 }
 

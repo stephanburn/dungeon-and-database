@@ -69,6 +69,17 @@ function getSpeciesSkillChoiceConfig(species: Species | null): SpeciesSkillChoic
     }
   }
 
+  if (species.name === 'Half-Elf (Mark of Detection)' && species.source === 'EE') {
+    return {
+      count: 1,
+      from: new Set<SkillKey>([
+        'insight',
+        'investigation',
+      ]),
+      sourceFeatureKey: 'species_trait:deductive_intuition',
+    }
+  }
+
   return null
 }
 

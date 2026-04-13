@@ -312,6 +312,68 @@ test('buildTypedSkillProficiencies tags changeling and warforged species skill p
   ])
 })
 
+test('buildTypedSkillProficiencies tags EE mark of detection skill picks but not ERftLW', () => {
+  const eeChoices = buildTypedSkillProficiencies({
+    skillProficiencies: ['insight'],
+    background: null,
+    selectedClass: null,
+    species: {
+      id: 'mark-detection-ee',
+      name: 'Half-Elf (Mark of Detection)',
+      size: 'medium',
+      speed: 30,
+      ability_score_bonuses: [{ ability: 'cha', bonus: 2 }, { ability: 'wis', bonus: 1 }],
+      languages: ['Common', 'Elvish'],
+      traits: [],
+      senses: [{ type: 'darkvision', range_ft: 60 }],
+      damage_resistances: [],
+      condition_immunities: [],
+      source: 'EE',
+      amended: true,
+      amendment_note: null,
+    },
+  })
+
+  const erftlwChoices = buildTypedSkillProficiencies({
+    skillProficiencies: ['insight'],
+    background: null,
+    selectedClass: null,
+    species: {
+      id: 'mark-detection-erftlw',
+      name: 'Half-Elf (Mark of Detection)',
+      size: 'medium',
+      speed: 30,
+      ability_score_bonuses: [{ ability: 'wis', bonus: 2 }],
+      languages: ['Common', 'Elvish'],
+      traits: [],
+      senses: [{ type: 'darkvision', range_ft: 60 }],
+      damage_resistances: [],
+      condition_immunities: [],
+      source: 'ERftLW',
+      amended: true,
+      amendment_note: null,
+    },
+  })
+
+  assert.deepEqual(eeChoices, [{
+    skill: 'insight',
+    expertise: false,
+    character_level_id: null,
+    source_category: 'species_choice',
+    source_entity_id: 'mark-detection-ee',
+    source_feature_key: 'species_trait:deductive_intuition',
+  }])
+
+  assert.deepEqual(erftlwChoices, [{
+    skill: 'insight',
+    expertise: false,
+    character_level_id: null,
+    source_category: 'manual',
+    source_entity_id: null,
+    source_feature_key: null,
+  }])
+})
+
 test('buildTypedLanguageChoices tags changeling and background language picks with provenance', () => {
   const choices = buildTypedLanguageChoices({
     languageChoices: ['Elvish', 'Draconic', 'Dwarvish', 'Infernal'],
@@ -444,6 +506,22 @@ test('buildTypedAbilityBonusChoices tags changeling and warforged flexible speci
     amendment_note: null,
   }, ['wis'])
 
+  const markOfDetectionChoices = buildTypedAbilityBonusChoices({
+    id: 'mark-detection-erftlw',
+    name: 'Half-Elf (Mark of Detection)',
+    size: 'medium',
+    speed: 30,
+    ability_score_bonuses: [{ ability: 'wis', bonus: 2 }],
+    languages: ['Common', 'Elvish'],
+    traits: [],
+    senses: [{ type: 'darkvision', range_ft: 60 }],
+    damage_resistances: [],
+    condition_immunities: [],
+    source: 'ERftLW',
+    amended: true,
+    amendment_note: null,
+  }, ['int'])
+
   assert.deepEqual(changelingChoices, [{
     ability: 'dex',
     bonus: 1,
@@ -460,6 +538,15 @@ test('buildTypedAbilityBonusChoices tags changeling and warforged flexible speci
     source_category: 'species_choice',
     source_entity_id: 'warforged',
     source_feature_key: 'species_asi:warforged_flexible_bonus',
+  }])
+
+  assert.deepEqual(markOfDetectionChoices, [{
+    ability: 'int',
+    bonus: 1,
+    character_level_id: null,
+    source_category: 'species_choice',
+    source_entity_id: 'mark-detection-erftlw',
+    source_feature_key: 'species_asi:mark_of_detection_flexible_bonus',
   }])
 })
 
@@ -811,6 +898,36 @@ test('species spell-list expansion makes off-list class spells legal and counts 
   assert.equal(result.checks.find((check) => check.key === 'spell_legality')?.passed, true)
   assert.equal(result.checks.find((check) => check.key === 'spell_selection_count')?.passed, true)
   assert.deepEqual(result.derived?.spellcasting.sources[0]?.selectedSpellCountsByLevel, { 1: 1 })
+})
+
+test('ERftLW mark of detection species spell-list expansion is also treated as legal class access', () => {
+  const result = runLegalityChecks(createContext({
+    allowedSources: ['SRD', 'ERftLW'],
+    allSourceRuleSets: { SRD: '2014', ERftLW: '2014' },
+    selectedSpells: [
+      {
+        id: 'detect-thoughts',
+        name: 'Detect Thoughts',
+        level: 2,
+        classes: [],
+        source: 'EE',
+        grantedBySubclassIds: [],
+        owningClassId: 'wizard',
+        acquisitionMode: 'known',
+        sourceFeatureKey: null,
+        countsAgainstSelectionLimit: true,
+      },
+    ],
+    sourceCollections: {
+      classSources: ['SRD'],
+      subclassSources: ['SRD'],
+      spellSources: ['EE'],
+      featSources: [],
+    },
+    speciesExpandedSpellIds: ['detect-thoughts'],
+  }))
+
+  assert.equal(result.checks.find((check) => check.key === 'spell_legality')?.passed, true)
 })
 
 test('deriveCharacter exposes per-source spellcasting summaries for multiclass casters', () => {

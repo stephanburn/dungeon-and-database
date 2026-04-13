@@ -11,6 +11,7 @@ const SOURCE_COLOURS: Record<string, string> = {
   TCoE: 'bg-neutral-700 text-neutral-200',
   GGtR: 'bg-neutral-700 text-neutral-200',
   ERftLW: 'bg-neutral-700 text-neutral-200',
+  EE: 'bg-neutral-700 text-neutral-200',
   Homebrew: 'bg-rose-900 text-rose-200',
 }
 
