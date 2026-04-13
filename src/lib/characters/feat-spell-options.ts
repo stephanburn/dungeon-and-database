@@ -131,7 +131,9 @@ export function buildTypedFeatSpellChoices(args: {
   featSpellChoices: Record<string, string>
   definitions: FeatSpellChoiceDefinition[]
 }): SpellChoiceInput[] {
-  const definitionsByKey = new Map(definitions.map((definition) => [definition.sourceFeatureKey, definition]))
+  const definitionsByKey = new Map(
+    args.definitions.map((definition) => [definition.sourceFeatureKey, definition])
+  )
 
   return Object.entries(args.featSpellChoices).flatMap(([sourceFeatureKey, spellId]) => {
     if (!spellId) return []
