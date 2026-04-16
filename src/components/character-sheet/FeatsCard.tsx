@@ -9,6 +9,16 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import type { Feat, Background } from '@/lib/types/database'
+import type { AsiSelection } from '@/lib/characters/asi-provenance'
+
+const ABILITY_OPTIONS = [
+  { value: 'str', label: 'Strength' },
+  { value: 'dex', label: 'Dexterity' },
+  { value: 'con', label: 'Constitution' },
+  { value: 'int', label: 'Intelligence' },
+  { value: 'wis', label: 'Wisdom' },
+  { value: 'cha', label: 'Charisma' },
+] as const
 
 // Default ASI levels for classes that don't have custom progression loaded.
 // Covers: Barbarian, Bard, Cleric, Druid, Fighter (partial), Monk, Ranger, Rogue,
@@ -25,10 +35,12 @@ interface FeatsCardProps {
   backgroundFeat: Feat | null
   availableFeats: Feat[]
   featChoices: string[]
+  asiChoices: AsiSelection[]
   totalLevel: number
   featSlotLabels?: string[]
   canEdit: boolean
   onChange: (featChoices: string[]) => void
+  onAsiChange: (asiChoices: AsiSelection[]) => void
 }
 
 export function FeatsCard({
@@ -36,10 +48,12 @@ export function FeatsCard({
   backgroundFeat,
   availableFeats,
   featChoices,
+  asiChoices,
   totalLevel,
   featSlotLabels,
   canEdit,
   onChange,
+  onAsiChange,
 }: FeatsCardProps) {
   const slots = featSlotLabels?.length ?? asiSlotsEarned(totalLevel)
   const hasBgFeat = !!backgroundFeat
@@ -53,6 +67,13 @@ export function FeatsCard({
     // Trim trailing empty strings
     while (next.length > 0 && !next[next.length - 1]) next.pop()
     onChange(next)
+  }
+
+  function setAsiSlot(index: number, selection: AsiSelection) {
+    const next = [...asiChoices]
+    next[index] = selection
+    while (next.length > 0 && (next[next.length - 1] ?? []).length === 0) next.pop()
+    onAsiChange(next)
   }
 
   return (
@@ -80,6 +101,7 @@ export function FeatsCard({
         {Array.from({ length: slots }, (_, i) => {
           const chosenId = featChoices[i] ?? ''
           const chosenFeat = availableFeats.find((f) => f.id === chosenId)
+          const chosenAsi = asiChoices[i] ?? []
 
           return (
             <div key={i} className="space-y-1">
@@ -112,9 +134,46 @@ export function FeatsCard({
                         )}
                       </>
                     ) : (
-                      <p className="text-sm text-neutral-500">ASI (not a feat)</p>
+                      <p className="text-sm text-neutral-500">
+                        ASI {chosenAsi.length > 0 ? `(${chosenAsi.map((ability) => ability.toUpperCase()).join(', ')})` : '(not allocated yet)'}
+                      </p>
                     )}
                   </div>
+                </div>
+              )}
+
+              {canEdit && !chosenFeat && (
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {[0, 1].map((pickIndex) => {
+                    const selectedAbility = chosenAsi[pickIndex] ?? ''
+                    return (
+                      <Select
+                        key={pickIndex}
+                        value={selectedAbility || 'none'}
+                        onValueChange={(value) => {
+                          const next = [...chosenAsi]
+                          if (value === 'none') {
+                            next.splice(pickIndex, 1)
+                          } else {
+                            next[pickIndex] = value as AsiSelection[number]
+                          }
+                          setAsiSlot(i, next.filter(Boolean) as AsiSelection)
+                        }}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder={`ASI pick ${pickIndex + 1}`} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none" className="text-neutral-500">Unassigned</SelectItem>
+                          {ABILITY_OPTIONS.map((ability) => (
+                            <SelectItem key={ability.value} value={ability.value} className="text-neutral-200">
+                              {ability.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )
+                  })}
                 </div>
               )}
             </div>

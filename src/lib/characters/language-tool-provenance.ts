@@ -88,8 +88,6 @@ const STANDARD_TOOL_OPTIONS = [
   'Viol',
 ]
 
-const ARTISAN_TOOL_OPTIONS = STANDARD_TOOL_OPTIONS.slice(0, 17)
-
 function dedupe(values: string[]) {
   return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)))
 }
@@ -148,40 +146,6 @@ function getSpeciesLanguageChoiceConfig(species: Species | null): LanguageChoice
     }
   }
 
-  if (
-    (
-      species.name === 'Half-Elf (Mark of Detection)' ||
-      species.name === 'Half-Elf (Mark of Storm)'
-    ) &&
-    (species.source === 'ERftLW' || species.source === 'EE')
-  ) {
-    return {
-      count: 1,
-      options: STANDARD_LANGUAGE_OPTIONS.filter((language) => !species.languages.includes(language)),
-      sourceCategory: 'species_choice',
-      sourceEntityId: species.id,
-      sourceFeatureKey: 'species_languages:half_elf_dragonmark',
-    }
-  }
-
-  if (
-    (
-      species.name === 'Human (Mark of Handling)' ||
-      species.name === 'Human (Mark of Making)' ||
-      species.name === 'Human (Mark of Passage)' ||
-      species.name === 'Human (Mark of Sentinel)'
-    ) &&
-    species.source === 'ERftLW'
-  ) {
-    return {
-      count: 1,
-      options: STANDARD_LANGUAGE_OPTIONS.filter((language) => !species.languages.includes(language)),
-      sourceCategory: 'species_choice',
-      sourceEntityId: species.id,
-      sourceFeatureKey: 'species_languages:human_dragonmark',
-    }
-  }
-
   return null
 }
 
@@ -210,16 +174,6 @@ function getSpeciesToolChoiceConfig(species: Species | null): ToolChoiceConfig |
       sourceCategory: 'species_choice',
       sourceEntityId: species.id,
       sourceFeatureKey: 'species_trait:specialized_design',
-    }
-  }
-
-  if (species.name === 'Human (Mark of Making)' && species.source === 'ERftLW') {
-    return {
-      count: 1,
-      options: ARTISAN_TOOL_OPTIONS,
-      sourceCategory: 'species_choice',
-      sourceEntityId: species.id,
-      sourceFeatureKey: 'species_trait:artisans_gift',
     }
   }
 

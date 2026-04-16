@@ -63,17 +63,24 @@ export type AbilityBonusChoiceInput =
       source_feature_key?: string | null
     }
 
-export type FeatureOptionChoiceInput =
-  | {
-      option_group_key: string
-      option_key: string
-      selected_value?: Record<string, unknown>
-      choice_order?: number
-      character_level_id?: string | null
-      source_category?: string
-      source_entity_id?: string | null
-      source_feature_key?: string | null
-    }
+export type AsiChoiceInput = {
+  slot_index: number
+  ability: 'str' | 'dex' | 'con' | 'int' | 'wis' | 'cha'
+  bonus?: number
+  character_level_id?: string | null
+  source_feature_key?: string | null
+}
+
+export type FeatureOptionChoiceInput = {
+  option_group_key: string
+  option_key: string
+  selected_value?: Record<string, unknown>
+  choice_order?: number
+  character_level_id?: string | null
+  source_category?: string
+  source_entity_id?: string | null
+  source_feature_key?: string | null
+}
 
 function normalizeSpellChoice(choice: SpellChoiceInput) {
   if (typeof choice === 'string') {
@@ -186,6 +193,16 @@ function normalizeAbilityBonusChoice(choice: AbilityBonusChoiceInput) {
     character_level_id: choice.character_level_id ?? null,
     source_category: choice.source_category ?? 'manual',
     source_entity_id: choice.source_entity_id ?? null,
+    source_feature_key: choice.source_feature_key ?? null,
+  }
+}
+
+function normalizeAsiChoice(choice: AsiChoiceInput) {
+  return {
+    slot_index: choice.slot_index,
+    ability: choice.ability,
+    bonus: choice.bonus ?? 1,
+    character_level_id: choice.character_level_id ?? null,
     source_feature_key: choice.source_feature_key ?? null,
   }
 }
@@ -379,16 +396,40 @@ export async function replaceCharacterAbilityBonusChoices(
   return error
 }
 
+export async function replaceCharacterAsiChoices(
+  supabase: SupabaseClient<Database>,
+  characterId: string,
+  asiChoices: AsiChoiceInput[]
+) {
+  const { error: deleteAsiChoicesError } = await supabase
+    .from('character_asi_choices')
+    .delete()
+    .eq('character_id', characterId)
+  if (deleteAsiChoicesError) return deleteAsiChoicesError
+
+  if (asiChoices.length === 0) return null
+
+  const normalizedChoices = asiChoices.map(normalizeAsiChoice)
+
+  const { error } = await supabase.from('character_asi_choices').insert(
+    normalizedChoices.map((choice) => ({
+      character_id: characterId,
+      ...choice,
+    }))
+  )
+  return error
+}
+
 export async function replaceCharacterFeatureOptionChoices(
   supabase: SupabaseClient<Database>,
   characterId: string,
   featureOptionChoices: FeatureOptionChoiceInput[]
 ) {
-  const { error: deleteFeatureChoicesError } = await supabase
+  const { error: deleteChoicesError } = await supabase
     .from('character_feature_option_choices')
     .delete()
     .eq('character_id', characterId)
-  if (deleteFeatureChoicesError) return deleteFeatureChoicesError
+  if (deleteChoicesError) return deleteChoicesError
 
   const normalizedChoices = featureOptionChoices
     .filter((choice) => choice.option_group_key.trim().length > 0 && choice.option_key.trim().length > 0)

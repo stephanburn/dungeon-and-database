@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { requireAuth, requireAdmin, jsonError, readJsonBody } from '@/lib/api-helpers'
 import { getAllowedSources } from '@/lib/content-helpers'
+import { MAVERICK_BREAKTHROUGH_SOURCE_FEATURE_KEY } from '@/lib/characters/maverick'
 import { writeAuditLog } from '@/lib/server/audit'
 import type { SpellComponents } from '@/lib/types/database'
 
@@ -12,8 +13,9 @@ export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl
   const campaignId = searchParams.get('campaign_id')
   const classId = searchParams.get('class_id')
-  const subclassIds = searchParams.getAll('subclass_id').filter(Boolean)
   const speciesId = searchParams.get('species_id')
+  const subclassIds = searchParams.getAll('subclass_id').filter(Boolean)
+  const expandedClassIds = searchParams.getAll('expanded_class_id').filter(Boolean)
   const classLevel = parseInt(searchParams.get('class_level') ?? '0', 10)
   const levelParam = searchParams.get('level')
 
@@ -28,17 +30,18 @@ export async function GET(request: NextRequest) {
 
   if (activeBonusRows.error) return jsonError(activeBonusRows.error.message, 500)
 
-  const speciesBonusRows = speciesId
+  const activeSpeciesBonusRows = speciesId
     ? await supabase
         .from('species_bonus_spells')
         .select('*')
         .eq('species_id', speciesId)
+        .lte('minimum_character_level', Number.isNaN(classLevel) ? 0 : classLevel)
     : { data: [], error: null }
 
-  if (speciesBonusRows.error) return jsonError(speciesBonusRows.error.message, 500)
+  if (activeSpeciesBonusRows.error) return jsonError(activeSpeciesBonusRows.error.message, 500)
 
   const grantedSpellIds = new Set((activeBonusRows.data ?? []).map((row) => row.spell_id))
-  const speciesBonusSpellIds = new Set((speciesBonusRows.data ?? []).map((row) => row.spell_id))
+  const speciesExpandedSpellIds = new Set((activeSpeciesBonusRows.data ?? []).map((row) => row.spell_id))
   const baseQuery = supabase.from('spells').select('*').order('level').order('name')
   const { data: allSpells, error } = await baseQuery
   if (error) return jsonError(error.message, 500)
@@ -53,18 +56,36 @@ export async function GET(request: NextRequest) {
   const filtered = (allSpells ?? []).filter((spell) => {
     const baseAllowed = !classId || spell.classes.includes(classId)
     const bonusAllowed = grantedSpellIds.has(spell.id)
-    const speciesAllowed = speciesBonusSpellIds.has(spell.id)
-    const sourceAllowed = !allowedSources || allowedSources.has(spell.source) || bonusAllowed || speciesAllowed
+    const speciesAllowed = speciesExpandedSpellIds.has(spell.id)
+    const breakthroughAllowed = expandedClassIds.some((expandedClassId) => spell.classes.includes(expandedClassId))
+    const sourceAllowed = !allowedSources || allowedSources.has(spell.source) || bonusAllowed
     const levelAllowed = levelParam === null || spell.level === parseInt(levelParam, 10)
-    return sourceAllowed && levelAllowed && (baseAllowed || bonusAllowed || speciesAllowed)
-  }).map((spell) => ({
-    ...spell,
-    granted_by_subclasses: (bonusRowsBySpellId.get(spell.id) ?? []).map((row) => row.subclass_id),
-    expanded_by_species: speciesBonusSpellIds.has(spell.id) ? [speciesId].filter((value): value is string => Boolean(value)) : [],
-    counts_against_selection_limit: !(bonusRowsBySpellId.get(spell.id) ?? []).some(
-      (row) => !row.counts_against_selection_limit
-    ),
-  }))
+    return sourceAllowed && levelAllowed && (baseAllowed || bonusAllowed || speciesAllowed || breakthroughAllowed)
+  }).map((spell) => {
+    const baseAllowed = !classId || spell.classes.includes(classId)
+    const breakthroughAllowed = expandedClassIds.some((expandedClassId) => spell.classes.includes(expandedClassId))
+    const breakthroughOnly = breakthroughAllowed && !baseAllowed
+
+    return {
+      ...spell,
+      granted_by_subclasses: (bonusRowsBySpellId.get(spell.id) ?? []).map((row) => row.subclass_id),
+      counts_against_selection_limit: speciesExpandedSpellIds.has(spell.id)
+        ? true
+        : breakthroughOnly
+          ? spell.level === 0
+          : !(bonusRowsBySpellId.get(spell.id) ?? []).some(
+              (row) => !row.counts_against_selection_limit
+            ),
+      available_via_class_ids: [
+        ...(classId && (speciesExpandedSpellIds.has(spell.id) || breakthroughOnly)
+          ? [classId]
+          : []),
+      ],
+      source_feature_key: breakthroughOnly && spell.level > 0
+        ? MAVERICK_BREAKTHROUGH_SOURCE_FEATURE_KEY
+        : null,
+    }
+  })
 
   return NextResponse.json(filtered)
 }

@@ -6,6 +6,7 @@ import type {
   ClassFeatureProgression,
   Database,
   CharacterAbilityBonusChoice,
+  CharacterAsiChoice,
   CharacterFeatChoice,
   CharacterFeatureOptionChoice,
   CharacterLanguageChoice,
@@ -51,6 +52,30 @@ function toSelectedAbilityBonusMap(
   return bonuses
 }
 
+function toSelectedAsiBonusMap(
+  rows: CharacterAsiChoice[]
+): Partial<Record<AbilityKey, number>> {
+  const bonuses: Partial<Record<AbilityKey, number>> = {}
+  for (const entry of rows) {
+    bonuses[entry.ability] = (bonuses[entry.ability] ?? 0) + entry.bonus
+  }
+  return bonuses
+}
+
+function toAsiChoiceSlots(rows: CharacterAsiChoice[]) {
+  const grouped = new Map<number, Partial<Record<AbilityKey, number>>>()
+
+  for (const entry of rows) {
+    const existing = grouped.get(entry.slot_index) ?? {}
+    existing[entry.ability] = (existing[entry.ability] ?? 0) + entry.bonus
+    grouped.set(entry.slot_index, existing)
+  }
+
+  return Array.from(grouped.entries())
+    .sort((left, right) => left[0] - right[0])
+    .map(([slotIndex, bonuses]) => ({ slotIndex, bonuses }))
+}
+
 export async function buildCharacterBuildContext(
   supabase: SupabaseClient<Database>,
   characterId: string
@@ -70,6 +95,7 @@ export async function buildCharacterBuildContext(
     statRollsResult,
     skillsResult,
     abilityBonusChoicesResult,
+    asiChoicesResult,
     languageChoicesResult,
     toolChoicesResult,
     featureOptionChoicesResult,
@@ -85,9 +111,10 @@ export async function buildCharacterBuildContext(
     supabase.from('character_stat_rolls').select('assigned_to, roll_set').eq('character_id', characterId),
     supabase.from('character_skill_proficiencies').select('*').eq('character_id', characterId),
     supabase.from('character_ability_bonus_choices').select('*').eq('character_id', characterId),
+    supabase.from('character_asi_choices').select('*').eq('character_id', characterId),
     supabase.from('character_language_choices').select('*').eq('character_id', characterId),
     supabase.from('character_tool_choices').select('*').eq('character_id', characterId),
-    supabase.from('character_feature_option_choices').select('*').eq('character_id', characterId).order('choice_order'),
+    supabase.from('character_feature_option_choices').select('*').eq('character_id', characterId),
     character.species_id
       ? supabase.from('species').select('*').eq('id', character.species_id).single()
       : Promise.resolve({ data: null }),
@@ -111,6 +138,7 @@ export async function buildCharacterBuildContext(
   const featIds: string[] = []
   const typedSpellSelections = (spellSelectionsResult.data ?? []) as CharacterSpellSelection[]
   const typedFeatSelections = (featSelectionsResult.data ?? []) as CharacterFeatChoice[]
+  const typedFeatureOptionChoices = (featureOptionChoicesResult.data ?? []) as CharacterFeatureOptionChoice[]
   spellIds.push(...typedSpellSelections.map((row) => row.spell_id))
   featIds.push(...typedFeatSelections.map((row) => row.feat_id))
 
@@ -194,13 +222,17 @@ export async function buildCharacterBuildContext(
     const matchingClass = buildClassesForLevelLookup(levels, row.subclass_id)
     return matchingClass !== null && matchingClass.level >= row.required_class_level
   })
-  const activeSpeciesBonusSpells = (speciesBonusSpellsResult.data ?? []) as SpeciesBonusSpell[]
   const bonusSpellRowsBySpellId = new Map<string, SubclassBonusSpell[]>()
   for (const row of activeSubclassBonusSpells) {
     const existing = bonusSpellRowsBySpellId.get(row.spell_id) ?? []
     existing.push(row)
     bonusSpellRowsBySpellId.set(row.spell_id, existing)
   }
+  const activeSpeciesBonusSpells = ((speciesBonusSpellsResult.data ?? []) as SpeciesBonusSpell[]).filter((row) => {
+    const totalLevel = levels.reduce((sum, level) => sum + level.level, 0)
+    return totalLevel >= row.minimum_character_level
+  })
+  const speciesBonusSpellIds = new Set(activeSpeciesBonusSpells.map((row) => row.spell_id))
 
   const buildClasses: BuildClassSummary[] = levels.flatMap((level) => {
     const cls = classesById.get(level.class_id)
@@ -275,21 +307,22 @@ export async function buildCharacterBuildContext(
       id: spell.id,
       name: spell.name,
       level: spell.level,
-      classes: spell.classes,
+      classes: typedSpellSelections.length > 0
+        ? Array.from(new Set([
+            ...spell.classes,
+            ...(typedSpellSelectionsBySpellId.get(spell.id) ?? [])
+              .map((row) => row.owning_class_id)
+              .filter((value): value is string => Boolean(value)),
+          ]))
+        : spell.classes,
       source: spell.source,
       grantedBySubclassIds: typedSpellSelections.length > 0
         ? (typedSpellSelectionsBySpellId.get(spell.id) ?? [])
             .map((row) => row.granting_subclass_id)
             .filter((value): value is string => Boolean(value))
         : (bonusSpellRowsBySpellId.get(spell.id) ?? []).map((row) => row.subclass_id),
-      owningClassId: typedSpellSelections.length > 0
-        ? (typedSpellSelectionsBySpellId.get(spell.id) ?? []).find((row) => row.owning_class_id !== null)?.owning_class_id ?? null
-        : null,
-      acquisitionMode: typedSpellSelections.length > 0
-        ? (typedSpellSelectionsBySpellId.get(spell.id) ?? []).find((row) => Boolean(row.acquisition_mode))?.acquisition_mode ?? 'known'
-        : 'known',
       sourceFeatureKey: typedSpellSelections.length > 0
-        ? (typedSpellSelectionsBySpellId.get(spell.id) ?? []).find((row) => Boolean(row.source_feature_key))?.source_feature_key ?? null
+        ? (typedSpellSelectionsBySpellId.get(spell.id) ?? [])[0]?.source_feature_key ?? null
         : null,
       countsAgainstSelectionLimit: typedSpellSelections.length > 0
         ? !((typedSpellSelectionsBySpellId.get(spell.id) ?? []).some((row) => !row.counts_against_selection_limit))
@@ -362,6 +395,9 @@ export async function buildCharacterBuildContext(
     })),
     skillProficiencies: (skillsResult.data ?? []).map((row) => row.skill),
     selectedAbilityBonuses: toSelectedAbilityBonusMap((abilityBonusChoicesResult.data ?? []) as CharacterAbilityBonusChoice[]),
+    selectedAsiBonuses: toSelectedAsiBonusMap((asiChoicesResult.data ?? []) as CharacterAsiChoice[]),
+    selectedFeatureOptions: typedFeatureOptionChoices,
+    asiChoiceSlots: toAsiChoiceSlots((asiChoicesResult.data ?? []) as CharacterAsiChoice[]),
     speciesName: species?.name ?? null,
     selectedLanguages: ((languageChoicesResult.data ?? []) as CharacterLanguageChoice[]).map((row) => row.language),
     selectedTools: ((toolChoicesResult.data ?? []) as CharacterToolChoice[]).map((row) => row.tool),
@@ -385,16 +421,6 @@ export async function buildCharacterBuildContext(
     classes: buildClasses,
     selectedSpells,
     selectedFeats,
-    selectedFeatureOptionChoices: ((featureOptionChoicesResult.data ?? []) as CharacterFeatureOptionChoice[]).map((row) => ({
-      optionGroupKey: row.option_group_key,
-      optionKey: row.option_key,
-      selectedValue: row.selected_value,
-      choiceOrder: row.choice_order,
-      characterLevelId: row.character_level_id,
-      sourceCategory: row.source_category,
-      sourceEntityId: row.source_entity_id,
-      sourceFeatureKey: row.source_feature_key,
-    })),
     sourceCollections,
     grantedSpellIds: Array.from(new Set([
       ...activeSubclassBonusSpells.map((row) => row.spell_id),
@@ -402,6 +428,7 @@ export async function buildCharacterBuildContext(
         .filter((row) => row.acquisition_mode === 'granted' || Boolean(row.source_feature_key))
         .map((row) => row.spell_id),
     ])),
+    expandedSpellIds: Array.from(speciesBonusSpellIds),
     freePreparedSpellIds: Array.from(new Set(
       [
         ...activeSubclassBonusSpells
@@ -412,7 +439,6 @@ export async function buildCharacterBuildContext(
           .map((row) => row.spell_id),
       ]
     )),
-    speciesExpandedSpellIds: activeSpeciesBonusSpells.map((row) => row.spell_id),
     multiclassSpellSlotsByCasterLevel,
   }
 }

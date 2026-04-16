@@ -2,18 +2,16 @@ import type {
   CharacterSpellSelection,
   Feat,
 } from '@/lib/types/database'
-import type { SpellChoiceInput } from '@/lib/characters/choice-persistence'
+import type { FeatureSpellChoiceDefinition } from '@/lib/characters/feature-grants'
+import {
+  buildTypedFeatureSpellChoices,
+  extractInteractiveFeatureSpellChoiceMap,
+} from '@/lib/characters/feature-grants'
 
-export interface FeatSpellChoiceDefinition {
+export interface FeatSpellChoiceDefinition extends FeatureSpellChoiceDefinition {
   featId: string
   featName: string
   choiceKey: string
-  label: string
-  spellLevel: number | null
-  spellListClassName: string | null
-  acquisitionMode: string
-  countsAgainstSelectionLimit: boolean
-  sourceFeatureKey: string
 }
 
 type RawFeatSpellChoice = {
@@ -48,11 +46,12 @@ function normalizeFeatSpellChoiceDefinition(
     featId: feat.id,
     featName: feat.name,
     choiceKey,
+    ownerLabel: feat.name,
     label: typeof raw.label === 'string' && raw.label.length > 0
       ? raw.label
       : `${feat.name} spell choice`,
     spellLevel,
-    spellListClassName,
+    spellListClassNames: [spellListClassName],
     acquisitionMode: typeof raw.acquisition_mode === 'string' && raw.acquisition_mode.length > 0
       ? raw.acquisition_mode
       : 'granted',
@@ -119,36 +118,19 @@ export function getFeatSpellChoiceDefinitions(feats: Feat[]): FeatSpellChoiceDef
 export function extractFeatSpellChoiceMap(
   rows: CharacterSpellSelection[]
 ): Record<string, string> {
-  const entries = rows.flatMap((row) => {
-    if (!isFeatSpellSourceFeatureKey(row.source_feature_key)) return []
-    return [[row.source_feature_key as string, row.spell_id] as const]
-  })
-
-  return Object.fromEntries(entries)
+  return Object.fromEntries(
+    Object.entries(extractInteractiveFeatureSpellChoiceMap(rows)).filter(([sourceFeatureKey]) =>
+      isFeatSpellSourceFeatureKey(sourceFeatureKey)
+    )
+  )
 }
 
 export function buildTypedFeatSpellChoices(args: {
   featSpellChoices: Record<string, string>
   definitions: FeatSpellChoiceDefinition[]
-}): SpellChoiceInput[] {
-  const definitionsByKey = new Map(
-    args.definitions.map((definition) => [definition.sourceFeatureKey, definition])
-  )
-
-  return Object.entries(args.featSpellChoices).flatMap(([sourceFeatureKey, spellId]) => {
-    if (!spellId) return []
-
-    const definition = definitionsByKey.get(sourceFeatureKey)
-    if (!definition) return []
-
-    return [{
-      spell_id: spellId,
-      character_level_id: null,
-      owning_class_id: null,
-      granting_subclass_id: null,
-      acquisition_mode: definition.acquisitionMode,
-      counts_against_selection_limit: definition.countsAgainstSelectionLimit,
-      source_feature_key: sourceFeatureKey,
-    }]
+}) {
+  return buildTypedFeatureSpellChoices({
+    selectedChoices: args.featSpellChoices,
+    definitions: args.definitions,
   })
 }

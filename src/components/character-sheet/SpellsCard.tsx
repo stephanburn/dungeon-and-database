@@ -18,6 +18,7 @@ interface SpellsCardProps {
   campaignId: string
   speciesId?: string | null
   subclassIds?: string[]
+  expandedClassIds?: string[]
   classLevel?: number
   derivedSpellcasting?: Pick<
     DerivedCharacter['spellcasting'],
@@ -36,13 +37,16 @@ interface SpellsCardProps {
 type SpellOption = Spell & {
   granted_by_subclasses?: string[]
   counts_against_selection_limit?: boolean
+  available_via_class_ids?: string[]
+  source_feature_key?: string | null
 }
 
 export function SpellsCard({
   classId,
   campaignId,
-  speciesId = null,
+  speciesId,
   subclassIds = [],
+  expandedClassIds = [],
   classLevel = 0,
   derivedSpellcasting,
   spellChoices,
@@ -66,11 +70,12 @@ export function SpellsCard({
     })
     if (speciesId) params.set('species_id', speciesId)
     for (const subclassId of subclassIds) params.append('subclass_id', subclassId)
+    for (const expandedClassId of expandedClassIds) params.append('expanded_class_id', expandedClassId)
 
     fetch(`/api/content/spells?${params.toString()}`)
       .then(r => r.json())
       .then(data => setSpells(Array.isArray(data) ? data : []))
-  }, [classId, campaignId, classLevel, speciesId, subclassIds])
+  }, [classId, campaignId, classLevel, speciesId, subclassIds, expandedClassIds])
 
   const visibleSpells = spells.filter((spell) => spell.level === 0 || maxSpellLevel === undefined || spell.level <= maxSpellLevel)
   const filtered = search.trim()

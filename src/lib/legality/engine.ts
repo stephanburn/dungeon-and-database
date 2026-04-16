@@ -5,6 +5,11 @@ import {
   type DerivedCharacter,
   type CharacterBuildContext,
 } from '@/lib/characters/build-context'
+import {
+  getMaverickPreparedBreakthroughLevels,
+  isMaverickSubclass,
+  MAVERICK_BREAKTHROUGH_SOURCE_FEATURE_KEY,
+} from '@/lib/characters/maverick'
 import { getSpeciesAbilityBonusChoiceConfig } from '@/lib/characters/species-ability-bonus-provenance'
 import { normalizeSkillKey } from '@/lib/skills'
 
@@ -314,6 +319,35 @@ function checkSpeciesAbilityBonusChoices(input: LegalityInput): LegalityCheck {
   }
 }
 
+function checkAsiChoices(input: LegalityInput, derived: DerivedCharacter): LegalityCheck {
+  const invalidSlots = input.asiChoiceSlots.flatMap((slot) => {
+    const totalBonus = Object.values(slot.bonuses).reduce((sum, bonus) => sum + (bonus ?? 0), 0)
+    const invalidAbilityBonus = Object.values(slot.bonuses).some((bonus) => (bonus ?? 0) > 2)
+    if (invalidAbilityBonus || totalBonus > 2) {
+      return [`ASI slot ${slot.slotIndex + 1} exceeds the normal +2 total.`]
+    }
+    return []
+  })
+
+  if (input.asiChoiceSlots.length + input.selectedFeats.length > derived.choiceCaps.featSlots) {
+    return {
+      key: 'asi_choices',
+      passed: false,
+      message: `Progression ASI and feat selections exceed available slots (${derived.choiceCaps.featSlots}).`,
+      severity: 'error',
+    }
+  }
+
+  return {
+    key: 'asi_choices',
+    passed: invalidSlots.length === 0,
+    message: invalidSlots.length === 0
+      ? `ASI choices fit available slots (${input.asiChoiceSlots.length}/${derived.choiceCaps.featSlots}).`
+      : invalidSlots.join(' '),
+    severity: 'error',
+  }
+}
+
 function checkMulticlassPrerequisites(input: LegalityInput): LegalityCheck {
   const adjustedScores = getAdjustedAbilityScores(input)
   const violations = input.classes
@@ -414,19 +448,11 @@ function checkFeatSlots(input: LegalityInput, derived: DerivedCharacter): Legali
 function checkSpellLegality(input: LegalityInput, derived: DerivedCharacter): LegalityCheck {
   const availableClassIds = new Set(input.classes.map((cls) => cls.classId))
   const grantedSpellIds = new Set(input.grantedSpellIds)
-  const speciesExpandedSpellIds = new Set(input.speciesExpandedSpellIds)
+  const expandedSpellIds = new Set(input.expandedSpellIds)
   const invalid = input.selectedSpells.filter((spell) => {
     const matchesClass =
-      (
-        spell.owningClassId !== null &&
-        availableClassIds.has(spell.owningClassId) &&
-        (
-          spell.classes.includes(spell.owningClassId) ||
-          speciesExpandedSpellIds.has(spell.id)
-        )
-      ) ||
       spell.classes.some((classId) => availableClassIds.has(classId)) ||
-      speciesExpandedSpellIds.has(spell.id) ||
+      expandedSpellIds.has(spell.id) ||
       grantedSpellIds.has(spell.id) ||
       spell.grantedBySubclassIds.some((subclassId) =>
         input.classes.some((cls) => cls.subclass?.id === subclassId)
@@ -445,16 +471,50 @@ function checkSpellLegality(input: LegalityInput, derived: DerivedCharacter): Le
   }
 }
 
+function checkMaverickBreakthroughSelections(input: LegalityInput): LegalityCheck {
+  const maverickClass = input.classes.find((cls) => cls.subclass && isMaverickSubclass(cls.subclass))
+  if (!maverickClass) {
+    return {
+      key: 'maverick_breakthroughs',
+      passed: true,
+      message: 'No Maverick-specific spell selections to validate.',
+      severity: 'error',
+    }
+  }
+
+  const allowedLevels = new Set<number>(getMaverickPreparedBreakthroughLevels(maverickClass.level))
+  const breakthroughSpells = input.selectedSpells.filter(
+    (spell) => spell.sourceFeatureKey === MAVERICK_BREAKTHROUGH_SOURCE_FEATURE_KEY && spell.level > 0
+  )
+
+  const invalidLevels = breakthroughSpells
+    .filter((spell) => !allowedLevels.has(spell.level))
+    .map((spell) => spell.name)
+
+  const overSelectedLevels = Array.from(allowedLevels).flatMap((level) => {
+    const count = breakthroughSpells.filter((spell) => spell.level === level).length
+    return count > 1 ? [`level ${level} (${count} selected)`] : []
+  })
+
+  return {
+    key: 'maverick_breakthroughs',
+    passed: invalidLevels.length === 0 && overSelectedLevels.length === 0,
+    message: invalidLevels.length === 0 && overSelectedLevels.length === 0
+      ? 'Maverick Breakthrough spell selections are valid.'
+      : [
+          invalidLevels.length > 0 ? `Invalid Breakthrough spell levels: ${invalidLevels.join(', ')}.` : null,
+          overSelectedLevels.length > 0 ? `Too many Breakthrough spells selected for ${overSelectedLevels.join(', ')}.` : null,
+        ].filter(Boolean).join(' '),
+    severity: 'error',
+  }
+}
+
 function checkSpellSelectionCount(input: LegalityInput, derived: DerivedCharacter): LegalityCheck {
   const sourceViolations = derived.spellcasting.sources.flatMap((source) => {
     const sourceSelections = input.selectedSpells.filter((spell) => {
       if (!spell.countsAgainstSelectionLimit) return false
-      if (spell.owningClassId === source.classId) return true
       return (
-        (
-          spell.owningClassId == null &&
-          spell.classes.includes(source.classId)
-        ) ||
+        spell.classes.includes(source.classId) ||
         spell.grantedBySubclassIds.includes(
           input.classes.find((cls) => cls.classId === source.classId)?.subclass?.id ?? ''
         )
@@ -518,11 +578,13 @@ export function runLegalityChecks(input: LegalityInput): LegalityResult {
     checkLevelCap(input, baseDerived),
     checkSkillProficiencies(input, baseDerived),
     checkSpeciesAbilityBonusChoices(input),
+    checkAsiChoices(input, baseDerived),
     checkMulticlassPrerequisites(input),
     checkSubclassTiming(baseDerived),
     checkFeatPrerequisites(input, baseDerived),
     checkFeatSlots(input, baseDerived),
     checkSpellLegality(input, baseDerived),
+    checkMaverickBreakthroughSelections(input),
     checkSpellSelectionCount(input, baseDerived),
   ]
 

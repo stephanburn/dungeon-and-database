@@ -57,11 +57,13 @@ export default async function CharacterPage({ params }: { params: { id: string }
           campaignId={character.campaign_id}
           initialSkillProficiencies={loadedState.initialSkillProficiencies}
           initialAbilityBonusChoices={loadedState.initialAbilityBonusChoices}
+          initialAsiChoices={loadedState.initialAsiChoices}
           initialLanguageChoices={loadedState.initialLanguageChoices}
           initialToolChoices={loadedState.initialToolChoices}
           initialSpellChoices={loadedState.initialSpellChoices}
-          initialFeatSpellChoices={loadedState.initialFeatSpellChoices}
+          initialSelectedSpells={loadedState.initialSelectedSpells}
           initialFeatChoices={loadedState.initialFeatChoices}
+          initialFeatureOptionChoices={loadedState.initialFeatureOptionChoices}
           initialLegalityResult={loadedState.legality}
           readOnly={false}
           isDm={isDm}

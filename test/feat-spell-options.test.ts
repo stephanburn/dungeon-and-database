@@ -22,6 +22,8 @@ function createContext(overrides: Partial<CharacterBuildContext> = {}): Characte
     selectedLanguages: [],
     selectedTools: [],
     selectedAbilityBonuses: {},
+    selectedAsiBonuses: {},
+    asiChoiceSlots: [],
     speciesName: 'Human',
     speciesSource: 'SRD',
     speciesAbilityBonuses: {},
@@ -66,7 +68,7 @@ function createContext(overrides: Partial<CharacterBuildContext> = {}): Characte
     }],
     selectedSpells: [],
     selectedFeats: [],
-    selectedFeatureOptionChoices: [],
+    selectedFeatureOptions: [],
     sourceCollections: {
       classSources: ['SRD'],
       subclassSources: [],
@@ -75,7 +77,7 @@ function createContext(overrides: Partial<CharacterBuildContext> = {}): Characte
     },
     grantedSpellIds: [],
     freePreparedSpellIds: [],
-    speciesExpandedSpellIds: [],
+    expandedSpellIds: [],
     multiclassSpellSlotsByCasterLevel: {
       1: [2],
       2: [3],
@@ -111,7 +113,7 @@ test('getFeatSpellChoiceDefinitions exposes Aberrant Dragonmark choices from ben
   assert.deepEqual(definitions.map((definition) => ({
     label: definition.label,
     spellLevel: definition.spellLevel,
-    spellListClassName: definition.spellListClassName,
+    spellListClassName: definition.spellListClassNames[0],
     sourceFeatureKey: definition.sourceFeatureKey,
   })), [{
     label: 'Aberrant Dragonmark cantrip',
@@ -130,14 +132,12 @@ test('feat-granted off-list spells stay legal and out of class selection caps', 
       classes: ['sorcerer'],
       source: 'EE',
       grantedBySubclassIds: [],
-      owningClassId: null,
-      acquisitionMode: 'granted',
       sourceFeatureKey: 'feat_spell:feat-aberrant-dragonmark:level_1_spell',
       countsAgainstSelectionLimit: false,
     }],
     grantedSpellIds: ['chaos-bolt'],
     freePreparedSpellIds: ['chaos-bolt'],
-    speciesExpandedSpellIds: ['chaos-bolt'],
+    expandedSpellIds: ['chaos-bolt'],
     sourceCollections: {
       classSources: ['SRD'],
       subclassSources: [],
@@ -151,6 +151,13 @@ test('feat-granted off-list spells stay legal and out of class selection caps', 
 
   assert.equal(legality.checks.find((check) => check.key === 'spell_legality')?.passed, true)
   assert.equal(legality.checks.find((check) => check.key === 'spell_selection_count')?.passed, true)
-  assert.deepEqual(derived.spellcasting.sources[0]?.selectedSpells, [])
+  assert.deepEqual(derived.spellcasting.sources[0]?.selectedSpells, [{
+    id: 'chaos-bolt',
+    name: 'Chaos Bolt',
+    level: 1,
+    source: 'EE',
+    granted: true,
+    countsAgainstSelectionLimit: false,
+  }])
   assert.equal(derived.spellcasting.selectedSpells[0]?.granted, true)
 })

@@ -226,7 +226,7 @@ export type SpeciesBonusSpell = {
   id: string
   species_id: string
   spell_id: string
-  created_at: string
+  minimum_character_level: number
 }
 
 export type Spell = {
@@ -397,6 +397,17 @@ export type CharacterAbilityBonusChoice = {
   created_at: string
 }
 
+export type CharacterAsiChoice = {
+  id: string
+  character_id: string
+  character_level_id: string | null
+  slot_index: number
+  ability: 'str' | 'dex' | 'con' | 'int' | 'wis' | 'cha'
+  bonus: number
+  source_feature_key: string | null
+  created_at: string
+}
+
 export type CharacterFeatureOptionChoice = {
   id: string
   character_id: string
@@ -445,7 +456,7 @@ export type Database = {
       subclasses: { Row: Subclass; Insert: Omit<Subclass, 'id'>; Update: Partial<Omit<Subclass, 'id'>>; Relationships: R }
       subclass_features: { Row: SubclassFeature; Insert: Omit<SubclassFeature, 'id'>; Update: Partial<Omit<SubclassFeature, 'id'>>; Relationships: R }
       subclass_bonus_spells: { Row: SubclassBonusSpell; Insert: Omit<SubclassBonusSpell, 'id'>; Update: Partial<Omit<SubclassBonusSpell, 'id'>>; Relationships: R }
-      species_bonus_spells: { Row: SpeciesBonusSpell; Insert: Omit<SpeciesBonusSpell, 'id' | 'created_at'>; Update: Partial<Omit<SpeciesBonusSpell, 'id' | 'created_at'>>; Relationships: R }
+      species_bonus_spells: { Row: SpeciesBonusSpell; Insert: Omit<SpeciesBonusSpell, 'id'>; Update: Partial<Omit<SpeciesBonusSpell, 'id'>>; Relationships: R }
       spells: { Row: Spell; Insert: Omit<Spell, 'id'>; Update: Partial<Omit<Spell, 'id'>>; Relationships: R }
       feats: { Row: Feat; Insert: Omit<Feat, 'id'>; Update: Partial<Omit<Feat, 'id'>>; Relationships: R }
       backgrounds: { Row: Background; Insert: Omit<Background, 'id'>; Update: Partial<Omit<Background, 'id'>>; Relationships: R }
@@ -459,6 +470,7 @@ export type Database = {
       character_language_choices: { Row: CharacterLanguageChoice; Insert: Omit<CharacterLanguageChoice, 'created_at'>; Update: Partial<Omit<CharacterLanguageChoice, 'created_at'>>; Relationships: R }
       character_tool_choices: { Row: CharacterToolChoice; Insert: Omit<CharacterToolChoice, 'created_at'>; Update: Partial<Omit<CharacterToolChoice, 'created_at'>>; Relationships: R }
       character_ability_bonus_choices: { Row: CharacterAbilityBonusChoice; Insert: Omit<CharacterAbilityBonusChoice, 'id' | 'created_at'>; Update: Partial<Omit<CharacterAbilityBonusChoice, 'id' | 'created_at'>>; Relationships: R }
+      character_asi_choices: { Row: CharacterAsiChoice; Insert: Omit<CharacterAsiChoice, 'id' | 'created_at'>; Update: Partial<Omit<CharacterAsiChoice, 'id' | 'created_at'>>; Relationships: R }
       character_feature_option_choices: { Row: CharacterFeatureOptionChoice; Insert: Omit<CharacterFeatureOptionChoice, 'id' | 'created_at'>; Update: Partial<Omit<CharacterFeatureOptionChoice, 'id' | 'created_at'>>; Relationships: R }
       character_skill_proficiencies: { Row: CharacterSkillProficiency; Insert: CharacterSkillProficiency; Update: Partial<CharacterSkillProficiency>; Relationships: R }
       audit_logs: { Row: AuditLog; Insert: Omit<AuditLog, 'id' | 'created_at'> & { details?: Record<string, unknown>; succeeded?: boolean }; Update: Partial<Omit<AuditLog, 'id' | 'created_at'>>; Relationships: R }

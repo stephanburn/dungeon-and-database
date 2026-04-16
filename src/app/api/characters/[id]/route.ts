@@ -6,6 +6,7 @@ import { runLegalityChecks } from '@/lib/legality/engine'
 import { loadCharacterState } from '@/lib/characters/load-character'
 import {
   replaceCharacterAbilityBonusChoices,
+  replaceCharacterAsiChoices,
   replaceCharacterFeatChoices,
   replaceCharacterFeatureOptionChoices,
   replaceCharacterLanguageChoices,
@@ -13,6 +14,7 @@ import {
   replaceCharacterSpellSelections,
   replaceCharacterToolChoices,
   type AbilityBonusChoiceInput,
+  type AsiChoiceInput,
   type FeatChoiceInput,
   type FeatureOptionChoiceInput,
   type LanguageChoiceInput,
@@ -89,6 +91,14 @@ const abilityBonusChoiceSchema = z.object({
   source_feature_key: z.string().nullable().optional(),
 })
 
+const asiChoiceSchema = z.object({
+  slot_index: z.number().int().min(0),
+  ability: z.enum(['str', 'dex', 'con', 'int', 'wis', 'cha']),
+  bonus: z.number().int().min(1).optional(),
+  character_level_id: z.string().uuid().nullable().optional(),
+  source_feature_key: z.string().nullable().optional(),
+})
+
 const featureOptionChoiceSchema = z.object({
   option_group_key: z.string().min(1),
   option_key: z.string().min(1),
@@ -119,9 +129,10 @@ const updateCharacterSchema = z.object({
   // Skill proficiencies: chosen skill rows, optionally with provenance metadata
   skill_proficiencies: z.array(skillProficiencySchema).optional(),
   ability_bonus_choices: z.array(abilityBonusChoiceSchema).optional(),
+  asi_choices: z.array(asiChoiceSchema).optional(),
+  feature_option_choices: z.array(featureOptionChoiceSchema).optional(),
   language_choices: z.array(languageChoiceSchema).optional(),
   tool_choices: z.array(toolChoiceSchema).optional(),
-  feature_option_choices: z.array(featureOptionChoiceSchema).optional(),
   // Spell choices: full replacement of the character's typed spell selections
   spell_choices: z.array(spellChoiceSchema).optional(),
   // Feat choices: full replacement of typed feat choices (empty string = ASI taken instead)
@@ -155,10 +166,11 @@ export async function GET(
     ...loadedState.character,
     skill_proficiencies: loadedState.initialSkillProficiencies,
     ability_bonus_choices: loadedState.initialAbilityBonusChoices,
+    asi_choices: loadedState.initialAsiChoices,
     language_choices: loadedState.initialLanguageChoices,
     tool_choices: loadedState.initialToolChoices,
     spell_choices: loadedState.initialSpellChoices,
-    feat_spell_choices: loadedState.initialFeatSpellChoices,
+    spell_selections: loadedState.initialSpellSelections,
     feat_choices: loadedState.initialFeatChoices,
     feature_option_choices: loadedState.initialFeatureOptionChoices,
     legality: loadedState.legality,
@@ -192,20 +204,7 @@ export async function PUT(
   const parsed = updateCharacterSchema.safeParse(body)
   if (!parsed.success) return jsonError(parsed.error.message, 400)
 
-  const {
-    levels,
-    stat_rolls,
-    skill_proficiencies,
-    ability_bonus_choices,
-    language_choices,
-    tool_choices,
-    feature_option_choices,
-    spell_choices,
-    feat_choices,
-    character_type,
-    dm_notes,
-    ...characterFields
-  } = parsed.data
+  const { levels, stat_rolls, skill_proficiencies, ability_bonus_choices, asi_choices, feature_option_choices, language_choices, tool_choices, spell_choices, feat_choices, character_type, dm_notes, ...characterFields } = parsed.data
 
   // DM-only fields
   if (hasDmAccess(profile.role)) {
@@ -287,6 +286,24 @@ export async function PUT(
     if (error) return jsonError(error.message, 500)
   }
 
+  if (asi_choices !== undefined) {
+    const error = await replaceCharacterAsiChoices(
+      supabase,
+      params.id,
+      asi_choices as AsiChoiceInput[]
+    )
+    if (error) return jsonError(error.message, 500)
+  }
+
+  if (feature_option_choices !== undefined) {
+    const error = await replaceCharacterFeatureOptionChoices(
+      supabase,
+      params.id,
+      feature_option_choices as FeatureOptionChoiceInput[]
+    )
+    if (error) return jsonError(error.message, 500)
+  }
+
   if (language_choices !== undefined) {
     const error = await replaceCharacterLanguageChoices(
       supabase,
@@ -301,15 +318,6 @@ export async function PUT(
       supabase,
       params.id,
       tool_choices as ToolChoiceInput[]
-    )
-    if (error) return jsonError(error.message, 500)
-  }
-
-  if (feature_option_choices !== undefined) {
-    const error = await replaceCharacterFeatureOptionChoices(
-      supabase,
-      params.id,
-      feature_option_choices as FeatureOptionChoiceInput[]
     )
     if (error) return jsonError(error.message, 500)
   }

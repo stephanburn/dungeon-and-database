@@ -24,27 +24,43 @@ import { SpeciesAbilityBonusCard } from './SpeciesAbilityBonusCard'
 import { SpellsCard } from './SpellsCard'
 import { FeatsCard } from './FeatsCard'
 import { FeatSpellChoicesCard } from './FeatSpellChoicesCard'
+import { FeatureOptionChoicesCard } from './FeatureOptionChoicesCard'
+import { FeatureSpellChoicesCard } from './FeatureSpellChoicesCard'
 import { CharacterSheetHeader } from './CharacterSheetHeader'
 import { LegalityBadge } from './LegalityBadge'
 import { SourceTag } from '@/components/shared/SourceTag'
 import { useToast } from '@/hooks/use-toast'
 import {
-  buildCombinedSpellSelections,
+  buildTypedAsiChoices,
+  buildTypedSpellChoices,
   buildTypedFeatChoices,
   buildTypedAbilityBonusChoices,
   buildTypedLanguageChoices,
   buildTypedSkillProficiencies,
   buildTypedToolChoices,
-  type SpellOption,
 } from '@/lib/characters/wizard-helpers'
 import { deriveCharacterCore, type DerivedCharacterCore } from '@/lib/characters/derived'
+import {
+  buildMaverickFeatureOptionChoices,
+  buildTypedFeatureSpellChoices,
+  getMaverickArcaneBreakthroughOptionDefinitions,
+  getMaverickFeatureSpellChoiceDefinitions,
+  getSelectedMaverickBreakthroughClassIds,
+  isInteractiveFeatureSpellSourceFeatureKey,
+  MAVERICK_ARCANE_BREAKTHROUGH_GROUP_KEY,
+} from '@/lib/characters/feature-grants'
+import { buildTypedFeatSpellChoices, getFeatSpellChoiceDefinitions } from '@/lib/characters/feat-spell-options'
 import { buildSpeciesAbilityBonusMap, type AbilityKey as SpeciesChoiceAbilityKey } from '@/lib/characters/species-ability-bonus-provenance'
+import type { AsiSelection } from '@/lib/characters/asi-provenance'
 import type { CharacterWithRelations } from '@/lib/characters/load-character'
+import type { FeatureOptionChoiceInput } from '@/lib/characters/choice-persistence'
 import type {
   Species, Background,
+  CharacterFeatureOptionChoice,
   Class, Subclass, Feat, Alignment, StatMethod, AbilityScoreBonus,
 } from '@/lib/types/database'
 import type { LegalityResult } from '@/lib/legality/engine'
+import type { SpellOption } from '@/lib/characters/wizard-helpers'
 
 // ── Status display ─────────────────────────────────────────
 
@@ -69,11 +85,13 @@ interface CharacterSheetProps {
   campaignId: string
   initialSkillProficiencies?: string[]
   initialAbilityBonusChoices?: SpeciesChoiceAbilityKey[]
+  initialAsiChoices?: AsiSelection[]
   initialLanguageChoices?: string[]
   initialToolChoices?: string[]
   initialSpellChoices?: string[]
-  initialFeatSpellChoices?: Record<string, string>
+  initialSelectedSpells?: SpellOption[]
   initialFeatChoices?: string[]
+  initialFeatureOptionChoices?: CharacterFeatureOptionChoice[]
   initialLegalityResult?: LegalityResult | null
   readOnly?: boolean
   isDm?: boolean
@@ -130,11 +148,13 @@ export function CharacterSheet({
   campaignId,
   initialSkillProficiencies = [],
   initialAbilityBonusChoices = [],
+  initialAsiChoices = [],
   initialLanguageChoices = [],
   initialToolChoices = [],
   initialSpellChoices = [],
-  initialFeatSpellChoices = {},
+  initialSelectedSpells = [],
   initialFeatChoices = [],
+  initialFeatureOptionChoices = [],
   initialLegalityResult = null,
   readOnly = false,
   isDm = false,
@@ -173,16 +193,47 @@ export function CharacterSheet({
   const [classList, setClassList] = useState<Class[]>([])
   const [subclassMap, setSubclassMap] = useState<Record<string, Subclass[]>>({})
   const [featList, setFeatList] = useState<Feat[]>([])
-  const [spellOptions, setSpellOptions] = useState<SpellOption[]>([])
+  const [spellOptions, setSpellOptions] = useState<SpellOption[]>(initialSelectedSpells)
 
   const [skillProficiencies, setSkillProficiencies] = useState<string[]>(initialSkillProficiencies)
   const [abilityBonusChoices, setAbilityBonusChoices] = useState<SpeciesChoiceAbilityKey[]>(initialAbilityBonusChoices)
+  const [asiChoices, setAsiChoices] = useState<AsiSelection[]>(initialAsiChoices)
   const [languageChoices, setLanguageChoices] = useState<string[]>(initialLanguageChoices)
   const [toolChoices, setToolChoices] = useState<string[]>(initialToolChoices)
-  const [spellChoices, setSpellChoices] = useState<string[]>(initialSpellChoices)
+  const [spellChoices, setSpellChoices] = useState<string[]>(
+    initialSelectedSpells
+      .filter((spell) => !isInteractiveFeatureSpellSourceFeatureKey(spell.source_feature_key))
+      .map((spell) => spell.id)
+  )
   const [featChoices, setFeatChoices] = useState<string[]>(initialFeatChoices)
-  const [featSpellChoices, setFeatSpellChoices] = useState<Record<string, string>>(initialFeatSpellChoices)
-  const [featSpellOptions, setFeatSpellOptions] = useState<SpellOption[]>([])
+  const [featureOptionChoices, setFeatureOptionChoices] = useState<FeatureOptionChoiceInput[]>(
+    initialFeatureOptionChoices.map((choice) => ({
+      option_group_key: choice.option_group_key,
+      option_key: choice.option_key,
+      selected_value: choice.selected_value,
+      choice_order: choice.choice_order,
+      character_level_id: choice.character_level_id,
+      source_category: choice.source_category,
+      source_entity_id: choice.source_entity_id,
+      source_feature_key: choice.source_feature_key,
+    }))
+  )
+  const [featSpellChoices, setFeatSpellChoices] = useState<Record<string, string>>(
+    Object.fromEntries(
+      initialSelectedSpells.flatMap((spell) => {
+        if (!spell.source_feature_key?.startsWith('feat_spell:')) return []
+        return [[spell.source_feature_key, spell.id] as const]
+      })
+    )
+  )
+  const [featureSpellChoices, setFeatureSpellChoices] = useState<Record<string, string>>(
+    Object.fromEntries(
+      initialSelectedSpells.flatMap((spell) => {
+        if (!spell.source_feature_key?.startsWith('feature_spell:')) return []
+        return [[spell.source_feature_key, spell.id] as const]
+      })
+    )
+  )
 
   // UI state
   const [saving, setSaving] = useState(false)
@@ -192,18 +243,6 @@ export function CharacterSheet({
   const [dmNotes, setDmNotes] = useState(initial.dm_notes ?? '')
   const [highlightedSection, setHighlightedSection] = useState<SectionId | null>(null)
   const highlightTimerRef = useRef<number | null>(null)
-  const firstClassId = levels[0]?.class_id
-  const firstClassLevel = levels[0]?.level ?? 0
-  const firstClassSubclassIds = levels
-    .filter((level) => level.class_id === firstClassId && level.subclass_id)
-    .map((level) => level.subclass_id as string)
-  const selectedClass = classList.find((c) => c.id === firstClassId) ?? null
-  const selectedSpecies =
-    speciesList.find((s) => s.id === speciesId) ??
-    (initial.species?.id === speciesId ? initial.species : null)
-  const selectedBackground =
-    backgroundList.find((b) => b.id === backgroundId) ??
-    (initial.background?.id === backgroundId ? initial.background : null)
 
   // Load content options filtered by campaign allowlist
   useEffect(() => {
@@ -244,24 +283,49 @@ export function CharacterSheet({
     })
   }, [levels, campaignId, subclassMap])
 
+  const firstClassId = levels[0]?.class_id
+  const firstClassLevel = levels[0]?.level ?? 0
+  const firstClassSubclassIds = levels
+    .filter((level) => level.class_id === firstClassId && level.subclass_id)
+    .map((level) => level.subclass_id as string)
+  const maverickBreakthroughClassIds = getSelectedMaverickBreakthroughClassIds(featureOptionChoices)
+
   useEffect(() => {
-    if (!firstClassId || !selectedClass?.spellcasting_type || selectedClass.spellcasting_type === 'none') {
-      setSpellOptions([])
+    const primaryClass = classList.find((cls) => cls.id === firstClassId) ?? null
+    if (!campaignId || !firstClassId || !primaryClass?.spellcasting_type || primaryClass.spellcasting_type === 'none') {
+      setSpellOptions(initialSelectedSpells)
       return
     }
 
     const params = new URLSearchParams({
-      campaign_id: campaignId,
       class_id: firstClassId,
+      campaign_id: campaignId,
       class_level: String(firstClassLevel),
     })
-    if (selectedSpecies?.id) params.set('species_id', selectedSpecies.id)
+    if (speciesId) params.set('species_id', speciesId)
     for (const subclassId of firstClassSubclassIds) params.append('subclass_id', subclassId)
+    for (const expandedClassId of maverickBreakthroughClassIds.filter(Boolean)) {
+      params.append('expanded_class_id', expandedClassId)
+    }
 
     fetch(`/api/content/spells?${params.toString()}`)
       .then((response) => response.json())
-      .then((data: SpellOption[]) => setSpellOptions(Array.isArray(data) ? data : []))
-  }, [campaignId, firstClassId, firstClassLevel, firstClassSubclassIds, selectedClass, selectedSpecies?.id])
+      .then((data: SpellOption[]) => {
+        const mergedById = new Map<string, SpellOption>()
+        for (const spell of initialSelectedSpells) mergedById.set(spell.id, spell)
+        for (const spell of Array.isArray(data) ? data : []) mergedById.set(spell.id, spell)
+        setSpellOptions(Array.from(mergedById.values()))
+      })
+  }, [
+    campaignId,
+    classList,
+    firstClassId,
+    firstClassLevel,
+    firstClassSubclassIds,
+    initialSelectedSpells,
+    maverickBreakthroughClassIds,
+    speciesId,
+  ])
 
   function handleStatChange(stat: string, value: number) {
     setStats((prev) => ({ ...prev, [stat]: value }))
@@ -285,6 +349,14 @@ export function CharacterSheet({
   async function handleSave() {
     setSaving(true)
     try {
+      const canonicalFeatureOptionChoices = [
+        ...featureOptionChoices.filter((choice) => choice.option_group_key !== MAVERICK_ARCANE_BREAKTHROUGH_GROUP_KEY),
+        ...buildMaverickFeatureOptionChoices({
+          selectedClassIds: maverickBreakthroughClassIds,
+          definitions: maverickOptionDefinitions,
+        }),
+      ]
+
       const res = await fetch(`/api/characters/${initial.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -309,6 +381,11 @@ export function CharacterSheet({
             selectedSpecies,
             abilityBonusChoices
           ),
+          asi_choices: buildTypedAsiChoices(
+            asiChoices,
+            derivedProgression?.featSlotLabels,
+            featChoices
+          ),
           language_choices: buildTypedLanguageChoices({
             languageChoices,
             background: selectedBackground,
@@ -319,7 +396,24 @@ export function CharacterSheet({
             selectedClass,
             species: selectedSpecies,
           }),
-          spell_choices: combinedSpellSelections,
+          feature_option_choices: canonicalFeatureOptionChoices,
+          spell_choices: [
+            ...buildTypedSpellChoices({
+              spellChoices,
+              spellOptions,
+              owningClassId: firstClassId ?? null,
+              activeSubclassIds: firstClassSubclassIds,
+              derived: derivedCharacter,
+            }),
+            ...buildTypedFeatSpellChoices({
+              featSpellChoices,
+              definitions: featSpellDefinitions,
+            }),
+            ...buildTypedFeatureSpellChoices({
+              selectedChoices: featureSpellChoices,
+              definitions: maverickFeatureSpellDefinitions,
+            }),
+          ],
           feat_choices: buildTypedFeatChoices(featChoices, derivedProgression?.featSlotLabels),
           ...(isDm ? { dm_notes: dmNotes } : {}),
         }),
@@ -364,6 +458,12 @@ export function CharacterSheet({
   const statusInfo = STATUS_LABELS[status] ?? STATUS_LABELS.draft
 
   // Racial bonuses from the currently selected species
+  const selectedSpecies =
+    speciesList.find((s) => s.id === speciesId) ??
+    (initial.species?.id === speciesId ? initial.species : null)
+  const selectedBackground =
+    backgroundList.find((b) => b.id === backgroundId) ??
+    (initial.background?.id === backgroundId ? initial.background : null)
   const racialBonuses: Partial<Record<string, number>> = {}
   if (selectedSpecies?.ability_score_bonuses) {
     ;(selectedSpecies.ability_score_bonuses as AbilityScoreBonus[]).forEach(({ ability, bonus }) => {
@@ -374,44 +474,54 @@ export function CharacterSheet({
   ;(Object.entries(chosenSpeciesBonuses) as Array<[string, number]>).forEach(([ability, bonus]) => {
     racialBonuses[ability] = (racialBonuses[ability] ?? 0) + bonus
   })
-  const selectedBg = backgroundList.find((b) => b.id === backgroundId) ?? initial.background
-  const backgroundFeat = selectedBg?.background_feat_id
-    ? (featList.find((f) => f.id === selectedBg.background_feat_id) ?? null)
+  const chosenAsiBonuses = asiChoices.reduce<Record<string, number>>((acc, selection, slotIndex) => {
+    if ((featChoices[slotIndex] ?? '').length > 0) return acc
+    for (const ability of selection) {
+      acc[ability] = (acc[ability] ?? 0) + 1
+    }
+    return acc
+  }, {})
+  ;(Object.entries(chosenAsiBonuses) as Array<[string, number]>).forEach(([ability, bonus]) => {
+    racialBonuses[ability] = (racialBonuses[ability] ?? 0) + bonus
+  })
+  // First class (used for skill choices and saving throws)
+  const selectedClass = classList.find((c) => c.id === firstClassId) ?? null
+  const selectedBackgroundFeat = selectedBackground?.background_feat_id
+    ? (featList.find((feat) => feat.id === selectedBackground.background_feat_id) ?? null)
     : null
+  const activeFeats = useMemo(() => {
+    const selectedFeatRows = featChoices
+      .map((featId) => featList.find((feat) => feat.id === featId))
+      .filter((feat): feat is Feat => Boolean(feat))
+    return Array.from(new Map(
+      [...selectedFeatRows, ...(selectedBackgroundFeat ? [selectedBackgroundFeat] : [])].map((feat) => [feat.id, feat])
+    ).values())
+  }, [featChoices, featList, selectedBackgroundFeat])
+  const featSpellDefinitions = useMemo(
+    () => getFeatSpellChoiceDefinitions(activeFeats),
+    [activeFeats]
+  )
+  const maverickOptionDefinitions = useMemo(
+    () => getMaverickArcaneBreakthroughOptionDefinitions({
+      classLevel: firstClassLevel,
+      subclassId: firstClassSubclassIds[0] ?? null,
+      classList,
+    }),
+    [classList, firstClassLevel, firstClassSubclassIds]
+  )
+  const maverickFeatureSpellDefinitions = useMemo(
+    () => getMaverickFeatureSpellChoiceDefinitions({
+      classLevel: firstClassLevel,
+      artificerClassId: firstClassId ?? null,
+      selectedBreakthroughClassIds: maverickBreakthroughClassIds,
+      classList,
+    }),
+    [classList, firstClassId, firstClassLevel, maverickBreakthroughClassIds]
+  )
 
   const failedChecks = legalityResult?.checks.filter((c) => !c.passed) ?? []
   const derivedCharacter = legalityResult?.derived ?? null
   const derivedProgression = legalityResult?.derived ?? null
-  const activeFeatSpellFeats = useMemo(
-    () => [
-      ...featChoices
-        .map((featId) => featList.find((feat) => feat.id === featId))
-        .filter((feat): feat is Feat => Boolean(feat)),
-      ...(backgroundFeat ? [backgroundFeat] : []),
-    ],
-    [backgroundFeat, featChoices, featList]
-  )
-  const combinedSpellSelections = useMemo(
-    () => buildCombinedSpellSelections({
-      classSpellChoices: spellChoices,
-      spellOptions: [...spellOptions, ...featSpellOptions],
-      owningClassId: firstClassId ?? null,
-      activeSubclassIds: firstClassSubclassIds,
-      derived: derivedCharacter,
-      featSpellChoices,
-      featList: activeFeatSpellFeats,
-    }),
-    [
-      activeFeatSpellFeats,
-      derivedCharacter,
-      featSpellChoices,
-      featSpellOptions,
-      firstClassId,
-      firstClassSubclassIds,
-      spellChoices,
-      spellOptions,
-    ]
-  )
   const derivedCore: DerivedCharacterCore = deriveCharacterCore({
     baseStats: stats,
     speciesAbilityBonuses: racialBonuses as Partial<Record<'str' | 'dex' | 'con' | 'int' | 'wis' | 'cha', number>>,
@@ -446,12 +556,21 @@ export function CharacterSheet({
     multiclass_skill_validation: 'stats-skills',
     skill_proficiencies: 'stats-skills',
     species_ability_bonus_choices: 'stats-skills',
+    asi_choices: 'spells-feats',
     multiclass_prerequisites: 'identity-class',
     subclass_timing: 'identity-class',
     feat_prerequisites: 'spells-feats',
     feat_slots: 'spells-feats',
     spell_legality: 'spells-feats',
     spell_selection_count: 'spells-feats',
+  }
+
+  function mergeSpellOptions(options: SpellOption[]) {
+    setSpellOptions((current) => {
+      const mergedById = new Map(current.map((spell) => [spell.id, spell]))
+      for (const spell of options) mergedById.set(spell.id, spell)
+      return Array.from(mergedById.values())
+    })
   }
 
   function jumpToCheck(key: string) {
@@ -925,8 +1044,9 @@ export function CharacterSheet({
           <SpellsCard
             classId={firstClassId}
             campaignId={campaignId}
-            speciesId={selectedSpecies?.id ?? null}
+            speciesId={speciesId || null}
             subclassIds={firstClassSubclassIds}
+            expandedClassIds={maverickBreakthroughClassIds}
             classLevel={firstClassLevel}
             derivedSpellcasting={derivedCharacter?.spellcasting}
             spellChoices={spellChoices}
@@ -940,25 +1060,46 @@ export function CharacterSheet({
           />
         )}
 
-        <FeatsCard
-          background={selectedBg ?? null}
-          backgroundFeat={backgroundFeat}
-          availableFeats={featList}
-          featChoices={featChoices}
-          totalLevel={derivedCore.totalLevel}
-          featSlotLabels={derivedProgression?.featSlotLabels}
+        <FeatureOptionChoicesCard
+          title="Feature Option Choices"
+          definitions={maverickOptionDefinitions}
+          choices={featureOptionChoices}
           canEdit={canEdit}
-          onChange={setFeatChoices}
+          onChange={setFeatureOptionChoices}
+        />
+
+        <FeatureSpellChoicesCard
+          title="Feature Spell Choices"
+          definitions={maverickFeatureSpellDefinitions}
+          campaignId={campaignId}
+          classList={classList}
+          selectedChoices={featureSpellChoices}
+          canEdit={canEdit}
+          onChange={setFeatureSpellChoices}
+          onOptionsLoaded={mergeSpellOptions}
         />
 
         <FeatSpellChoicesCard
-          activeFeats={activeFeatSpellFeats}
+          activeFeats={activeFeats}
           campaignId={campaignId}
           classList={classList}
           selectedChoices={featSpellChoices}
           canEdit={canEdit}
           onChange={setFeatSpellChoices}
-          onOptionsLoaded={setFeatSpellOptions}
+          onOptionsLoaded={mergeSpellOptions}
+        />
+
+        <FeatsCard
+          background={selectedBackground ?? null}
+          backgroundFeat={selectedBackgroundFeat}
+          availableFeats={featList}
+          featChoices={featChoices}
+          asiChoices={asiChoices}
+          totalLevel={derivedCore.totalLevel}
+          featSlotLabels={derivedProgression?.featSlotLabels}
+          canEdit={canEdit}
+          onChange={setFeatChoices}
+          onAsiChange={setAsiChoices}
         />
       </CollapsibleSection>
 

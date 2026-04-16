@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { deriveCharacter, deriveCharacterProgression, type CharacterBuildContext } from '@/lib/characters/build-context'
+import { buildTypedAsiChoices } from '@/lib/characters/asi-provenance'
 import { buildTypedLanguageChoices, buildTypedToolChoices } from '@/lib/characters/language-tool-provenance'
 import { buildTypedAbilityBonusChoices } from '@/lib/characters/species-ability-bonus-provenance'
 import { buildTypedSkillProficiencies } from '@/lib/characters/skill-provenance'
@@ -24,6 +25,9 @@ function createContext(overrides: Partial<CharacterBuildContext> = {}): Characte
     selectedLanguages: [],
     selectedTools: [],
     selectedAbilityBonuses: {},
+    selectedAsiBonuses: {},
+    selectedFeatureOptions: [],
+    asiChoiceSlots: [],
     speciesName: 'Human',
     speciesSource: 'SRD',
     speciesAbilityBonuses: { int: 1 },
@@ -88,10 +92,10 @@ function createContext(overrides: Partial<CharacterBuildContext> = {}): Characte
         source: 'SRD',
         grantedBySubclassIds: [],
         countsAgainstSelectionLimit: true,
+        sourceFeatureKey: null,
       },
     ],
     selectedFeats: [],
-    selectedFeatureOptionChoices: [],
     sourceCollections: {
       classSources: ['SRD'],
       subclassSources: ['SRD'],
@@ -99,8 +103,8 @@ function createContext(overrides: Partial<CharacterBuildContext> = {}): Characte
       featSources: [],
     },
     grantedSpellIds: [],
+    expandedSpellIds: [],
     freePreparedSpellIds: [],
-    speciesExpandedSpellIds: [],
     multiclassSpellSlotsByCasterLevel: {
       1: [2],
       2: [3],
@@ -312,68 +316,6 @@ test('buildTypedSkillProficiencies tags changeling and warforged species skill p
   ])
 })
 
-test('buildTypedSkillProficiencies tags EE mark of detection skill picks but not ERftLW', () => {
-  const eeChoices = buildTypedSkillProficiencies({
-    skillProficiencies: ['insight'],
-    background: null,
-    selectedClass: null,
-    species: {
-      id: 'mark-detection-ee',
-      name: 'Half-Elf (Mark of Detection)',
-      size: 'medium',
-      speed: 30,
-      ability_score_bonuses: [{ ability: 'cha', bonus: 2 }, { ability: 'wis', bonus: 1 }],
-      languages: ['Common', 'Elvish'],
-      traits: [],
-      senses: [{ type: 'darkvision', range_ft: 60 }],
-      damage_resistances: [],
-      condition_immunities: [],
-      source: 'EE',
-      amended: true,
-      amendment_note: null,
-    },
-  })
-
-  const erftlwChoices = buildTypedSkillProficiencies({
-    skillProficiencies: ['insight'],
-    background: null,
-    selectedClass: null,
-    species: {
-      id: 'mark-detection-erftlw',
-      name: 'Half-Elf (Mark of Detection)',
-      size: 'medium',
-      speed: 30,
-      ability_score_bonuses: [{ ability: 'wis', bonus: 2 }],
-      languages: ['Common', 'Elvish'],
-      traits: [],
-      senses: [{ type: 'darkvision', range_ft: 60 }],
-      damage_resistances: [],
-      condition_immunities: [],
-      source: 'ERftLW',
-      amended: true,
-      amendment_note: null,
-    },
-  })
-
-  assert.deepEqual(eeChoices, [{
-    skill: 'insight',
-    expertise: false,
-    character_level_id: null,
-    source_category: 'species_choice',
-    source_entity_id: 'mark-detection-ee',
-    source_feature_key: 'species_trait:deductive_intuition',
-  }])
-
-  assert.deepEqual(erftlwChoices, [{
-    skill: 'insight',
-    expertise: false,
-    character_level_id: null,
-    source_category: 'manual',
-    source_entity_id: null,
-    source_feature_key: null,
-  }])
-})
-
 test('buildTypedLanguageChoices tags changeling and background language picks with provenance', () => {
   const choices = buildTypedLanguageChoices({
     languageChoices: ['Elvish', 'Draconic', 'Dwarvish', 'Infernal'],
@@ -441,64 +383,6 @@ test('buildTypedLanguageChoices tags changeling and background language picks wi
   ])
 })
 
-test('buildTypedLanguageChoices tags dragonmarked half-elf and human bonus language picks with provenance', () => {
-  const halfElfChoices = buildTypedLanguageChoices({
-    languageChoices: ['Draconic'],
-    background: null,
-    species: {
-      id: 'mark-storm',
-      name: 'Half-Elf (Mark of Storm)',
-      size: 'medium',
-      speed: 30,
-      ability_score_bonuses: [{ ability: 'cha', bonus: 2 }, { ability: 'dex', bonus: 1 }],
-      languages: ['Common', 'Elvish'],
-      traits: [],
-      senses: [{ type: 'darkvision', range_ft: 60 }],
-      damage_resistances: ['lightning'],
-      condition_immunities: [],
-      source: 'ERftLW',
-      amended: true,
-      amendment_note: null,
-    },
-  })
-
-  const humanChoices = buildTypedLanguageChoices({
-    languageChoices: ['Goblin'],
-    background: null,
-    species: {
-      id: 'mark-making',
-      name: 'Human (Mark of Making)',
-      size: 'medium',
-      speed: 30,
-      ability_score_bonuses: [{ ability: 'int', bonus: 2 }],
-      languages: ['Common'],
-      traits: [],
-      senses: [],
-      damage_resistances: [],
-      condition_immunities: [],
-      source: 'ERftLW',
-      amended: true,
-      amendment_note: null,
-    },
-  })
-
-  assert.deepEqual(halfElfChoices, [{
-    language: 'Draconic',
-    character_level_id: null,
-    source_category: 'species_choice',
-    source_entity_id: 'mark-storm',
-    source_feature_key: 'species_languages:half_elf_dragonmark',
-  }])
-
-  assert.deepEqual(humanChoices, [{
-    language: 'Goblin',
-    character_level_id: null,
-    source_category: 'species_choice',
-    source_entity_id: 'mark-making',
-    source_feature_key: 'species_languages:human_dragonmark',
-  }])
-})
-
 test('buildTypedToolChoices tags warforged specialized design picks', () => {
   const choices = buildTypedToolChoices({
     toolChoices: ["Thieves' Tools"],
@@ -529,36 +413,6 @@ test('buildTypedToolChoices tags warforged specialized design picks', () => {
       source_feature_key: 'species_trait:specialized_design',
     },
   ])
-})
-
-test('buildTypedToolChoices tags mark of making artisan tool picks', () => {
-  const choices = buildTypedToolChoices({
-    toolChoices: ["Smith's Tools"],
-    selectedClass: null,
-    species: {
-      id: 'mark-making',
-      name: 'Human (Mark of Making)',
-      size: 'medium',
-      speed: 30,
-      ability_score_bonuses: [{ ability: 'int', bonus: 2 }],
-      languages: ['Common'],
-      traits: [],
-      senses: [],
-      damage_resistances: [],
-      condition_immunities: [],
-      source: 'ERftLW',
-      amended: true,
-      amendment_note: null,
-    },
-  })
-
-  assert.deepEqual(choices, [{
-    tool: "Smith's Tools",
-    character_level_id: null,
-    source_category: 'species_choice',
-    source_entity_id: 'mark-making',
-    source_feature_key: 'species_trait:artisans_gift',
-  }])
 })
 
 test('buildTypedAbilityBonusChoices tags changeling and warforged flexible species bonuses', () => {
@@ -594,38 +448,6 @@ test('buildTypedAbilityBonusChoices tags changeling and warforged flexible speci
     amendment_note: null,
   }, ['wis'])
 
-  const markOfDetectionChoices = buildTypedAbilityBonusChoices({
-    id: 'mark-detection-erftlw',
-    name: 'Half-Elf (Mark of Detection)',
-    size: 'medium',
-    speed: 30,
-    ability_score_bonuses: [{ ability: 'wis', bonus: 2 }],
-    languages: ['Common', 'Elvish'],
-    traits: [],
-    senses: [{ type: 'darkvision', range_ft: 60 }],
-    damage_resistances: [],
-    condition_immunities: [],
-    source: 'ERftLW',
-    amended: true,
-    amendment_note: null,
-  }, ['int'])
-
-  const markOfMakingChoices = buildTypedAbilityBonusChoices({
-    id: 'mark-making',
-    name: 'Human (Mark of Making)',
-    size: 'medium',
-    speed: 30,
-    ability_score_bonuses: [{ ability: 'int', bonus: 2 }],
-    languages: ['Common'],
-    traits: [],
-    senses: [],
-    damage_resistances: [],
-    condition_immunities: [],
-    source: 'ERftLW',
-    amended: true,
-    amendment_note: null,
-  }, ['wis'])
-
   assert.deepEqual(changelingChoices, [{
     ability: 'dex',
     bonus: 1,
@@ -643,24 +465,38 @@ test('buildTypedAbilityBonusChoices tags changeling and warforged flexible speci
     source_entity_id: 'warforged',
     source_feature_key: 'species_asi:warforged_flexible_bonus',
   }])
+})
 
-  assert.deepEqual(markOfDetectionChoices, [{
-    ability: 'int',
-    bonus: 1,
-    character_level_id: null,
-    source_category: 'species_choice',
-    source_entity_id: 'mark-detection-erftlw',
-    source_feature_key: 'species_asi:mark_of_detection_flexible_bonus',
-  }])
+test('buildTypedAsiChoices persists +2 and split +1/+1 allocations by slot', () => {
+  const choices = buildTypedAsiChoices(
+    [['str', 'str'], ['dex', 'wis']],
+    ['Wizard 4', 'Wizard 8'],
+    ['', '']
+  )
 
-  assert.deepEqual(markOfMakingChoices, [{
-    ability: 'wis',
-    bonus: 1,
-    character_level_id: null,
-    source_category: 'species_choice',
-    source_entity_id: 'mark-making',
-    source_feature_key: 'species_asi:mark_of_making_flexible_bonus',
-  }])
+  assert.deepEqual(choices, [
+    {
+      slot_index: 0,
+      ability: 'str',
+      bonus: 2,
+      character_level_id: null,
+      source_feature_key: 'asi_slot:Wizard 4',
+    },
+    {
+      slot_index: 1,
+      ability: 'dex',
+      bonus: 1,
+      character_level_id: null,
+      source_feature_key: 'asi_slot:Wizard 8',
+    },
+    {
+      slot_index: 1,
+      ability: 'wis',
+      bonus: 1,
+      character_level_id: null,
+      source_feature_key: 'asi_slot:Wizard 8',
+    },
+  ])
 })
 
 test('deriveCharacter includes background fixed languages and typed selected languages and tools', () => {
@@ -708,6 +544,18 @@ test('legality blocks invalid flexible species ability bonus selections', () => 
   }))
 
   assert.equal(result.checks.find((check) => check.key === 'species_ability_bonus_choices')?.passed, false)
+})
+
+test('legality blocks ASI allocations that exceed one slot total', () => {
+  const result = runLegalityChecks(createContext({
+    selectedAsiBonuses: { str: 3 },
+    asiChoiceSlots: [{
+      slotIndex: 0,
+      bonuses: { str: 3 },
+    }],
+  }))
+
+  assert.equal(result.checks.find((check) => check.key === 'asi_choices')?.passed, false)
 })
 
 test('legality blocks missing multiclass prerequisites and missing subclass', () => {
@@ -828,6 +676,7 @@ test('legality blocks invalid spell selections above available spell level', () 
         source: 'SRD',
         grantedBySubclassIds: [],
         countsAgainstSelectionLimit: true,
+        sourceFeatureKey: null,
       },
     ],
     sourceCollections: {
@@ -847,12 +696,12 @@ test('legality blocks invalid spell selections above available spell level', () 
 test('legality blocks spell selections above class spell-preparation caps', () => {
   const result = runLegalityChecks(createContext({
     selectedSpells: [
-      { id: 'magic-missile', name: 'Magic Missile', level: 1, classes: ['wizard'], source: 'SRD', grantedBySubclassIds: [], countsAgainstSelectionLimit: true },
-      { id: 'shield', name: 'Shield', level: 1, classes: ['wizard'], source: 'SRD', grantedBySubclassIds: [], countsAgainstSelectionLimit: true },
-      { id: 'sleep', name: 'Sleep', level: 1, classes: ['wizard'], source: 'SRD', grantedBySubclassIds: [], countsAgainstSelectionLimit: true },
-      { id: 'detect-magic', name: 'Detect Magic', level: 1, classes: ['wizard'], source: 'SRD', grantedBySubclassIds: [], countsAgainstSelectionLimit: true },
-      { id: 'identify', name: 'Identify', level: 1, classes: ['wizard'], source: 'SRD', grantedBySubclassIds: [], countsAgainstSelectionLimit: true },
-      { id: 'feather-fall', name: 'Feather Fall', level: 1, classes: ['wizard'], source: 'SRD', grantedBySubclassIds: [], countsAgainstSelectionLimit: true },
+      { id: 'magic-missile', name: 'Magic Missile', level: 1, classes: ['wizard'], source: 'SRD', grantedBySubclassIds: [], countsAgainstSelectionLimit: true, sourceFeatureKey: null },
+      { id: 'shield', name: 'Shield', level: 1, classes: ['wizard'], source: 'SRD', grantedBySubclassIds: [], countsAgainstSelectionLimit: true, sourceFeatureKey: null },
+      { id: 'sleep', name: 'Sleep', level: 1, classes: ['wizard'], source: 'SRD', grantedBySubclassIds: [], countsAgainstSelectionLimit: true, sourceFeatureKey: null },
+      { id: 'detect-magic', name: 'Detect Magic', level: 1, classes: ['wizard'], source: 'SRD', grantedBySubclassIds: [], countsAgainstSelectionLimit: true, sourceFeatureKey: null },
+      { id: 'identify', name: 'Identify', level: 1, classes: ['wizard'], source: 'SRD', grantedBySubclassIds: [], countsAgainstSelectionLimit: true, sourceFeatureKey: null },
+      { id: 'feather-fall', name: 'Feather Fall', level: 1, classes: ['wizard'], source: 'SRD', grantedBySubclassIds: [], countsAgainstSelectionLimit: true, sourceFeatureKey: null },
     ],
     sourceCollections: {
       classSources: ['SRD'],
@@ -961,10 +810,10 @@ test('subclass bonus spells stay legal and do not consume artificer preparation 
       },
     ],
     selectedSpells: [
-      { id: 'cure-wounds', name: 'Cure Wounds', level: 1, classes: ['artificer'], source: 'ERftLW', grantedBySubclassIds: [], countsAgainstSelectionLimit: true },
-      { id: 'faerie-fire', name: 'Faerie Fire', level: 1, classes: ['artificer'], source: 'ERftLW', grantedBySubclassIds: [], countsAgainstSelectionLimit: true },
-      { id: 'heroism', name: 'Heroism', level: 1, classes: [], source: 'ERftLW', grantedBySubclassIds: ['battle-smith'], countsAgainstSelectionLimit: false },
-      { id: 'shield', name: 'Shield', level: 1, classes: [], source: 'ERftLW', grantedBySubclassIds: ['battle-smith'], countsAgainstSelectionLimit: false },
+      { id: 'cure-wounds', name: 'Cure Wounds', level: 1, classes: ['artificer'], source: 'ERftLW', grantedBySubclassIds: [], countsAgainstSelectionLimit: true, sourceFeatureKey: null },
+      { id: 'faerie-fire', name: 'Faerie Fire', level: 1, classes: ['artificer'], source: 'ERftLW', grantedBySubclassIds: [], countsAgainstSelectionLimit: true, sourceFeatureKey: null },
+      { id: 'heroism', name: 'Heroism', level: 1, classes: [], source: 'ERftLW', grantedBySubclassIds: ['battle-smith'], countsAgainstSelectionLimit: false, sourceFeatureKey: null },
+      { id: 'shield', name: 'Shield', level: 1, classes: [], source: 'ERftLW', grantedBySubclassIds: ['battle-smith'], countsAgainstSelectionLimit: false, sourceFeatureKey: null },
     ],
     sourceCollections: {
       classSources: ['ERftLW'],
@@ -975,99 +824,6 @@ test('subclass bonus spells stay legal and do not consume artificer preparation 
     grantedSpellIds: ['heroism', 'shield'],
     freePreparedSpellIds: ['heroism', 'shield'],
     allSourceRuleSets: { SRD: '2014', ERftLW: '2014' },
-  }))
-
-  assert.equal(result.checks.find((check) => check.key === 'spell_legality')?.passed, true)
-  assert.equal(result.checks.find((check) => check.key === 'spell_selection_count')?.passed, true)
-})
-
-test('species spell-list expansion makes off-list class spells legal and counts them against the owning class cap', () => {
-  const result = runLegalityChecks(createContext({
-    allowedSources: ['SRD', 'EE'],
-    allSourceRuleSets: { SRD: '2014', EE: '2014' },
-    selectedSpells: [
-      {
-        id: 'detect-poison-and-disease',
-        name: 'Detect Poison and Disease',
-        level: 1,
-        classes: [],
-        source: 'EE',
-        grantedBySubclassIds: [],
-        owningClassId: 'wizard',
-        acquisitionMode: 'known',
-        sourceFeatureKey: null,
-        countsAgainstSelectionLimit: true,
-      },
-    ],
-    sourceCollections: {
-      classSources: ['SRD'],
-      subclassSources: ['SRD'],
-      spellSources: ['EE'],
-      featSources: [],
-    },
-    speciesExpandedSpellIds: ['detect-poison-and-disease'],
-  }))
-
-  assert.equal(result.checks.find((check) => check.key === 'spell_legality')?.passed, true)
-  assert.equal(result.checks.find((check) => check.key === 'spell_selection_count')?.passed, true)
-  assert.deepEqual(result.derived?.spellcasting.sources[0]?.selectedSpellCountsByLevel, { 1: 1 })
-})
-
-test('ERftLW mark of detection species spell-list expansion is also treated as legal class access', () => {
-  const result = runLegalityChecks(createContext({
-    allowedSources: ['SRD', 'ERftLW'],
-    allSourceRuleSets: { SRD: '2014', ERftLW: '2014' },
-    selectedSpells: [
-      {
-        id: 'detect-thoughts',
-        name: 'Detect Thoughts',
-        level: 2,
-        classes: [],
-        source: 'EE',
-        grantedBySubclassIds: [],
-        owningClassId: 'wizard',
-        acquisitionMode: 'known',
-        sourceFeatureKey: null,
-        countsAgainstSelectionLimit: true,
-      },
-    ],
-    sourceCollections: {
-      classSources: ['SRD'],
-      subclassSources: ['SRD'],
-      spellSources: ['EE'],
-      featSources: [],
-    },
-    speciesExpandedSpellIds: ['detect-thoughts'],
-  }))
-
-  assert.equal(result.checks.find((check) => check.key === 'spell_legality')?.passed, true)
-})
-
-test('mark of warding species spell-list expansion is treated as legal class access', () => {
-  const result = runLegalityChecks(createContext({
-    allowedSources: ['SRD', 'ERftLW'],
-    allSourceRuleSets: { SRD: '2014', ERftLW: '2014' },
-    selectedSpells: [
-      {
-        id: 'armor-of-agathys',
-        name: 'Armor of Agathys',
-        level: 1,
-        classes: [],
-        source: 'ERftLW',
-        grantedBySubclassIds: [],
-        owningClassId: 'wizard',
-        acquisitionMode: 'known',
-        sourceFeatureKey: null,
-        countsAgainstSelectionLimit: true,
-      },
-    ],
-    sourceCollections: {
-      classSources: ['SRD'],
-      subclassSources: ['SRD'],
-      spellSources: ['ERftLW'],
-      featSources: [],
-    },
-    speciesExpandedSpellIds: ['armor-of-agathys'],
   }))
 
   assert.equal(result.checks.find((check) => check.key === 'spell_legality')?.passed, true)
@@ -1140,9 +896,9 @@ test('deriveCharacter exposes per-source spellcasting summaries for multiclass c
       },
     ],
     selectedSpells: [
-      { id: 'magic-missile', name: 'Magic Missile', level: 1, classes: ['wizard'], source: 'SRD', grantedBySubclassIds: [], countsAgainstSelectionLimit: true },
-      { id: 'mage-hand', name: 'Mage Hand', level: 0, classes: ['wizard'], source: 'SRD', grantedBySubclassIds: [], countsAgainstSelectionLimit: true },
-      { id: 'bless', name: 'Bless', level: 1, classes: ['cleric'], source: 'SRD', grantedBySubclassIds: [], countsAgainstSelectionLimit: true },
+      { id: 'magic-missile', name: 'Magic Missile', level: 1, classes: ['wizard'], source: 'SRD', grantedBySubclassIds: [], countsAgainstSelectionLimit: true, sourceFeatureKey: null },
+      { id: 'mage-hand', name: 'Mage Hand', level: 0, classes: ['wizard'], source: 'SRD', grantedBySubclassIds: [], countsAgainstSelectionLimit: true, sourceFeatureKey: null },
+      { id: 'bless', name: 'Bless', level: 1, classes: ['cleric'], source: 'SRD', grantedBySubclassIds: [], countsAgainstSelectionLimit: true, sourceFeatureKey: null },
     ],
     sourceCollections: {
       classSources: ['SRD', 'SRD'],
@@ -1223,11 +979,11 @@ test('legality enforces spell selection caps per spellcasting source', () => {
       },
     ],
     selectedSpells: [
-      { id: 'mage-hand', name: 'Mage Hand', level: 0, classes: ['wizard'], source: 'SRD', grantedBySubclassIds: [], countsAgainstSelectionLimit: true },
-      { id: 'light', name: 'Light', level: 0, classes: ['wizard', 'cleric'], source: 'SRD', grantedBySubclassIds: [], countsAgainstSelectionLimit: true },
-      { id: 'sacred-flame', name: 'Sacred Flame', level: 0, classes: ['cleric'], source: 'SRD', grantedBySubclassIds: [], countsAgainstSelectionLimit: true },
-      { id: 'guidance', name: 'Guidance', level: 0, classes: ['cleric'], source: 'SRD', grantedBySubclassIds: [], countsAgainstSelectionLimit: true },
-      { id: 'resistance', name: 'Resistance', level: 0, classes: ['cleric'], source: 'SRD', grantedBySubclassIds: [], countsAgainstSelectionLimit: true },
+      { id: 'mage-hand', name: 'Mage Hand', level: 0, classes: ['wizard'], source: 'SRD', grantedBySubclassIds: [], countsAgainstSelectionLimit: true, sourceFeatureKey: null },
+      { id: 'light', name: 'Light', level: 0, classes: ['wizard', 'cleric'], source: 'SRD', grantedBySubclassIds: [], countsAgainstSelectionLimit: true, sourceFeatureKey: null },
+      { id: 'sacred-flame', name: 'Sacred Flame', level: 0, classes: ['cleric'], source: 'SRD', grantedBySubclassIds: [], countsAgainstSelectionLimit: true, sourceFeatureKey: null },
+      { id: 'guidance', name: 'Guidance', level: 0, classes: ['cleric'], source: 'SRD', grantedBySubclassIds: [], countsAgainstSelectionLimit: true, sourceFeatureKey: null },
+      { id: 'resistance', name: 'Resistance', level: 0, classes: ['cleric'], source: 'SRD', grantedBySubclassIds: [], countsAgainstSelectionLimit: true, sourceFeatureKey: null },
     ],
     sourceCollections: {
       classSources: ['SRD', 'SRD'],

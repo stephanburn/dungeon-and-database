@@ -1,6 +1,7 @@
 import type {
   Background,
   Campaign,
+  CharacterFeatureOptionChoice,
   Class,
   ClassFeatureProgression,
   Feat,
@@ -16,6 +17,11 @@ import type {
   FeatChoiceInput,
   SpellChoiceInput,
 } from '@/lib/characters/choice-persistence'
+import {
+  buildAsiBonusMap,
+  buildTypedAsiChoices,
+  type AsiSelection,
+} from '@/lib/characters/asi-provenance'
 import {
   buildTypedLanguageChoices,
   buildTypedToolChoices,
@@ -39,6 +45,7 @@ import {
   type CharacterBuildContext,
   type DerivedCharacter,
 } from '@/lib/characters/build-context'
+import { getStaticSpeciesGrantedSpells } from '@/lib/characters/feature-grants'
 import { hitPointGainFromRoll } from '@/lib/characters/derived'
 
 export interface ClassDetail extends Class {
@@ -48,8 +55,9 @@ export interface ClassDetail extends Class {
 
 export type SpellOption = Spell & {
   granted_by_subclasses?: string[]
-  expanded_by_species?: string[]
   counts_against_selection_limit?: boolean
+  available_via_class_ids?: string[]
+  source_feature_key?: string | null
 }
 
 export type WizardLevel = {
@@ -82,10 +90,12 @@ type LocalBuildContextArgs = {
   spellSelections?: SpellChoiceInput[]
   featList: Feat[]
   featChoices: string[]
-  skillProficiencies: string[]
-  abilityBonusChoices: SpeciesChoiceAbilityKey[]
-  languageChoices: string[]
-  toolChoices: string[]
+  asiChoices?: AsiSelection[]
+  skillProficiencies?: string[]
+  abilityBonusChoices?: SpeciesChoiceAbilityKey[]
+  languageChoices?: string[]
+  toolChoices?: string[]
+  featureOptionChoices?: CharacterFeatureOptionChoice[]
 }
 
 export function buildLocalCharacterContext({
@@ -105,10 +115,12 @@ export function buildLocalCharacterContext({
   spellSelections,
   featList,
   featChoices,
-  skillProficiencies,
-  abilityBonusChoices,
-  languageChoices,
-  toolChoices,
+  asiChoices = [],
+  skillProficiencies = [],
+  abilityBonusChoices = [],
+  languageChoices = [],
+  toolChoices = [],
+  featureOptionChoices = [],
 }: LocalBuildContextArgs): CharacterBuildContext | null {
   if (!campaign) return null
 
@@ -166,6 +178,79 @@ export function buildLocalCharacterContext({
     counts_against_selection_limit: true,
     source_feature_key: null,
   }))
+  const totalLevel = levels.reduce((sum, level) => sum + level.level, 0)
+  const staticGrantedSpells = getStaticSpeciesGrantedSpells({
+    speciesName: selectedSpecies?.name ?? null,
+    speciesSource: selectedSpecies?.source ?? null,
+    totalLevel,
+    spells: spellOptions,
+  })
+  const selectedSpellSummaries = [
+    ...typedSpellSelections
+      .map((selection) => {
+        const spellId = typeof selection === 'string' ? selection : selection.spell_id
+        const spell = spellById.get(spellId)
+        if (!spell) return null
+
+        return {
+          spell,
+          selection: typeof selection === 'string' ? null : selection,
+        }
+      })
+      .filter((entry): entry is { spell: SpellOption; selection: Exclude<SpellChoiceInput, string> | null } => Boolean(entry))
+      .map(({ spell, selection }) => ({
+        id: spell.id,
+        name: spell.name,
+        level: spell.level,
+        classes: selection?.owning_class_id
+          ? Array.from(new Set([
+              selection.owning_class_id,
+              ...(spell.available_via_class_ids && spell.available_via_class_ids.length > 0 ? spell.available_via_class_ids : spell.classes),
+            ]))
+          : spell.available_via_class_ids && spell.available_via_class_ids.length > 0
+            ? spell.available_via_class_ids
+            : spell.classes,
+        source: spell.source,
+        grantedBySubclassIds: selection?.granting_subclass_id
+          ? [selection.granting_subclass_id]
+          : spell.granted_by_subclasses ?? [],
+        countsAgainstSelectionLimit: selection?.counts_against_selection_limit ?? spell.counts_against_selection_limit !== false,
+        sourceFeatureKey: selection?.source_feature_key ?? spell.source_feature_key ?? null,
+      })),
+    ...staticGrantedSpells.map((spell) => ({
+      id: spell.id,
+      name: spell.name,
+      level: spell.level,
+      classes: spell.classes,
+      source: spell.source,
+      grantedBySubclassIds: spell.grantedBySubclassIds,
+      countsAgainstSelectionLimit: spell.countsAgainstSelectionLimit,
+      sourceFeatureKey: spell.sourceFeatureKey,
+    })),
+  ]
+  const dedupedSelectedSpells = Array.from(
+    new Map(selectedSpellSummaries.map((spell) => [spell.id, spell])).values()
+  )
+  const grantedSpellIds = Array.from(new Set([
+    ...typedSpellSelections
+      .map((selection) => typeof selection === 'string' ? selection : selection.spell_id)
+      .filter((spellId) => (spellById.get(spellId)?.granted_by_subclasses?.length ?? 0) > 0),
+    ...typedSpellSelections
+      .filter((selection): selection is Exclude<SpellChoiceInput, string> => typeof selection !== 'string')
+      .filter((selection) => selection.acquisition_mode === 'granted' || Boolean(selection.source_feature_key))
+      .map((selection) => selection.spell_id),
+    ...staticGrantedSpells.map((spell) => spell.id),
+  ]))
+  const freePreparedSpellIds = Array.from(new Set([
+    ...typedSpellSelections
+      .map((selection) => typeof selection === 'string' ? selection : selection.spell_id)
+      .filter((spellId) => spellById.get(spellId)?.counts_against_selection_limit === false),
+    ...typedSpellSelections
+      .filter((selection): selection is Exclude<SpellChoiceInput, string> => typeof selection !== 'string')
+      .filter((selection) => selection.counts_against_selection_limit === false)
+      .map((selection) => selection.spell_id),
+    ...staticGrantedSpells.map((spell) => spell.id),
+  ]))
 
   return {
     allowedSources,
@@ -177,8 +262,18 @@ export function buildLocalCharacterContext({
     baseStats: stats,
     statRolls: [],
     skillProficiencies,
-    selectedAbilityBonuses: buildSpeciesAbilityBonusMap(selectedSpecies, abilityBonusChoices),
-    speciesName: selectedSpecies?.name ?? null,
+  selectedAbilityBonuses: buildSpeciesAbilityBonusMap(selectedSpecies, abilityBonusChoices),
+    selectedAsiBonuses: buildAsiBonusMap(asiChoices),
+    asiChoiceSlots: asiChoices
+      .map((selection, slotIndex) => ({
+        slotIndex,
+        bonuses: selection.reduce<Partial<Record<SpeciesChoiceAbilityKey, number>>>((acc, ability) => {
+          acc[ability] = (acc[ability] ?? 0) + 1
+          return acc
+        }, {}),
+      }))
+    .filter((slot) => Object.keys(slot.bonuses).length > 0),
+  speciesName: selectedSpecies?.name ?? null,
     selectedLanguages: languageChoices,
     selectedTools: toolChoices,
     speciesSource: selectedSpecies?.source ?? null,
@@ -202,30 +297,7 @@ export function buildLocalCharacterContext({
         }
       : null,
     classes,
-    selectedSpells: typedSpellSelections
-      .map((selection) => {
-        const spellId = typeof selection === 'string' ? selection : selection.spell_id
-        const spell = spellById.get(spellId)
-        if (!spell) return null
-
-        return {
-          spell,
-          selection: typeof selection === 'string' ? null : selection,
-        }
-      })
-      .filter((entry): entry is { spell: SpellOption; selection: Exclude<SpellChoiceInput, string> | null } => Boolean(entry))
-      .map(({ spell, selection }) => ({
-        id: spell.id,
-        name: spell.name,
-        level: spell.level,
-        classes: spell.classes,
-        source: spell.source,
-        grantedBySubclassIds: spell.granted_by_subclasses ?? [],
-        owningClassId: selection?.owning_class_id ?? null,
-        acquisitionMode: selection?.acquisition_mode ?? 'known',
-        sourceFeatureKey: selection?.source_feature_key ?? null,
-        countsAgainstSelectionLimit: selection?.counts_against_selection_limit ?? spell.counts_against_selection_limit !== false,
-      })),
+    selectedSpells: dedupedSelectedSpells,
     selectedFeats: featChoices
       .map((featId) => featById.get(featId))
       .filter((feat): feat is Feat => Boolean(feat))
@@ -235,7 +307,7 @@ export function buildLocalCharacterContext({
         source: feat.source,
         prerequisites: feat.prerequisites,
       })),
-    selectedFeatureOptionChoices: [],
+    selectedFeatureOptions: featureOptionChoices,
     sourceCollections: {
       classSources: classes.map((cls) => cls.source),
       subclassSources: classes
@@ -251,29 +323,11 @@ export function buildLocalCharacterContext({
         ...(backgroundFeat ? [backgroundFeat.source] : []),
       ],
     },
-    grantedSpellIds: typedSpellSelections
-      .map((selection) => {
-        const spellId = typeof selection === 'string' ? selection : selection.spell_id
-        const spell = spellById.get(spellId)
-        const grantedBySubclass = (spell?.granted_by_subclasses?.length ?? 0) > 0
-        const grantedByFeature = typeof selection !== 'string' && (
-          selection.acquisition_mode === 'granted' || Boolean(selection.source_feature_key)
-        )
-        return grantedBySubclass || grantedByFeature ? spellId : null
-      })
-      .filter((value): value is string => Boolean(value)),
-    freePreparedSpellIds: typedSpellSelections
-      .map((selection) => {
-        const spellId = typeof selection === 'string' ? selection : selection.spell_id
-        const spell = spellById.get(spellId)
-        const freeFromOptions = spell?.counts_against_selection_limit === false
-        const freeFromSelection = typeof selection !== 'string' && selection.counts_against_selection_limit === false
-        return freeFromOptions || freeFromSelection ? spellId : null
-      })
-      .filter((value): value is string => Boolean(value)),
-    speciesExpandedSpellIds: spellOptions
-      .filter((spell) => selectedSpecies?.id != null && (spell.expanded_by_species ?? []).includes(selectedSpecies.id))
-      .map((spell) => spell.id),
+    grantedSpellIds,
+    expandedSpellIds: typedSpellSelections
+      .map((selection) => typeof selection === 'string' ? selection : selection.spell_id)
+      .filter((spellId) => (spellById.get(spellId)?.available_via_class_ids?.length ?? 0) > 0),
+    freePreparedSpellIds,
     multiclassSpellSlotsByCasterLevel: {},
   }
 }
@@ -356,7 +410,9 @@ export function buildTypedSpellChoices(args: {
       granting_subclass_id: grantingSubclassId,
       acquisition_mode: grantingSubclassId ? 'granted' : (sourceSummary?.mode ?? derived?.spellcasting.mode ?? 'known'),
       counts_against_selection_limit: spell?.counts_against_selection_limit !== false,
-      source_feature_key: grantingSubclassId ? `subclass_bonus_spell:${grantingSubclassId}` : null,
+      source_feature_key: grantingSubclassId
+        ? `subclass_bonus_spell:${grantingSubclassId}`
+        : spell?.source_feature_key ?? null,
     }
   })
 }
@@ -404,6 +460,7 @@ export function buildTypedFeatChoices(
 }
 
 export { buildTypedSkillProficiencies }
+export { buildTypedAsiChoices, type AsiSelection }
 export { buildTypedLanguageChoices, buildTypedToolChoices }
 export { buildTypedAbilityBonusChoices }
 
@@ -454,6 +511,8 @@ function humanizeLegalityCheck(check: LegalityResult['checks'][number]): string 
       return 'One or more selected skills are not available to this build.'
     case 'species_ability_bonus_choices':
       return 'A flexible species ability bonus is missing or assigned to an invalid ability.'
+    case 'asi_choices':
+      return 'An ASI allocation is invalid or exceeds the available progression slots.'
     case 'multiclass_prerequisites':
       return 'A multiclass choice is missing the required ability scores.'
     case 'subclass_timing':

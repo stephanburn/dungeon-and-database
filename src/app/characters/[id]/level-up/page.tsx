@@ -2,12 +2,15 @@ import { redirect, notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { hasDmAccess } from '@/lib/auth/roles'
 import { LevelUpWizard } from '../LevelUpWizard'
+import { buildAsiSelectionsFromRows } from '@/lib/characters/asi-provenance'
 import type {
   Background,
   Campaign,
   CharacterAbilityBonusChoice,
+  CharacterAsiChoice,
   Character,
   CharacterFeatChoice,
+  CharacterFeatureOptionChoice,
   CharacterLanguageChoice,
   CharacterLevel,
   CharacterSpellSelection,
@@ -16,10 +19,6 @@ import type {
   Species,
   Spell,
 } from '@/lib/types/database'
-import {
-  extractFeatSpellChoiceMap,
-  isFeatSpellSourceFeatureKey,
-} from '@/lib/characters/feat-spell-options'
 
 interface CharacterWithRelations extends Character {
   species: Species | null
@@ -54,7 +53,7 @@ export default async function CharacterLevelUpPage({ params }: { params: { id: s
     redirect(`/characters/${params.id}`)
   }
 
-  const [speciesResult, backgroundResult, levelsResult, skillsResult, abilityBonusChoicesResult, languageChoicesResult, toolChoicesResult, typedSpellSelectionsResult, typedFeatChoicesResult, campaignResult, allowlistResult, sourcesResult] = await Promise.all([
+  const [speciesResult, backgroundResult, levelsResult, skillsResult, abilityBonusChoicesResult, asiChoicesResult, languageChoicesResult, toolChoicesResult, featureOptionChoicesResult, typedSpellSelectionsResult, typedFeatChoicesResult, campaignResult, allowlistResult, sourcesResult] = await Promise.all([
     character.species_id
       ? supabase.from('species').select('*').eq('id', character.species_id).single()
       : Promise.resolve({ data: null }),
@@ -64,8 +63,10 @@ export default async function CharacterLevelUpPage({ params }: { params: { id: s
     supabase.from('character_levels').select('*').eq('character_id', character.id).order('taken_at'),
     supabase.from('character_skill_proficiencies').select('*').eq('character_id', character.id),
     supabase.from('character_ability_bonus_choices').select('*').eq('character_id', character.id),
+    supabase.from('character_asi_choices').select('*').eq('character_id', character.id),
     supabase.from('character_language_choices').select('*').eq('character_id', character.id),
     supabase.from('character_tool_choices').select('*').eq('character_id', character.id),
+    supabase.from('character_feature_option_choices').select('*').eq('character_id', character.id),
     supabase.from('character_spell_selections').select('*').eq('character_id', character.id),
     supabase.from('character_feat_choices').select('*').eq('character_id', character.id),
     supabase.from('campaigns').select('*').eq('id', character.campaign_id).single(),
@@ -73,9 +74,7 @@ export default async function CharacterLevelUpPage({ params }: { params: { id: s
     supabase.from('sources').select('key, rule_set'),
   ])
 
-  const typedSpellSelections = (typedSpellSelectionsResult.data ?? []) as CharacterSpellSelection[]
-  const initialSpellChoiceIds = typedSpellSelections
-    .filter((row) => !isFeatSpellSourceFeatureKey(row.source_feature_key))
+  const initialSpellChoiceIds = ((typedSpellSelectionsResult.data ?? []) as CharacterSpellSelection[])
     .map((row) => row.spell_id)
     .filter((value): value is string => Boolean(value))
 
@@ -88,9 +87,11 @@ export default async function CharacterLevelUpPage({ params }: { params: { id: s
   const initialAbilityBonusChoices = ((abilityBonusChoicesResult.data ?? []) as CharacterAbilityBonusChoice[])
     .map((row) => row.ability)
     .filter((value): value is 'str' | 'dex' | 'con' | 'int' | 'wis' | 'cha' => Boolean(value))
+  const initialAsiChoices = buildAsiSelectionsFromRows((asiChoicesResult.data ?? []) as CharacterAsiChoice[])
   const initialToolChoices = ((toolChoicesResult.data ?? []) as CharacterToolChoice[])
     .map((row) => row.tool)
     .filter((value): value is string => Boolean(value))
+  const initialFeatureOptionChoices = (featureOptionChoicesResult.data ?? []) as CharacterFeatureOptionChoice[]
 
   const spellSelectionRows = initialSpellChoiceIds.length > 0
     ? await supabase.from('spells').select('*').in('id', initialSpellChoiceIds)
@@ -120,10 +121,11 @@ export default async function CharacterLevelUpPage({ params }: { params: { id: s
           allSourceRuleSets={allSourceRuleSets}
           initialSkillProficiencies={(skillsResult.data ?? []).map((row) => row.skill)}
           initialAbilityBonusChoices={initialAbilityBonusChoices}
+          initialAsiChoices={initialAsiChoices}
           initialLanguageChoices={initialLanguageChoices}
           initialToolChoices={initialToolChoices}
+          initialFeatureOptionChoices={initialFeatureOptionChoices}
           initialSpellChoices={initialSpellChoiceIds}
-          initialFeatSpellChoices={extractFeatSpellChoiceMap(typedSpellSelections)}
           initialSpellSelections={(spellSelectionRows.data ?? []) as Spell[]}
           initialFeatChoices={initialFeatChoices}
           isDm={hasDmAccess(profile?.role)}

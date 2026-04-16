@@ -28,6 +28,7 @@ import type {
 import type { LegalityResult } from '@/lib/legality/engine'
 import { StatBlock } from '@/components/character-sheet/StatBlock'
 import { LanguagesToolsCard } from '@/components/character-sheet/LanguagesToolsCard'
+import { MaverickBreakthroughCard } from '@/components/character-sheet/MaverickBreakthroughCard'
 import { SpeciesAbilityBonusCard } from '@/components/character-sheet/SpeciesAbilityBonusCard'
 import { SkillsCard } from '@/components/character-sheet/SkillsCard'
 import { SpellsCard } from '@/components/character-sheet/SpellsCard'
@@ -36,11 +37,13 @@ import { FeatSpellChoicesCard } from '@/components/character-sheet/FeatSpellChoi
 import { LegalityBadge, LegalitySummaryBadge } from '@/components/character-sheet/LegalityBadge'
 import {
   buildCombinedSpellSelections,
+  buildTypedAsiChoices,
   buildLocalCharacterContext,
   buildTypedAbilityBonusChoices,
   buildTypedFeatChoices,
   buildTypedLanguageChoices,
   buildTypedSkillProficiencies,
+  buildTypedSpellChoices,
   buildTypedToolChoices,
   buildWizardHitDieRows,
   calculateCreationHpMax,
@@ -48,6 +51,7 @@ import {
   deriveLocalCharacter,
   SpellOption,
   summarizeWizardLegality,
+  type AsiSelection,
   type WizardLevel,
 } from '@/lib/characters/wizard-helpers'
 import {
@@ -56,6 +60,10 @@ import {
   type AbilityKey as SpeciesChoiceAbilityKey,
 } from '@/lib/characters/species-ability-bonus-provenance'
 import { getFeatSpellChoiceDefinitions } from '@/lib/characters/feat-spell-options'
+import {
+  buildMaverickFeatureOptionChoices,
+  isMaverickSubclass,
+} from '@/lib/characters/maverick'
 
 interface CharacterNewFormProps {
   isDm: boolean
@@ -112,12 +120,14 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
   const [stats, setStats] = useState({ str: 15, dex: 14, con: 13, int: 12, wis: 10, cha: 8 })
   const [skillProficiencies, setSkillProficiencies] = useState<string[]>([])
   const [abilityBonusChoices, setAbilityBonusChoices] = useState<SpeciesChoiceAbilityKey[]>([])
+  const [asiChoices, setAsiChoices] = useState<AsiSelection[]>([])
   const [languageChoices, setLanguageChoices] = useState<string[]>([])
   const [toolChoices, setToolChoices] = useState<string[]>([])
   const [spellChoices, setSpellChoices] = useState<string[]>([])
   const [featChoices, setFeatChoices] = useState<string[]>([])
   const [featSpellChoices, setFeatSpellChoices] = useState<Record<string, string>>({})
   const [featSpellOptions, setFeatSpellOptions] = useState<SpellOption[]>([])
+  const [maverickBreakthroughClassIds, setMaverickBreakthroughClassIds] = useState<string[]>([])
 
   useEffect(() => {
     fetch('/api/campaigns')
@@ -204,11 +214,14 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
     })
     if (speciesId) params.set('species_id', speciesId)
     for (const subclassId of firstClassSubclassIds) params.append('subclass_id', subclassId)
+    for (const expandedClassId of maverickBreakthroughClassIds.filter(Boolean)) {
+      params.append('expanded_class_id', expandedClassId)
+    }
 
     fetch(`/api/content/spells?${params.toString()}`)
       .then((response) => response.json())
       .then((data: SpellOption[]) => setSpellOptions(Array.isArray(data) ? data : []))
-  }, [campaignId, levels, classDetailMap, speciesId])
+  }, [campaignId, levels, classDetailMap, maverickBreakthroughClassIds, speciesId])
 
   const currentStep = STEPS[stepIndex]
   const selectedSpecies = speciesList.find((species) => species.id === speciesId) ?? null
@@ -219,6 +232,10 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
     .filter((level) => level.class_id === firstClassId && level.subclass_id)
     .map((level) => level.subclass_id as string)
   const selectedClass = classList.find((cls) => cls.id === firstClassId) ?? null
+  const selectedSubclass = selectedClass
+    ? (subclassMap[selectedClass.id] ?? []).find((entry) => entry.id === firstClassSubclassIds[0]) ?? null
+    : null
+  const breakthroughClassOptions = classList.filter((cls) => !['Artificer'].includes(cls.name))
   const backgroundFeat = selectedBackground?.background_feat_id
     ? featList.find((feat) => feat.id === selectedBackground.background_feat_id) ?? null
     : null
@@ -276,10 +293,28 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
     spellSelections: combinedSpellSelections,
     featList,
     featChoices,
+    asiChoices,
     skillProficiencies,
     abilityBonusChoices,
     languageChoices,
     toolChoices,
+    featureOptionChoices: buildMaverickFeatureOptionChoices({
+      subclassId: selectedSubclass?.id ?? null,
+      classLevel: firstClassLevel,
+      selectedClassIds: maverickBreakthroughClassIds,
+    }).map((choice) => ({
+      id: `${choice.option_group_key}:${choice.option_key}`,
+      character_id: 'local',
+      character_level_id: null,
+      option_group_key: choice.option_group_key,
+      option_key: choice.option_key,
+      selected_value: choice.selected_value ?? {},
+      choice_order: choice.choice_order ?? 0,
+      source_category: choice.source_category ?? 'subclass_choice',
+      source_entity_id: choice.source_entity_id ?? null,
+      source_feature_key: choice.source_feature_key ?? null,
+      created_at: '',
+    })),
   })
   const derived = deriveLocalCharacter(localContext)
   const persistedSpellSelections = buildCombinedSpellSelections({
@@ -349,7 +384,23 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
       case 'subclasses': {
         if (!derived) return null
         const missing = derived.subclassRequirements.find((entry) => entry.missingRequiredSubclass)
-        return missing ? `${missing.className} needs a subclass before continuing.` : null
+        if (missing) return `${missing.className} needs a subclass before continuing.`
+        if (selectedSubclass && isMaverickSubclass(selectedSubclass)) {
+          const requiredChoices = firstClassLevel >= 17 ? 5 : firstClassLevel >= 13 ? 4 : firstClassLevel >= 9 ? 3 : firstClassLevel >= 5 ? 2 : firstClassLevel >= 3 ? 1 : 0
+          if (maverickBreakthroughClassIds.filter(Boolean).length < requiredChoices) {
+            return `Choose ${requiredChoices} Arcane Breakthrough class${requiredChoices === 1 ? '' : 'es'} for Maverick.`
+          }
+        }
+        return null
+      }
+      case 'spells-feats': {
+        const requiredSlots = derived?.featSlotLabels?.length ?? 0
+        const incompleteAsiSlot = Array.from({ length: requiredSlots }, (_, index) => index)
+          .find((index) => !featChoices[index] && (asiChoices[index]?.length ?? 0) !== 2)
+        if (incompleteAsiSlot !== undefined) {
+          return `Choose a feat or finish both ASI picks for slot ${incompleteAsiSlot + 1}.`
+        }
+        return null
       }
       default:
         return null
@@ -412,6 +463,11 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
           selectedSpecies,
           abilityBonusChoices
         ),
+        asi_choices: buildTypedAsiChoices(
+          asiChoices,
+          derived?.featSlotLabels,
+          featChoices
+        ),
         language_choices: buildTypedLanguageChoices({
           languageChoices,
           background: selectedBackground,
@@ -421,6 +477,11 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
           toolChoices,
           selectedClass,
           species: selectedSpecies,
+        }),
+        feature_option_choices: buildMaverickFeatureOptionChoices({
+          subclassId: selectedSubclass?.id ?? null,
+          classLevel: firstClassLevel,
+          selectedClassIds: maverickBreakthroughClassIds,
         }),
         spell_choices: persistedSpellSelections,
         feat_choices: buildTypedFeatChoices(featChoices, derived?.featSlotLabels),
@@ -718,6 +779,15 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
                     </div>
                   )
                 })}
+                {selectedSubclass && isMaverickSubclass(selectedSubclass) && (
+                  <MaverickBreakthroughCard
+                    classLevel={firstClassLevel}
+                    availableClasses={breakthroughClassOptions}
+                    selectedClassIds={maverickBreakthroughClassIds}
+                    canEdit
+                    onChange={setMaverickBreakthroughClassIds}
+                  />
+                )}
               </div>
             )}
 
@@ -737,6 +807,12 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
                   for (const [ability, bonus] of Object.entries(chosenBonuses)) {
                     combined[ability] = (combined[ability] ?? 0) + bonus
                   }
+                  asiChoices.forEach((selection, slotIndex) => {
+                    if ((featChoices[slotIndex] ?? '').length > 0) return
+                    selection.forEach((ability) => {
+                      combined[ability] = (combined[ability] ?? 0) + 1
+                    })
+                  })
                   return combined
                 })()}
               />
@@ -784,6 +860,7 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
                     campaignId={campaignId}
                     speciesId={speciesId || null}
                     subclassIds={firstClassSubclassIds}
+                    expandedClassIds={maverickBreakthroughClassIds.filter(Boolean)}
                     classLevel={firstClassLevel}
                     derivedSpellcasting={derived?.spellcasting}
                     spellChoices={spellChoices}
@@ -802,10 +879,12 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
                   backgroundFeat={backgroundFeat}
                   availableFeats={featList}
                   featChoices={featChoices}
+                  asiChoices={asiChoices}
                   totalLevel={derived?.totalLevel ?? 0}
                   featSlotLabels={derived?.featSlotLabels}
                   canEdit
                   onChange={setFeatChoices}
+                  onAsiChange={setAsiChoices}
                 />
 
                 <FeatSpellChoicesCard

@@ -18,6 +18,7 @@ import {
 import { FeatsCard } from '@/components/character-sheet/FeatsCard'
 import { FeatSpellChoicesCard } from '@/components/character-sheet/FeatSpellChoicesCard'
 import { LegalityBadge, LegalitySummaryBadge } from '@/components/character-sheet/LegalityBadge'
+import { MaverickBreakthroughCard } from '@/components/character-sheet/MaverickBreakthroughCard'
 import { SpellsCard } from '@/components/character-sheet/SpellsCard'
 import { SkillsCard } from '@/components/character-sheet/SkillsCard'
 import { useToast } from '@/hooks/use-toast'
@@ -26,6 +27,7 @@ import type {
   Background,
   Campaign,
   Character,
+  CharacterFeatureOptionChoice,
   CharacterLevel,
   Class,
   Feat,
@@ -38,21 +40,29 @@ import type {
 } from '@/lib/types/database'
 import {
   buildCombinedSpellSelections,
+  buildTypedAsiChoices,
   buildLocalCharacterContext,
   buildTypedAbilityBonusChoices,
   buildTypedFeatChoices,
   buildTypedLanguageChoices,
   buildTypedSkillProficiencies,
+  buildTypedSpellChoices,
   buildTypedToolChoices,
   calculateLevelUpHpGain,
   ClassDetail,
   deriveLocalCharacter,
   getMulticlassSkillChoiceConfig,
+  type AsiSelection,
   type SpellOption,
   type WizardLevel,
 } from '@/lib/characters/wizard-helpers'
 import { buildSpeciesAbilityBonusMap } from '@/lib/characters/species-ability-bonus-provenance'
 import { getFeatSpellChoiceDefinitions } from '@/lib/characters/feat-spell-options'
+import {
+  buildMaverickFeatureOptionChoices,
+  getMaverickBreakthroughClassIds,
+  isMaverickSubclass,
+} from '@/lib/characters/maverick'
 import { getFixedHpGainValue } from '@/lib/characters/derived'
 
 type CharacterWithRelations = Character & {
@@ -70,10 +80,12 @@ type LevelUpWizardProps = {
   allSourceRuleSets: Record<string, RuleSet>
   initialSkillProficiencies: string[]
   initialAbilityBonusChoices: Array<'str' | 'dex' | 'con' | 'int' | 'wis' | 'cha'>
+  initialAsiChoices: AsiSelection[]
   initialLanguageChoices: string[]
   initialToolChoices: string[]
+  initialFeatureOptionChoices: CharacterFeatureOptionChoice[]
   initialSpellChoices: string[]
-  initialFeatSpellChoices: Record<string, string>
+  initialFeatSpellChoices?: Record<string, string>
   initialSpellSelections: Spell[]
   initialFeatChoices: string[]
   isDm: boolean
@@ -134,10 +146,12 @@ export function LevelUpWizard({
   allSourceRuleSets,
   initialSkillProficiencies,
   initialAbilityBonusChoices,
+  initialAsiChoices,
   initialLanguageChoices,
   initialToolChoices,
+  initialFeatureOptionChoices,
   initialSpellChoices,
-  initialFeatSpellChoices,
+  initialFeatSpellChoices = {},
   initialSpellSelections,
   initialFeatChoices,
   isDm,
@@ -164,8 +178,12 @@ export function LevelUpWizard({
   const [selectedClassId, setSelectedClassId] = useState(baseLevels[0]?.class_id ?? '')
   const [selectedSubclassId, setSelectedSubclassId] = useState<string | null>(null)
   const [skillProficiencies, setSkillProficiencies] = useState<string[]>(initialSkillProficiencies)
+  const [asiChoices, setAsiChoices] = useState<AsiSelection[]>(initialAsiChoices)
   const [languageChoices] = useState<string[]>(initialLanguageChoices)
   const [toolChoices] = useState<string[]>(initialToolChoices)
+  const [maverickBreakthroughClassIds, setMaverickBreakthroughClassIds] = useState<string[]>(
+    getMaverickBreakthroughClassIds(initialFeatureOptionChoices)
+  )
   const [spellChoices, setSpellChoices] = useState<string[]>(initialSpellChoices)
   const [featChoices] = useState<string[]>(initialFeatChoices)
   const [featSpellChoices, setFeatSpellChoices] = useState<Record<string, string>>(initialFeatSpellChoices)
@@ -255,13 +273,16 @@ export function LevelUpWizard({
       campaign_id: campaign.id,
       class_level: String(nextTargetLevel),
     })
-    if (character.species?.id) params.set('species_id', character.species.id)
+    if (character.species_id) params.set('species_id', character.species_id)
     if (selectedSubclassId) params.append('subclass_id', selectedSubclassId)
+    for (const expandedClassId of maverickBreakthroughClassIds.filter(Boolean)) {
+      params.append('expanded_class_id', expandedClassId)
+    }
 
     fetch(`/api/content/spells?${params.toString()}`)
       .then((response) => response.json())
       .then((data: SpellOption[]) => setSpellOptions(Array.isArray(data) ? data : []))
-  }, [campaign.id, character.species?.id, nextTargetLevel, selectedClassDetail, selectedClassId, selectedSubclassId])
+  }, [campaign.id, character.species_id, maverickBreakthroughClassIds, nextTargetLevel, selectedClassDetail, selectedClassId, selectedSubclassId])
 
   useEffect(() => {
     const existingSubclassId = baseLevels.find((level) => level.class_id === selectedClassId)?.subclass_id ?? null
@@ -281,6 +302,10 @@ export function LevelUpWizard({
     }
     return Array.from(byId.values())
   }, [featSpellOptions, initialSpellSelections, spellOptions])
+  const selectedSubclass = selectedClassId
+    ? (subclassMap[selectedClassId] ?? []).find((entry) => entry.id === selectedSubclassId) ?? null
+    : null
+  const breakthroughClassOptions = classList.filter((cls) => !['Artificer'].includes(cls.name))
 
   const targetLevels = useMemo<WizardLevel[]>(() => {
     if (!selectedClassId) {
@@ -370,10 +395,12 @@ export function LevelUpWizard({
     }),
     featList,
     featChoices: initialFeatChoices,
+    asiChoices: initialAsiChoices,
     skillProficiencies: initialSkillProficiencies,
     abilityBonusChoices: initialAbilityBonusChoices,
     languageChoices: initialLanguageChoices,
     toolChoices: initialToolChoices,
+    featureOptionChoices: initialFeatureOptionChoices,
   })
 
   const nextFeatChoices = useMemo(() => {
@@ -402,10 +429,28 @@ export function LevelUpWizard({
       spellChoices,
       featList,
       featChoices: next,
+      asiChoices,
       skillProficiencies,
       abilityBonusChoices: initialAbilityBonusChoices,
       languageChoices,
       toolChoices,
+      featureOptionChoices: buildMaverickFeatureOptionChoices({
+        subclassId: selectedSubclassId,
+        classLevel: nextTargetLevel,
+        selectedClassIds: maverickBreakthroughClassIds,
+      }).map((choice) => ({
+        id: `${choice.option_group_key}:${choice.option_key}`,
+        character_id: character.id,
+        character_level_id: null,
+        option_group_key: choice.option_group_key,
+        option_key: choice.option_key,
+        selected_value: choice.selected_value ?? {},
+        choice_order: choice.choice_order ?? 0,
+        source_category: choice.source_category ?? 'subclass_choice',
+        source_entity_id: choice.source_entity_id ?? null,
+        source_feature_key: choice.source_feature_key ?? null,
+        created_at: '',
+      })),
     })
     const nextSlots = deriveLocalCharacter(previewContext)?.totalAsiSlots ?? currentSlots
     if (nextSlots > currentSlots) {
@@ -430,13 +475,18 @@ export function LevelUpWizard({
     featChoices,
     featList,
     mergedSpellOptions,
+    maverickBreakthroughClassIds,
     newFeatChoice,
+    asiChoices,
     languageChoices,
     skillProficiencies,
     spellChoices,
+    selectedSubclassId,
     subclassMap,
+    nextTargetLevel,
     targetLevels,
     toolChoices,
+    character.id,
     currentContext,
     initialAbilityBonusChoices,
   ])
@@ -507,10 +557,28 @@ export function LevelUpWizard({
     spellSelections: nextCombinedSpellSelections,
     featList,
     featChoices: nextFeatChoices,
+    asiChoices,
     skillProficiencies,
     abilityBonusChoices: initialAbilityBonusChoices,
     languageChoices,
     toolChoices,
+    featureOptionChoices: buildMaverickFeatureOptionChoices({
+      subclassId: selectedSubclassId,
+      classLevel: nextTargetLevel,
+      selectedClassIds: maverickBreakthroughClassIds,
+    }).map((choice) => ({
+      id: `${choice.option_group_key}:${choice.option_key}`,
+      character_id: character.id,
+      character_level_id: null,
+      option_group_key: choice.option_group_key,
+      option_key: choice.option_key,
+      selected_value: choice.selected_value ?? {},
+      choice_order: choice.choice_order ?? 0,
+      source_category: choice.source_category ?? 'subclass_choice',
+      source_entity_id: choice.source_entity_id ?? null,
+      source_feature_key: choice.source_feature_key ?? null,
+      created_at: '',
+    })),
   })
 
   const currentDerived = deriveLocalCharacter(currentContext)
@@ -611,7 +679,14 @@ export function LevelUpWizard({
         return null
       }
       case 'subclass':
-        return selectedSubclassId ? null : 'Choose the subclass unlocked by this level.'
+        if (!selectedSubclassId) return 'Choose the subclass unlocked by this level.'
+        if (selectedSubclass && isMaverickSubclass(selectedSubclass)) {
+          const requiredChoices = nextTargetLevel >= 17 ? 5 : nextTargetLevel >= 13 ? 4 : nextTargetLevel >= 9 ? 3 : nextTargetLevel >= 5 ? 2 : nextTargetLevel >= 3 ? 1 : 0
+          if (maverickBreakthroughClassIds.filter(Boolean).length < requiredChoices) {
+            return `Choose ${requiredChoices} Arcane Breakthrough class${requiredChoices === 1 ? '' : 'es'} for Maverick.`
+          }
+        }
+        return null
       case 'skills':
         if (!multiclassSkillConfig) return null
         if (selectedNewSkillCount > multiclassSkillConfig.count) {
@@ -619,7 +694,14 @@ export function LevelUpWizard({
         }
         return null
       case 'feat':
-        return newFeatChoice ? null : 'Choose whether this level grants an ASI or a feat.'
+        if (!newFeatChoice) return 'Choose whether this level grants an ASI or a feat.'
+        if (newFeatChoice === 'asi') {
+          const selection = asiChoices[currentFeatSlotCount] ?? []
+          if (selection.length !== 2) {
+            return 'Choose two ASI increases for this slot.'
+          }
+        }
+        return null
       case 'hp':
         if (hpMode === 'manual' && (manualHpRoll < 1 || manualHpRoll > hitDie)) {
           return `Enter an HP roll between 1 and ${hitDie}.`
@@ -678,6 +760,11 @@ export function LevelUpWizard({
             character.species,
             initialAbilityBonusChoices
           ),
+          asi_choices: buildTypedAsiChoices(
+            asiChoices,
+            nextDerived?.featSlotLabels,
+            nextFeatChoices
+          ),
           language_choices: buildTypedLanguageChoices({
             languageChoices,
             background: character.background,
@@ -687,6 +774,11 @@ export function LevelUpWizard({
             toolChoices,
             selectedClass: selectedClassDetail,
             species: character.species,
+          }),
+          feature_option_choices: buildMaverickFeatureOptionChoices({
+            subclassId: selectedSubclassId,
+            classLevel: nextTargetLevel,
+            selectedClassIds: maverickBreakthroughClassIds,
           }),
           spell_choices: persistedNextSpellSelections,
           feat_choices: buildTypedFeatChoices(nextFeatChoices, nextDerived?.featSlotLabels),
@@ -847,6 +939,15 @@ export function LevelUpWizard({
                   ))}
                 </SelectContent>
               </Select>
+              {selectedSubclass && isMaverickSubclass(selectedSubclass) && (
+                <MaverickBreakthroughCard
+                  classLevel={nextTargetLevel}
+                  availableClasses={breakthroughClassOptions}
+                  selectedClassIds={maverickBreakthroughClassIds}
+                  canEdit
+                  onChange={setMaverickBreakthroughClassIds}
+                />
+              )}
             </div>
           )}
 
@@ -895,8 +996,9 @@ export function LevelUpWizard({
               <SpellsCard
                 classId={selectedClassId}
                 campaignId={campaign.id}
-                speciesId={character.species?.id ?? null}
+                speciesId={character.species_id}
                 subclassIds={selectedSubclassId ? [selectedSubclassId] : []}
+                expandedClassIds={maverickBreakthroughClassIds.filter(Boolean)}
                 classLevel={nextTargetLevel}
                 derivedSpellcasting={nextDerived?.spellcasting}
                 spellChoices={spellChoices}
@@ -923,13 +1025,23 @@ export function LevelUpWizard({
                 backgroundFeat={backgroundFeat}
                 availableFeats={featList}
                 featChoices={nextFeatChoices}
+                asiChoices={asiChoices}
                 totalLevel={nextDerived?.totalLevel ?? totalLevelAfter}
                 featSlotLabels={nextDerived?.featSlotLabels}
                 canEdit
                 onChange={(choices) => {
                   const nextChoice = choices[currentFeatSlotCount] ?? ''
                   setNewFeatChoice(nextChoice === '' ? 'asi' : nextChoice)
+                  if (nextChoice) {
+                    setAsiChoices((prev) => {
+                      const next = [...prev]
+                      next[currentFeatSlotCount] = []
+                      while (next.length > 0 && (next[next.length - 1] ?? []).length === 0) next.pop()
+                      return next
+                    })
+                  }
                 }}
+                onAsiChange={setAsiChoices}
               />
               <FeatSpellChoicesCard
                 activeFeats={nextActiveFeatSpellFeats}

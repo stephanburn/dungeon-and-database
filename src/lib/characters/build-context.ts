@@ -19,7 +19,13 @@ import {
   type DerivedCharacterCore,
 } from '@/lib/characters/derived'
 import { getFixedBackgroundLanguages } from '@/lib/characters/language-tool-provenance'
+import {
+  getMaverickCantripBonus,
+  getMaverickPreparedBreakthroughLevels,
+  isMaverickSubclass,
+} from '@/lib/characters/maverick'
 import { normalizeSkillKey, SAVING_THROW_NAMES, SKILLS, type SkillKey } from '@/lib/skills'
+import type { CharacterFeatureOptionChoice } from '@/lib/types/database'
 
 export type AbilityKey = 'str' | 'dex' | 'con' | 'int' | 'wis' | 'cha'
 
@@ -77,10 +83,8 @@ export interface BuildSpellSummary {
   classes: string[]
   source: string
   grantedBySubclassIds: string[]
-  owningClassId?: string | null
-  acquisitionMode?: string
-  sourceFeatureKey?: string | null
   countsAgainstSelectionLimit: boolean
+  sourceFeatureKey: string | null
 }
 
 export interface BuildFeatSummary {
@@ -104,6 +108,12 @@ export interface CharacterBuildContext {
   }>
   skillProficiencies: string[]
   selectedAbilityBonuses: Partial<Record<AbilityKey, number>>
+  selectedAsiBonuses: Partial<Record<AbilityKey, number>>
+  selectedFeatureOptions: CharacterFeatureOptionChoice[]
+  asiChoiceSlots: Array<{
+    slotIndex: number
+    bonuses: Partial<Record<AbilityKey, number>>
+  }>
   speciesName: string | null
   selectedLanguages: string[]
   selectedTools: string[]
@@ -120,16 +130,6 @@ export interface CharacterBuildContext {
   classes: BuildClassSummary[]
   selectedSpells: BuildSpellSummary[]
   selectedFeats: BuildFeatSummary[]
-  selectedFeatureOptionChoices: Array<{
-    optionGroupKey: string
-    optionKey: string
-    selectedValue: Record<string, unknown>
-    choiceOrder: number
-    characterLevelId: string | null
-    sourceCategory: string
-    sourceEntityId: string | null
-    sourceFeatureKey: string | null
-  }>
   sourceCollections: {
     classSources: string[]
     subclassSources: string[]
@@ -137,8 +137,8 @@ export interface CharacterBuildContext {
     featSources: string[]
   }
   grantedSpellIds: string[]
+  expandedSpellIds: string[]
   freePreparedSpellIds: string[]
-  speciesExpandedSpellIds: string[]
   multiclassSpellSlotsByCasterLevel: Record<number, number[]>
 }
 
@@ -451,7 +451,11 @@ export function deriveCharacterProgression(context: CharacterBuildContext): Char
   // Batch 1 intentionally exposes a single primary selection model here.
   // Multiclass builds with multiple distinct preparation/known systems will need a richer per-source summary later.
   const spellcastingProfile = primarySpellcastingClass?.spellcastingProgression ?? null
-  const cantripSelectionCap = spellcastingProfile?.cantrips_known_by_level?.[Math.max((primarySpellcastingClass?.level ?? 1) - 1, 0)] ?? null
+  const maverickCantripBonus = primarySpellcastingClass?.subclass && isMaverickSubclass(primarySpellcastingClass.subclass)
+    ? getMaverickCantripBonus(primarySpellcastingClass.level)
+    : 0
+  const cantripSelectionCapBase = spellcastingProfile?.cantrips_known_by_level?.[Math.max((primarySpellcastingClass?.level ?? 1) - 1, 0)] ?? null
+  const cantripSelectionCap = cantripSelectionCapBase === null ? null : cantripSelectionCapBase + maverickCantripBonus
 
   let leveledCapFromProgression = 0
   let spellSelectionMode: CharacterProgressionSummary['spellSelectionMode'] = 'none'
@@ -478,6 +482,12 @@ export function deriveCharacterProgression(context: CharacterBuildContext): Char
       spellcastingProfile.mode,
       leveledCapFromProgression
     )
+    if (primarySpellcastingClass.subclass && isMaverickSubclass(primarySpellcastingClass.subclass)) {
+      const extraLevels = getMaverickPreparedBreakthroughLevels(primarySpellcastingClass.level)
+      if (extraLevels.length > 0) {
+        spellSelectionSummary = `${spellSelectionSummary} Maverick also prepares one Breakthrough spell each of levels ${extraLevels.join(', ')} without counting against the normal prepared total.`
+      }
+    }
   }
 
   return {
@@ -666,23 +676,25 @@ export function deriveCharacter(context: CharacterBuildContext): DerivedCharacte
   })()
 
   const selectedSpellEntries = context.selectedSpells
-    .filter((spell) => spell.level === 0 || spell.level <= progression.maxSpellLevel)
+    .filter((spell) =>
+      spell.level === 0 ||
+      spell.level <= progression.maxSpellLevel ||
+      context.grantedSpellIds.includes(spell.id) ||
+      context.freePreparedSpellIds.includes(spell.id)
+    )
     .map((spell) => ({
       id: spell.id,
       name: spell.name,
       level: spell.level,
       source: spell.source,
-      granted:
-        spell.acquisitionMode === 'granted' ||
-        context.grantedSpellIds.includes(spell.id) ||
-        context.freePreparedSpellIds.includes(spell.id),
+      granted: context.grantedSpellIds.includes(spell.id) || context.freePreparedSpellIds.includes(spell.id),
       countsAgainstSelectionLimit: spell.countsAgainstSelectionLimit,
     }))
 
   const selectedSpellCountsByLevel = Object.fromEntries(
     Array.from({ length: 10 }, (_, level) => [
       level,
-      selectedSpellEntries.filter((spell) => spell.level === level).length,
+      selectedSpellEntries.filter((spell) => spell.level === level && spell.countsAgainstSelectionLimit).length,
     ])
       .filter(([, count]) => count > 0)
   )
@@ -693,7 +705,10 @@ export function deriveCharacter(context: CharacterBuildContext): DerivedCharacte
       return []
     }
 
-    const cantripCap = profile.cantrips_known_by_level?.[Math.max(cls.level - 1, 0)] ?? null
+    const cantripCapBase = profile.cantrips_known_by_level?.[Math.max(cls.level - 1, 0)] ?? null
+    const cantripCap = cantripCapBase === null
+      ? null
+      : cantripCapBase + (cls.subclass && isMaverickSubclass(cls.subclass) ? getMaverickCantripBonus(cls.level) : 0)
     let leveledCap = 0
 
     if (profile.mode === 'known') {
@@ -713,13 +728,10 @@ export function deriveCharacter(context: CharacterBuildContext): DerivedCharacte
     const sourceSelectedSpells = selectedSpellEntries.filter((spell) =>
       context.selectedSpells.some((selected) =>
         selected.id === spell.id && (
-          selected.owningClassId === cls.classId ||
-          (
-            selected.owningClassId == null &&
-            !selected.sourceFeatureKey?.startsWith('feat_spell:') &&
-            selected.classes.includes(cls.classId)
-          ) ||
-          selected.grantedBySubclassIds.includes(cls.subclass?.id ?? '')
+          selected.classes.includes(cls.classId) ||
+          selected.grantedBySubclassIds.includes(cls.subclass?.id ?? '') ||
+          context.grantedSpellIds.includes(selected.id) ||
+          context.freePreparedSpellIds.includes(selected.id)
         )
       )
     )
@@ -727,9 +739,17 @@ export function deriveCharacter(context: CharacterBuildContext): DerivedCharacte
     const sourceSelectedSpellCountsByLevel = Object.fromEntries(
       Array.from({ length: 10 }, (_, level) => [
         level,
-        sourceSelectedSpells.filter((spell) => spell.level === level).length,
+        sourceSelectedSpells.filter((spell) => spell.level === level && spell.countsAgainstSelectionLimit).length,
       ]).filter(([, count]) => count > 0)
     )
+
+    let selectionSummary = buildSpellSelectionSummary(cls.name, cls.level, profile.mode, leveledCap)
+    if (cls.subclass && isMaverickSubclass(cls.subclass)) {
+      const extraLevels = getMaverickPreparedBreakthroughLevels(cls.level)
+      if (extraLevels.length > 0) {
+        selectionSummary = `${selectionSummary} Maverick also prepares one Breakthrough spell each of levels ${extraLevels.join(', ')} for free.`
+      }
+    }
 
     return [{
       classId: cls.classId,
@@ -739,7 +759,7 @@ export function deriveCharacter(context: CharacterBuildContext): DerivedCharacte
       mode: profile.mode,
       cantripSelectionCap: cantripCap,
       leveledSpellSelectionCap: leveledCap,
-      selectionSummary: buildSpellSelectionSummary(cls.name, cls.level, profile.mode, leveledCap),
+      selectionSummary,
       selectedSpellCountsByLevel: sourceSelectedSpellCountsByLevel,
       selectedSpells: sourceSelectedSpells,
     }]
@@ -807,12 +827,14 @@ export function createBuildBackgroundSummary(background: Background | null): Bui
   }
 }
 
-function combineAbilityBonuses(context: Pick<CharacterBuildContext, 'speciesAbilityBonuses' | 'selectedAbilityBonuses'>) {
+function combineAbilityBonuses(context: Pick<CharacterBuildContext, 'speciesAbilityBonuses' | 'selectedAbilityBonuses' | 'selectedAsiBonuses'>) {
   const combined: Partial<Record<AbilityKey, number>> = { ...context.speciesAbilityBonuses }
 
-  for (const ability of ['str', 'dex', 'con', 'int', 'wis', 'cha'] as AbilityKey[]) {
-    if ((context.selectedAbilityBonuses[ability] ?? 0) > 0) {
-      combined[ability] = (combined[ability] ?? 0) + (context.selectedAbilityBonuses[ability] ?? 0)
+  for (const source of [context.selectedAbilityBonuses ?? {}, context.selectedAsiBonuses ?? {}]) {
+    for (const ability of ['str', 'dex', 'con', 'int', 'wis', 'cha'] as AbilityKey[]) {
+      if ((source[ability] ?? 0) > 0) {
+        combined[ability] = (combined[ability] ?? 0) + (source[ability] ?? 0)
+      }
     }
   }
 
