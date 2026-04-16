@@ -46,7 +46,6 @@ import {
   buildTypedFeatChoices,
   buildTypedLanguageChoices,
   buildTypedSkillProficiencies,
-  buildTypedSpellChoices,
   buildTypedToolChoices,
   calculateLevelUpHpGain,
   ClassDetail,

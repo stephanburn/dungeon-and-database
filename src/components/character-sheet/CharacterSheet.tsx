@@ -151,7 +151,6 @@ export function CharacterSheet({
   initialAsiChoices = [],
   initialLanguageChoices = [],
   initialToolChoices = [],
-  initialSpellChoices = [],
   initialSelectedSpells = [],
   initialFeatChoices = [],
   initialFeatureOptionChoices = [],

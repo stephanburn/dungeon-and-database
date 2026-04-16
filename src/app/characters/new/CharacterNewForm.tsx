@@ -43,7 +43,6 @@ import {
   buildTypedFeatChoices,
   buildTypedLanguageChoices,
   buildTypedSkillProficiencies,
-  buildTypedSpellChoices,
   buildTypedToolChoices,
   buildWizardHitDieRows,
   calculateCreationHpMax,
