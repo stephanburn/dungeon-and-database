@@ -61,7 +61,7 @@ function normalizeFeatSpellChoiceDefinition(
 }
 
 function getFallbackFeatSpellChoices(feat: Feat): RawFeatSpellChoice[] {
-  if (feat.name === 'Aberrant Dragonmark' && feat.source === 'EE') {
+  if (feat.name === 'Aberrant Dragonmark' && ['EE', 'ERftLW'].includes(feat.source)) {
     return [
       {
         key: 'cantrip',

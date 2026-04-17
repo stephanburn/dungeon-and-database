@@ -255,3 +255,224 @@ test('static dragonmark trait grants become free derived spells when the spell e
   )
   assert.deepEqual(derived.spellcasting.selectedSpellCountsByLevel, {})
 })
+
+test('static dragonmark trait grants use seeded source fallbacks and include Mark of Storm gust', () => {
+  const artificerDetail: ClassDetail = {
+    id: 'artificer',
+    name: 'Artificer',
+    hit_die: 8,
+    primary_ability: ['INT'],
+    saving_throw_proficiencies: ['con', 'int'],
+    armor_proficiencies: [],
+    weapon_proficiencies: [],
+    tool_proficiencies: {},
+    skill_choices: { count: 2, from: ['arcana'] },
+    multiclass_prereqs: [],
+    multiclass_proficiencies: {},
+    spellcasting_type: 'half',
+    spellcasting_progression: {
+      mode: 'prepared',
+      spellcasting_ability: 'int',
+      cantrips_known_by_level: [2, 2, 2],
+      prepared_formula: 'half_level_down',
+      prepared_add_ability_mod: true,
+      prepared_min: 1,
+    },
+    subclass_choice_level: 3,
+    source: 'ERftLW',
+    amended: false,
+    amendment_note: null,
+    progression: [
+      { id: 'p1', class_id: 'artificer', level: 1, features: [], asi_available: false, proficiency_bonus: 2 },
+      { id: 'p2', class_id: 'artificer', level: 2, features: [], asi_available: false, proficiency_bonus: 2 },
+      { id: 'p3', class_id: 'artificer', level: 3, features: [], asi_available: false, proficiency_bonus: 2 },
+    ],
+    spell_slots: [
+      { id: 's1', class_id: 'artificer', level: 1, slots_by_spell_level: [2] },
+      { id: 's2', class_id: 'artificer', level: 2, slots_by_spell_level: [2] },
+      { id: 's3', class_id: 'artificer', level: 3, slots_by_spell_level: [3] },
+    ],
+  }
+
+  const stormSpecies: Species = {
+    id: 'mark-of-storm',
+    name: 'Half-Elf (Mark of Storm)',
+    size: 'medium',
+    speed: 30,
+    ability_score_bonuses: [{ ability: 'cha', bonus: 2 }, { ability: 'dex', bonus: 1 }],
+    languages: ['Common', 'Elvish'],
+    traits: [],
+    senses: [],
+    damage_resistances: ['lightning'],
+    condition_immunities: [],
+    source: 'ERftLW',
+    amended: true,
+    amendment_note: null,
+  }
+
+  const hospitalitySpecies: Species = {
+    id: 'mark-of-hospitality',
+    name: 'Halfling (Mark of Hospitality)',
+    size: 'small',
+    speed: 25,
+    ability_score_bonuses: [{ ability: 'dex', bonus: 2 }, { ability: 'cha', bonus: 1 }],
+    languages: ['Common', 'Halfling'],
+    traits: [],
+    senses: [],
+    damage_resistances: [],
+    condition_immunities: [],
+    source: 'ERftLW',
+    amended: true,
+    amendment_note: null,
+  }
+
+  const stormContext = buildLocalCharacterContext({
+    campaign,
+    allowedSources: ['ERftLW', 'EE', 'PHB', 'SRD'],
+    allSourceRuleSets: { ERftLW: '2014', EE: '2014', PHB: '2014', SRD: '2014' },
+    statMethod: 'point_buy',
+    persistedHpMax: 20,
+    stats: { str: 10, dex: 14, con: 14, int: 16, wis: 12, cha: 12 },
+    selectedSpecies: stormSpecies,
+    selectedBackground: null,
+    levels: [{ class_id: 'artificer', level: 3, subclass_id: null }],
+    classDetailMap: { artificer: artificerDetail },
+    subclassMap: {},
+    spellOptions: [
+      {
+        id: 'gust',
+        name: 'Gust',
+        level: 0,
+        school: 'Varies',
+        casting_time: 'Varies',
+        range: 'Varies',
+        components: { verbal: false, somatic: false, material: false },
+        duration: 'Varies',
+        concentration: false,
+        ritual: false,
+        description: '',
+        classes: [],
+        source: 'EE',
+        amended: false,
+        amendment_note: null,
+      },
+      {
+        id: 'gust-of-wind',
+        name: 'Gust of Wind',
+        level: 2,
+        school: 'Varies',
+        casting_time: 'Varies',
+        range: 'Varies',
+        components: { verbal: false, somatic: false, material: false },
+        duration: 'Varies',
+        concentration: true,
+        ritual: false,
+        description: '',
+        classes: [],
+        source: 'ERftLW',
+        amended: false,
+        amendment_note: null,
+      },
+    ],
+    spellChoices: [],
+    featList: [],
+    featChoices: [],
+    asiChoices: [],
+    skillProficiencies: [],
+    abilityBonusChoices: [],
+    languageChoices: [],
+    toolChoices: [],
+  })
+
+  const hospitalityContext = buildLocalCharacterContext({
+    campaign,
+    allowedSources: ['ERftLW', 'EE', 'PHB', 'SRD'],
+    allSourceRuleSets: { ERftLW: '2014', EE: '2014', PHB: '2014', SRD: '2014' },
+    statMethod: 'point_buy',
+    persistedHpMax: 20,
+    stats: { str: 8, dex: 14, con: 14, int: 16, wis: 12, cha: 12 },
+    selectedSpecies: hospitalitySpecies,
+    selectedBackground: null,
+    levels: [{ class_id: 'artificer', level: 3, subclass_id: null }],
+    classDetailMap: { artificer: artificerDetail },
+    subclassMap: {},
+    spellOptions: [
+      {
+        id: 'prestidigitation',
+        name: 'Prestidigitation',
+        level: 0,
+        school: 'Varies',
+        casting_time: 'Varies',
+        range: 'Varies',
+        components: { verbal: false, somatic: false, material: false },
+        duration: 'Varies',
+        concentration: false,
+        ritual: false,
+        description: '',
+        classes: ['artificer'],
+        source: 'ERftLW',
+        amended: false,
+        amendment_note: null,
+      },
+      {
+        id: 'purify-food-and-drink',
+        name: 'Purify Food and Drink',
+        level: 1,
+        school: 'Varies',
+        casting_time: 'Varies',
+        range: 'Varies',
+        components: { verbal: false, somatic: false, material: false },
+        duration: 'Varies',
+        concentration: false,
+        ritual: true,
+        description: '',
+        classes: ['artificer'],
+        source: 'ERftLW',
+        amended: false,
+        amendment_note: null,
+      },
+      {
+        id: 'unseen-servant',
+        name: 'Unseen Servant',
+        level: 1,
+        school: 'Varies',
+        casting_time: 'Varies',
+        range: 'Varies',
+        components: { verbal: false, somatic: false, material: false },
+        duration: 'Varies',
+        concentration: false,
+        ritual: true,
+        description: '',
+        classes: [],
+        source: 'PHB',
+        amended: false,
+        amendment_note: null,
+      },
+    ],
+    spellChoices: [],
+    featList: [],
+    featChoices: [],
+    asiChoices: [],
+    skillProficiencies: [],
+    abilityBonusChoices: [],
+    languageChoices: [],
+    toolChoices: [],
+  })
+
+  assert.ok(stormContext)
+  assert.ok(hospitalityContext)
+
+  const stormDerived = deriveLocalCharacter(stormContext)
+  const hospitalityDerived = deriveLocalCharacter(hospitalityContext)
+
+  assert.ok(stormDerived)
+  assert.ok(hospitalityDerived)
+  assert.deepEqual(
+    stormDerived.spellcasting.selectedSpells.map((spell) => spell.name),
+    ['Gust', 'Gust of Wind']
+  )
+  assert.deepEqual(
+    hospitalityDerived.spellcasting.selectedSpells.map((spell) => spell.name),
+    ['Prestidigitation', 'Purify Food and Drink', 'Unseen Servant']
+  )
+})

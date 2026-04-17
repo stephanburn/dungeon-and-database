@@ -250,8 +250,7 @@ export async function replaceCharacterSpellSelections(
   )
   if (typedError) return typedError
 
-  // Batch 2 transition rule:
-  // keep legacy rows readable for untouched characters, but once a character is
+  // Keep legacy rows readable for untouched characters, but once a character is
   // saved through the typed path we clear the old spell_known mirror so future
   // reads cannot fall back to stale state.
   return null

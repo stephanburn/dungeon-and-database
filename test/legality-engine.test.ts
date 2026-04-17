@@ -383,6 +383,119 @@ test('buildTypedLanguageChoices tags changeling and background language picks wi
   ])
 })
 
+test('buildTypedLanguageChoices tags dragonmarked inherited language picks with provenance', () => {
+  const stormChoices = buildTypedLanguageChoices({
+    languageChoices: ['Draconic', 'Infernal'],
+    background: null,
+    species: {
+      id: 'storm-half-elf',
+      name: 'Half-Elf (Mark of Storm)',
+      size: 'medium',
+      speed: 30,
+      ability_score_bonuses: [],
+      languages: ['Common', 'Elvish'],
+      traits: [],
+      senses: [],
+      damage_resistances: [],
+      condition_immunities: [],
+      source: 'ERftLW',
+      amended: true,
+      amendment_note: null,
+    },
+  })
+
+  const findingChoices = buildTypedLanguageChoices({
+    languageChoices: ['Sylvan', 'Infernal'],
+    background: null,
+    species: {
+      id: 'finding-human',
+      name: 'Human (Mark of Finding)',
+      size: 'medium',
+      speed: 30,
+      ability_score_bonuses: [],
+      languages: ['Common', 'Goblin'],
+      traits: [],
+      senses: [],
+      damage_resistances: [],
+      condition_immunities: [],
+      source: 'ERftLW',
+      amended: true,
+      amendment_note: null,
+    },
+  })
+
+  const detectionEeChoices = buildTypedLanguageChoices({
+    languageChoices: ['Celestial', 'Infernal'],
+    background: null,
+    species: {
+      id: 'detection-half-elf-ee',
+      name: 'Half-Elf (Mark of Detection)',
+      size: 'medium',
+      speed: 30,
+      ability_score_bonuses: [],
+      languages: ['Common', 'Elvish'],
+      traits: [],
+      senses: [],
+      damage_resistances: [],
+      condition_immunities: [],
+      source: 'EE',
+      amended: true,
+      amendment_note: null,
+    },
+  })
+
+  assert.deepEqual(stormChoices, [
+    {
+      language: 'Draconic',
+      character_level_id: null,
+      source_category: 'species_choice',
+      source_entity_id: 'storm-half-elf',
+      source_feature_key: 'species_languages:mark_of_storm_half_elf',
+    },
+    {
+      language: 'Infernal',
+      character_level_id: null,
+      source_category: 'manual',
+      source_entity_id: null,
+      source_feature_key: null,
+    },
+  ])
+
+  assert.deepEqual(findingChoices, [
+    {
+      language: 'Sylvan',
+      character_level_id: null,
+      source_category: 'species_choice',
+      source_entity_id: 'finding-human',
+      source_feature_key: 'species_languages:mark_of_finding_human',
+    },
+    {
+      language: 'Infernal',
+      character_level_id: null,
+      source_category: 'manual',
+      source_entity_id: null,
+      source_feature_key: null,
+    },
+  ])
+
+  assert.deepEqual(detectionEeChoices, [
+    {
+      language: 'Celestial',
+      character_level_id: null,
+      source_category: 'species_choice',
+      source_entity_id: 'detection-half-elf-ee',
+      source_feature_key: 'species_languages:mark_of_detection_half_elf',
+    },
+    {
+      language: 'Infernal',
+      character_level_id: null,
+      source_category: 'manual',
+      source_entity_id: null,
+      source_feature_key: null,
+    },
+  ])
+})
+
 test('buildTypedToolChoices tags warforged specialized design picks', () => {
   const choices = buildTypedToolChoices({
     toolChoices: ["Thieves' Tools"],
@@ -411,6 +524,45 @@ test('buildTypedToolChoices tags warforged specialized design picks', () => {
       source_category: 'species_choice',
       source_entity_id: 'warforged',
       source_feature_key: 'species_trait:specialized_design',
+    },
+  ])
+})
+
+test('buildTypedToolChoices tags mark of making artisan tool picks', () => {
+  const choices = buildTypedToolChoices({
+    toolChoices: ["Smith's Tools", "Thieves' Tools"],
+    selectedClass: null,
+    species: {
+      id: 'making-human',
+      name: 'Human (Mark of Making)',
+      size: 'medium',
+      speed: 30,
+      ability_score_bonuses: [],
+      languages: ['Common'],
+      traits: [],
+      senses: [],
+      damage_resistances: [],
+      condition_immunities: [],
+      source: 'ERftLW',
+      amended: true,
+      amendment_note: null,
+    },
+  })
+
+  assert.deepEqual(choices, [
+    {
+      tool: "Smith's Tools",
+      character_level_id: null,
+      source_category: 'species_choice',
+      source_entity_id: 'making-human',
+      source_feature_key: 'species_trait:artisans_gift',
+    },
+    {
+      tool: "Thieves' Tools",
+      character_level_id: null,
+      source_category: 'manual',
+      source_entity_id: null,
+      source_feature_key: null,
     },
   ])
 })
@@ -464,6 +616,58 @@ test('buildTypedAbilityBonusChoices tags changeling and warforged flexible speci
     source_category: 'species_choice',
     source_entity_id: 'warforged',
     source_feature_key: 'species_asi:warforged_flexible_bonus',
+  }])
+})
+
+test('buildTypedAbilityBonusChoices tags dragonmarked flexible species bonuses', () => {
+  const detectionChoices = buildTypedAbilityBonusChoices({
+    id: 'detection-half-elf',
+    name: 'Half-Elf (Mark of Detection)',
+    size: 'medium',
+    speed: 30,
+    ability_score_bonuses: [{ ability: 'wis', bonus: 2 }],
+    languages: ['Common', 'Elvish'],
+    traits: [],
+    senses: [],
+    damage_resistances: [],
+    condition_immunities: [],
+    source: 'ERftLW',
+    amended: true,
+    amendment_note: null,
+  }, ['int'])
+
+  const makingChoices = buildTypedAbilityBonusChoices({
+    id: 'making-human',
+    name: 'Human (Mark of Making)',
+    size: 'medium',
+    speed: 30,
+    ability_score_bonuses: [{ ability: 'int', bonus: 2 }],
+    languages: ['Common'],
+    traits: [],
+    senses: [],
+    damage_resistances: [],
+    condition_immunities: [],
+    source: 'ERftLW',
+    amended: true,
+    amendment_note: null,
+  }, ['dex'])
+
+  assert.deepEqual(detectionChoices, [{
+    ability: 'int',
+    bonus: 1,
+    character_level_id: null,
+    source_category: 'species_choice',
+    source_entity_id: 'detection-half-elf',
+    source_feature_key: 'species_asi:mark_of_detection_half_elf',
+  }])
+
+  assert.deepEqual(makingChoices, [{
+    ability: 'dex',
+    bonus: 1,
+    character_level_id: null,
+    source_category: 'species_choice',
+    source_entity_id: 'making-human',
+    source_feature_key: 'species_asi:mark_of_making_human',
   }])
 })
 

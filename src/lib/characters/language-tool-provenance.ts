@@ -25,6 +25,20 @@ type ToolChoiceConfig = {
   sourceFeatureKey: string | null
 }
 
+type SpeciesChoiceRule = {
+  names: string[]
+  sources?: string[]
+  count: number
+  sourceFeatureKey: string
+}
+
+type SpeciesToolChoiceRule = {
+  names: string[]
+  count: number
+  options: string[]
+  sourceFeatureKey: string
+}
+
 type ParsedBackgroundLanguages = {
   fixed: string[]
   choiceCount: number
@@ -88,6 +102,56 @@ const STANDARD_TOOL_OPTIONS = [
   'Viol',
 ]
 
+const ARTISANS_TOOL_OPTIONS = STANDARD_TOOL_OPTIONS.filter((tool) => tool.includes("Tools") || tool.includes("Supplies") || tool.includes('Utensils'))
+
+const DRAGONMARK_LANGUAGE_CHOICE_RULES: SpeciesChoiceRule[] = [
+  {
+    names: ['Half-Elf (Mark of Detection)', 'Mark of Detection Half-Elf'],
+    sources: ['ERftLW', 'EE'],
+    count: 1,
+    sourceFeatureKey: 'species_languages:mark_of_detection_half_elf',
+  },
+  {
+    names: ['Half-Elf (Mark of Storm)', 'Mark of Storm Half-Elf'],
+    count: 1,
+    sourceFeatureKey: 'species_languages:mark_of_storm_half_elf',
+  },
+  {
+    names: ['Human (Mark of Finding)', 'Mark of Finding Human'],
+    count: 1,
+    sourceFeatureKey: 'species_languages:mark_of_finding_human',
+  },
+  {
+    names: ['Human (Mark of Handling)', 'Mark of Handling Human'],
+    count: 1,
+    sourceFeatureKey: 'species_languages:mark_of_handling_human',
+  },
+  {
+    names: ['Human (Mark of Making)', 'Mark of Making Human'],
+    count: 1,
+    sourceFeatureKey: 'species_languages:mark_of_making_human',
+  },
+  {
+    names: ['Human (Mark of Passage)', 'Mark of Passage Human'],
+    count: 1,
+    sourceFeatureKey: 'species_languages:mark_of_passage_human',
+  },
+  {
+    names: ['Human (Mark of Sentinel)', 'Mark of Sentinel Human'],
+    count: 1,
+    sourceFeatureKey: 'species_languages:mark_of_sentinel_human',
+  },
+]
+
+const DRAGONMARK_TOOL_CHOICE_RULES: SpeciesToolChoiceRule[] = [
+  {
+    names: ['Human (Mark of Making)', 'Mark of Making Human'],
+    count: 1,
+    options: ARTISANS_TOOL_OPTIONS,
+    sourceFeatureKey: 'species_trait:artisans_gift',
+  },
+]
+
 function dedupe(values: string[]) {
   return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)))
 }
@@ -146,6 +210,20 @@ function getSpeciesLanguageChoiceConfig(species: Species | null): LanguageChoice
     }
   }
 
+  const dragonmarkRule = DRAGONMARK_LANGUAGE_CHOICE_RULES.find((rule) => (
+    rule.names.includes(species.name) &&
+    (!rule.sources || rule.sources.includes(species.source))
+  ))
+  if (dragonmarkRule) {
+    return {
+      count: dragonmarkRule.count,
+      options: STANDARD_LANGUAGE_OPTIONS.filter((language) => !species.languages.includes(language)),
+      sourceCategory: 'species_choice',
+      sourceEntityId: species.id,
+      sourceFeatureKey: dragonmarkRule.sourceFeatureKey,
+    }
+  }
+
   return null
 }
 
@@ -174,6 +252,19 @@ function getSpeciesToolChoiceConfig(species: Species | null): ToolChoiceConfig |
       sourceCategory: 'species_choice',
       sourceEntityId: species.id,
       sourceFeatureKey: 'species_trait:specialized_design',
+    }
+  }
+
+  if (species.source === 'ERftLW') {
+    const dragonmarkRule = DRAGONMARK_TOOL_CHOICE_RULES.find((rule) => rule.names.includes(species.name))
+    if (dragonmarkRule) {
+      return {
+        count: dragonmarkRule.count,
+        options: dragonmarkRule.options,
+        sourceCategory: 'species_choice',
+        sourceEntityId: species.id,
+        sourceFeatureKey: dragonmarkRule.sourceFeatureKey,
+      }
     }
   }
 

@@ -56,7 +56,8 @@ const MAVERICK_BREAKTHROUGH_CLASS_NAMES = [
 
 type StaticGrantedSpellRule = {
   spellName: string
-  spellSource: string
+  spellSource?: string
+  spellSources?: string[]
   minLevel?: number
   sourceFeatureKey: string
 }
@@ -67,6 +68,7 @@ const MARK_OF_DETECTION_RULES: StaticGrantedSpellRule[] = [
   { spellName: 'See Invisibility', spellSource: 'ERftLW', minLevel: 3, sourceFeatureKey: 'species_trait:magical_detection:see_invisibility' },
 ]
 const MARK_OF_STORM_RULES: StaticGrantedSpellRule[] = [
+  { spellName: 'Gust', spellSources: ['EE', 'PHB', 'SRD'], sourceFeatureKey: 'species_trait:storms_boon:gust' },
   { spellName: 'Gust of Wind', spellSource: 'ERftLW', minLevel: 3, sourceFeatureKey: 'species_trait:storms_boon:gust_of_wind' },
 ]
 const MARK_OF_FINDING_RULES: StaticGrantedSpellRule[] = [
@@ -89,20 +91,20 @@ const MARK_OF_SENTINEL_RULES: StaticGrantedSpellRule[] = [
 ]
 const MARK_OF_WARDING_RULES: StaticGrantedSpellRule[] = [
   { spellName: 'Alarm', spellSource: 'ERftLW', sourceFeatureKey: 'species_trait:wards_and_seals:alarm' },
-  { spellName: 'Mage Armor', spellSource: 'EE', sourceFeatureKey: 'species_trait:wards_and_seals:mage_armor' },
+  { spellName: 'Mage Armor', spellSources: ['EE', 'PHB', 'SRD', 'ERftLW'], sourceFeatureKey: 'species_trait:wards_and_seals:mage_armor' },
   { spellName: 'Arcane Lock', spellSource: 'ERftLW', minLevel: 3, sourceFeatureKey: 'species_trait:wards_and_seals:arcane_lock' },
 ]
 const MARK_OF_HOSPITALITY_RULES: StaticGrantedSpellRule[] = [
   { spellName: 'Prestidigitation', spellSource: 'ERftLW', sourceFeatureKey: 'species_trait:innkeepers_magic:prestidigitation' },
   { spellName: 'Purify Food and Drink', spellSource: 'ERftLW', sourceFeatureKey: 'species_trait:innkeepers_magic:purify_food_and_drink' },
-  { spellName: 'Unseen Servant', spellSource: 'EE', sourceFeatureKey: 'species_trait:innkeepers_magic:unseen_servant' },
+  { spellName: 'Unseen Servant', spellSources: ['EE', 'PHB', 'SRD', 'ERftLW'], sourceFeatureKey: 'species_trait:innkeepers_magic:unseen_servant' },
 ]
 const MARK_OF_HEALING_RULES: StaticGrantedSpellRule[] = [
   { spellName: 'Cure Wounds', spellSource: 'ERftLW', sourceFeatureKey: 'species_trait:healing_touch:cure_wounds' },
   { spellName: 'Lesser Restoration', spellSource: 'ERftLW', minLevel: 3, sourceFeatureKey: 'species_trait:healing_touch:lesser_restoration' },
 ]
 const MARK_OF_SHADOW_RULES: StaticGrantedSpellRule[] = [
-  { spellName: 'Minor Illusion', spellSource: 'EE', sourceFeatureKey: 'species_trait:shape_shadows:minor_illusion' },
+  { spellName: 'Minor Illusion', spellSources: ['EE', 'PHB', 'SRD', 'ERftLW'], sourceFeatureKey: 'species_trait:shape_shadows:minor_illusion' },
   { spellName: 'Invisibility', spellSource: 'ERftLW', minLevel: 3, sourceFeatureKey: 'species_trait:shape_shadows:invisibility' },
 ]
 const MARK_OF_SCRIBING_RULES: StaticGrantedSpellRule[] = [
@@ -338,7 +340,14 @@ export function getStaticSpeciesGrantedSpells(args: {
   return rules.flatMap((rule) => {
     if ((rule.minLevel ?? 1) > args.totalLevel) return []
 
-    const spell = args.spells.find((entry) => entry.name === rule.spellName && entry.source === rule.spellSource)
+    const preferredSources = rule.spellSources ?? (rule.spellSource ? [rule.spellSource] : [])
+    const matchingSpells = args.spells.filter((entry) => entry.name === rule.spellName)
+    const spell = preferredSources.length > 0
+      ? preferredSources
+          .map((source) => matchingSpells.find((entry) => entry.source === source))
+          .find((entry): entry is typeof matchingSpells[number] => Boolean(entry))
+        ?? matchingSpells[0]
+      : matchingSpells[0]
     if (!spell) return []
 
     return [{

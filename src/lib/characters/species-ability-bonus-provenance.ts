@@ -12,6 +12,14 @@ type SpeciesAbilityBonusChoiceConfig = {
   sourceFeatureKey: string | null
 }
 
+type SpeciesAbilityBonusChoiceRule = {
+  names: string[]
+  count: number
+  bonus: number
+  allowedAbilities: AbilityKey[]
+  sourceFeatureKey: string
+}
+
 const ABILITY_LABELS: Record<AbilityKey, string> = {
   str: 'Strength',
   dex: 'Dexterity',
@@ -22,6 +30,37 @@ const ABILITY_LABELS: Record<AbilityKey, string> = {
 }
 
 const ALL_ABILITIES: AbilityKey[] = ['str', 'dex', 'con', 'int', 'wis', 'cha']
+
+const DRAGONMARK_ABILITY_CHOICE_RULES: SpeciesAbilityBonusChoiceRule[] = [
+  {
+    names: ['Half-Elf (Mark of Detection)', 'Mark of Detection Half-Elf'],
+    count: 1,
+    bonus: 1,
+    allowedAbilities: ALL_ABILITIES.filter((ability) => ability !== 'wis'),
+    sourceFeatureKey: 'species_asi:mark_of_detection_half_elf',
+  },
+  {
+    names: ['Human (Mark of Handling)', 'Mark of Handling Human'],
+    count: 1,
+    bonus: 1,
+    allowedAbilities: ALL_ABILITIES,
+    sourceFeatureKey: 'species_asi:mark_of_handling_human',
+  },
+  {
+    names: ['Human (Mark of Making)', 'Mark of Making Human'],
+    count: 1,
+    bonus: 1,
+    allowedAbilities: ALL_ABILITIES,
+    sourceFeatureKey: 'species_asi:mark_of_making_human',
+  },
+  {
+    names: ['Human (Mark of Passage)', 'Mark of Passage Human'],
+    count: 1,
+    bonus: 1,
+    allowedAbilities: ALL_ABILITIES,
+    sourceFeatureKey: 'species_asi:mark_of_passage_human',
+  },
+]
 
 export function getSpeciesAbilityBonusChoiceConfig(species: Species | null): SpeciesAbilityBonusChoiceConfig | null {
   if (!species) return null
@@ -48,17 +87,17 @@ export function getSpeciesAbilityBonusChoiceConfig(species: Species | null): Spe
     }
   }
 
-  if (
-    species.source === 'ERftLW' &&
-    ['Mark of Handling Human', 'Mark of Making Human', 'Mark of Passage Human'].includes(species.name)
-  ) {
+  if (species.source === 'ERftLW') {
+    const dragonmarkRule = DRAGONMARK_ABILITY_CHOICE_RULES.find((rule) => rule.names.includes(species.name))
+    if (!dragonmarkRule) return null
+
     return {
-      count: 1,
-      bonus: 1,
-      allowedAbilities: ALL_ABILITIES,
+      count: dragonmarkRule.count,
+      bonus: dragonmarkRule.bonus,
+      allowedAbilities: dragonmarkRule.allowedAbilities,
       sourceCategory: 'species_choice',
       sourceEntityId: species.id,
-      sourceFeatureKey: `species_asi:${species.name.toLowerCase().replaceAll(' ', '_')}`,
+      sourceFeatureKey: dragonmarkRule.sourceFeatureKey,
     }
   }
 

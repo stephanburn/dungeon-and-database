@@ -123,6 +123,39 @@ test('getFeatSpellChoiceDefinitions exposes Aberrant Dragonmark choices from ben
   }])
 })
 
+test('getFeatSpellChoiceDefinitions falls back for Aberrant Dragonmark on current seeded source', () => {
+  const definitions = getFeatSpellChoiceDefinitions([{
+    id: 'feat-aberrant-dragonmark-erftlw',
+    name: 'Aberrant Dragonmark',
+    prerequisites: [],
+    description: '',
+    benefits: {},
+    source: 'ERftLW',
+    amended: true,
+    amendment_note: null,
+  }])
+
+  assert.deepEqual(definitions.map((definition) => ({
+    label: definition.label,
+    spellLevel: definition.spellLevel,
+    spellListClassName: definition.spellListClassNames[0],
+    sourceFeatureKey: definition.sourceFeatureKey,
+  })), [
+    {
+      label: 'Aberrant Dragonmark cantrip',
+      spellLevel: 0,
+      spellListClassName: 'Sorcerer',
+      sourceFeatureKey: 'feat_spell:feat-aberrant-dragonmark-erftlw:cantrip',
+    },
+    {
+      label: 'Aberrant Dragonmark 1st-level spell',
+      spellLevel: 1,
+      spellListClassName: 'Sorcerer',
+      sourceFeatureKey: 'feat_spell:feat-aberrant-dragonmark-erftlw:level_1_spell',
+    },
+  ])
+})
+
 test('feat-granted off-list spells stay legal and out of class selection caps', () => {
   const context = createContext({
     selectedSpells: [{
