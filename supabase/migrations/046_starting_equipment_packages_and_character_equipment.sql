@@ -161,26 +161,26 @@ SET
   source = EXCLUDED.source;
 
 INSERT INTO public.starting_equipment_package_items (package_id, item_id, quantity, item_order, choice_group, notes) VALUES
-  ((SELECT id FROM public.starting_equipment_packages WHERE key = 'background:acolyte:srd'), (SELECT id FROM public.equipment_items WHERE key = 'holy_symbol'), 1, 10, NULL, NULL),
-  ((SELECT id FROM public.starting_equipment_packages WHERE key = 'background:acolyte:srd'), (SELECT id FROM public.equipment_items WHERE key = 'prayer_book'), 1, 20, NULL, NULL),
-  ((SELECT id FROM public.starting_equipment_packages WHERE key = 'background:acolyte:srd'), (SELECT id FROM public.equipment_items WHERE key = 'stick_of_incense'), 5, 30, NULL, NULL),
-  ((SELECT id FROM public.starting_equipment_packages WHERE key = 'background:acolyte:srd'), (SELECT id FROM public.equipment_items WHERE key = 'vestments'), 1, 40, NULL, NULL),
-  ((SELECT id FROM public.starting_equipment_packages WHERE key = 'background:acolyte:srd'), (SELECT id FROM public.equipment_items WHERE key = 'common_clothes'), 1, 50, NULL, NULL),
-  ((SELECT id FROM public.starting_equipment_packages WHERE key = 'background:acolyte:srd'), (SELECT id FROM public.equipment_items WHERE key = 'belt_pouch'), 1, 60, NULL, 'Contains 15 gp'),
+  ((SELECT id FROM public.starting_equipment_packages WHERE key = 'background:acolyte:srd'), (SELECT id FROM public.equipment_items WHERE key = 'holy_symbol'), 1, 10, '', NULL),
+  ((SELECT id FROM public.starting_equipment_packages WHERE key = 'background:acolyte:srd'), (SELECT id FROM public.equipment_items WHERE key = 'prayer_book'), 1, 20, '', NULL),
+  ((SELECT id FROM public.starting_equipment_packages WHERE key = 'background:acolyte:srd'), (SELECT id FROM public.equipment_items WHERE key = 'stick_of_incense'), 5, 30, '', NULL),
+  ((SELECT id FROM public.starting_equipment_packages WHERE key = 'background:acolyte:srd'), (SELECT id FROM public.equipment_items WHERE key = 'vestments'), 1, 40, '', NULL),
+  ((SELECT id FROM public.starting_equipment_packages WHERE key = 'background:acolyte:srd'), (SELECT id FROM public.equipment_items WHERE key = 'common_clothes'), 1, 50, '', NULL),
+  ((SELECT id FROM public.starting_equipment_packages WHERE key = 'background:acolyte:srd'), (SELECT id FROM public.equipment_items WHERE key = 'belt_pouch'), 1, 60, '', 'Contains 15 gp'),
 
-  ((SELECT id FROM public.starting_equipment_packages WHERE key = 'class:fighter:srd'), (SELECT id FROM public.equipment_items WHERE key = 'chain_mail'), 1, 10, NULL, NULL),
-  ((SELECT id FROM public.starting_equipment_packages WHERE key = 'class:fighter:srd'), (SELECT id FROM public.equipment_items WHERE key = 'longsword'), 1, 20, NULL, NULL),
-  ((SELECT id FROM public.starting_equipment_packages WHERE key = 'class:fighter:srd'), (SELECT id FROM public.equipment_items WHERE key = 'shield'), 1, 30, NULL, NULL),
-  ((SELECT id FROM public.starting_equipment_packages WHERE key = 'class:fighter:srd'), (SELECT id FROM public.equipment_items WHERE key = 'light_crossbow'), 1, 40, NULL, NULL),
+  ((SELECT id FROM public.starting_equipment_packages WHERE key = 'class:fighter:srd'), (SELECT id FROM public.equipment_items WHERE key = 'chain_mail'), 1, 10, '', NULL),
+  ((SELECT id FROM public.starting_equipment_packages WHERE key = 'class:fighter:srd'), (SELECT id FROM public.equipment_items WHERE key = 'longsword'), 1, 20, '', NULL),
+  ((SELECT id FROM public.starting_equipment_packages WHERE key = 'class:fighter:srd'), (SELECT id FROM public.equipment_items WHERE key = 'shield'), 1, 30, '', NULL),
+  ((SELECT id FROM public.starting_equipment_packages WHERE key = 'class:fighter:srd'), (SELECT id FROM public.equipment_items WHERE key = 'light_crossbow'), 1, 40, '', NULL),
 
-  ((SELECT id FROM public.starting_equipment_packages WHERE key = 'class:rogue:srd'), (SELECT id FROM public.equipment_items WHERE key = 'rapier'), 1, 10, NULL, NULL),
-  ((SELECT id FROM public.starting_equipment_packages WHERE key = 'class:rogue:srd'), (SELECT id FROM public.equipment_items WHERE key = 'shortbow'), 1, 20, NULL, NULL),
-  ((SELECT id FROM public.starting_equipment_packages WHERE key = 'class:rogue:srd'), (SELECT id FROM public.equipment_items WHERE key = 'leather_armor'), 1, 30, NULL, NULL),
-  ((SELECT id FROM public.starting_equipment_packages WHERE key = 'class:rogue:srd'), (SELECT id FROM public.equipment_items WHERE key = 'thieves_tools_kit'), 1, 40, NULL, NULL),
+  ((SELECT id FROM public.starting_equipment_packages WHERE key = 'class:rogue:srd'), (SELECT id FROM public.equipment_items WHERE key = 'rapier'), 1, 10, '', NULL),
+  ((SELECT id FROM public.starting_equipment_packages WHERE key = 'class:rogue:srd'), (SELECT id FROM public.equipment_items WHERE key = 'shortbow'), 1, 20, '', NULL),
+  ((SELECT id FROM public.starting_equipment_packages WHERE key = 'class:rogue:srd'), (SELECT id FROM public.equipment_items WHERE key = 'leather_armor'), 1, 30, '', NULL),
+  ((SELECT id FROM public.starting_equipment_packages WHERE key = 'class:rogue:srd'), (SELECT id FROM public.equipment_items WHERE key = 'thieves_tools_kit'), 1, 40, '', NULL),
 
-  ((SELECT id FROM public.starting_equipment_packages WHERE key = 'class:wizard:srd'), (SELECT id FROM public.equipment_items WHERE key = 'quarterstaff'), 1, 10, NULL, NULL),
-  ((SELECT id FROM public.starting_equipment_packages WHERE key = 'class:wizard:srd'), (SELECT id FROM public.equipment_items WHERE key = 'dagger'), 1, 20, NULL, NULL),
-  ((SELECT id FROM public.starting_equipment_packages WHERE key = 'class:wizard:srd'), (SELECT id FROM public.equipment_items WHERE key = 'spellbook'), 1, 30, NULL, NULL)
+  ((SELECT id FROM public.starting_equipment_packages WHERE key = 'class:wizard:srd'), (SELECT id FROM public.equipment_items WHERE key = 'quarterstaff'), 1, 10, '', NULL),
+  ((SELECT id FROM public.starting_equipment_packages WHERE key = 'class:wizard:srd'), (SELECT id FROM public.equipment_items WHERE key = 'dagger'), 1, 20, '', NULL),
+  ((SELECT id FROM public.starting_equipment_packages WHERE key = 'class:wizard:srd'), (SELECT id FROM public.equipment_items WHERE key = 'spellbook'), 1, 30, '', NULL)
 ON CONFLICT (package_id, item_id, choice_group) DO NOTHING;
 
 UPDATE public.backgrounds
