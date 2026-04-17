@@ -6,6 +6,12 @@ import {
   type CharacterBuildContext,
 } from '@/lib/characters/build-context'
 import {
+  FIGHTING_STYLE_VALUE_KEY,
+  getFightingStyleGroupKey,
+  getFightingStyleUnlockLevel,
+  MAVERICK_ARCANE_BREAKTHROUGH_SOURCE_KEY,
+} from '@/lib/characters/feature-grants'
+import {
   getMaverickPreparedBreakthroughLevels,
   isMaverickSubclass,
   MAVERICK_BREAKTHROUGH_SOURCE_FEATURE_KEY,
@@ -484,7 +490,10 @@ function checkMaverickBreakthroughSelections(input: LegalityInput): LegalityChec
 
   const allowedLevels = new Set<number>(getMaverickPreparedBreakthroughLevels(maverickClass.level))
   const breakthroughSpells = input.selectedSpells.filter(
-    (spell) => spell.sourceFeatureKey === MAVERICK_BREAKTHROUGH_SOURCE_FEATURE_KEY && spell.level > 0
+    (spell) => (
+      spell.sourceFeatureKey === MAVERICK_BREAKTHROUGH_SOURCE_FEATURE_KEY
+      || spell.sourceFeatureKey === MAVERICK_ARCANE_BREAKTHROUGH_SOURCE_KEY
+    ) && spell.level > 0
   )
 
   const invalidLevels = breakthroughSpells
@@ -568,6 +577,31 @@ function checkSpellSelectionCount(input: LegalityInput, derived: DerivedCharacte
   }
 }
 
+function checkFightingStyleSelections(input: LegalityInput): LegalityCheck {
+  const missingClassNames = input.classes.flatMap((cls) => {
+    const groupKey = getFightingStyleGroupKey(cls.name)
+    const unlockLevel = getFightingStyleUnlockLevel(cls.name)
+    if (!groupKey || !unlockLevel || cls.level < unlockLevel) return []
+
+    const hasSelection = input.selectedFeatureOptions.some((choice) => {
+      if (choice.option_group_key !== groupKey) return false
+      const selectedValue = choice.selected_value?.[FIGHTING_STYLE_VALUE_KEY]
+      return typeof selectedValue === 'string' && selectedValue.length > 0
+    })
+
+    return hasSelection ? [] : [cls.name]
+  })
+
+  return {
+    key: 'fighting_style_selections',
+    passed: missingClassNames.length === 0,
+    message: missingClassNames.length === 0
+      ? 'Required fighting style selections are present.'
+      : `Missing fighting style selection for ${missingClassNames.join(', ')}.`,
+    severity: 'error',
+  }
+}
+
 export function runLegalityChecks(input: LegalityInput): LegalityResult {
   const baseDerived = deriveCharacter(input)
   const checks: LegalityCheck[] = [
@@ -585,6 +619,7 @@ export function runLegalityChecks(input: LegalityInput): LegalityResult {
     checkFeatSlots(input, baseDerived),
     checkSpellLegality(input, baseDerived),
     checkMaverickBreakthroughSelections(input),
+    checkFightingStyleSelections(input),
     checkSpellSelectionCount(input, baseDerived),
   ]
 

@@ -855,7 +855,7 @@ test('legality blocks missing multiclass prerequisites and missing subclass', ()
   assert.equal(result.checks.find((check) => check.key === 'subclass_timing')?.passed, false)
   assert.deepEqual(
     result.derived?.blockingIssues.map((issue) => issue.key).sort(),
-    ['multiclass_prerequisites', 'stat_method', 'subclass_timing']
+    ['fighting_style_selections', 'multiclass_prerequisites', 'stat_method', 'subclass_timing']
   )
   assert.equal(shouldBlockCharacterSubmit(result), true)
 })
@@ -916,6 +916,93 @@ test('legality blocks invalid spell selections above available spell level', () 
 
   assert.equal(result.checks.find((check) => check.key === 'spell_legality')?.passed, false)
   assert.equal(result.passed, false)
+})
+
+test('legality requires fighting style selections when a class unlocks one', () => {
+  const result = runLegalityChecks(createContext({
+    skillProficiencies: ['athletics', 'survival'],
+    classes: [{
+      classId: 'fighter',
+      name: 'Fighter',
+      level: 1,
+      hitDie: 10,
+      hpRoll: 10,
+      source: 'SRD',
+      spellcastingType: null,
+      spellcastingProgression: null,
+      subclassChoiceLevel: 3,
+      multiclassPrereqs: [{ ability: 'str', min: 13 }],
+      skillChoices: { count: 2, from: ['athletics', 'history'] },
+      savingThrowProficiencies: ['str', 'con'],
+      armorProficiencies: ['All armor', 'Shields'],
+      weaponProficiencies: ['Simple', 'Martial'],
+      toolProficiencies: [],
+      subclass: null,
+      progression: [
+        { level: 1, asiAvailable: false, proficiencyBonus: 2, featureNames: ['Fighting Style', 'Second Wind'] },
+      ],
+      spellSlots: [],
+    }],
+    selectedSpells: [],
+    selectedFeatureOptions: [],
+    sourceCollections: {
+      classSources: ['SRD'],
+      subclassSources: [],
+      spellSources: [],
+      featSources: [],
+    },
+  }))
+
+  const missingCheck = result.checks.find((check) => check.key === 'fighting_style_selections')
+  assert.equal(missingCheck?.passed, false)
+
+  const withStyle = runLegalityChecks(createContext({
+    skillProficiencies: ['athletics', 'survival'],
+    classes: [{
+      classId: 'fighter',
+      name: 'Fighter',
+      level: 1,
+      hitDie: 10,
+      hpRoll: 10,
+      source: 'SRD',
+      spellcastingType: null,
+      spellcastingProgression: null,
+      subclassChoiceLevel: 3,
+      multiclassPrereqs: [{ ability: 'str', min: 13 }],
+      skillChoices: { count: 2, from: ['athletics', 'history'] },
+      savingThrowProficiencies: ['str', 'con'],
+      armorProficiencies: ['All armor', 'Shields'],
+      weaponProficiencies: ['Simple', 'Martial'],
+      toolProficiencies: [],
+      subclass: null,
+      progression: [
+        { level: 1, asiAvailable: false, proficiencyBonus: 2, featureNames: ['Fighting Style', 'Second Wind'] },
+      ],
+      spellSlots: [],
+    }],
+    selectedSpells: [],
+    selectedFeatureOptions: [{
+      id: 'fighter-style',
+      character_id: 'character',
+      character_level_id: null,
+      option_group_key: 'fighting_style:fighter:2014',
+      option_key: 'fighter:style',
+      selected_value: { feature_option_key: 'defense' },
+      choice_order: 0,
+      source_category: 'class_feature',
+      source_entity_id: 'fighter',
+      source_feature_key: 'class_feature:fighting_style:fighter',
+      created_at: '',
+    }],
+    sourceCollections: {
+      classSources: ['SRD'],
+      subclassSources: [],
+      spellSources: [],
+      featSources: [],
+    },
+  }))
+
+  assert.equal(withStyle.checks.find((check) => check.key === 'fighting_style_selections')?.passed, true)
 })
 
 test('legality blocks spell selections above class spell-preparation caps', () => {

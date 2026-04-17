@@ -43,6 +43,7 @@ import { deriveCharacterCore, type DerivedCharacterCore } from '@/lib/characters
 import {
   buildMaverickFeatureOptionChoices,
   buildTypedFeatureSpellChoices,
+  getFightingStyleFeatureOptionDefinition,
   getMaverickArcaneBreakthroughOptionDefinitions,
   getMaverickFeatureSpellChoiceDefinitions,
   getSelectedMaverickBreakthroughClassIds,
@@ -58,6 +59,9 @@ import type {
   Species, Background,
   CharacterFeatureOptionChoice,
   Class, Subclass, Feat, Alignment, StatMethod, AbilityScoreBonus,
+  FeatureOption,
+  Language,
+  Tool,
 } from '@/lib/types/database'
 import type { LegalityResult } from '@/lib/legality/engine'
 import type { SpellOption } from '@/lib/characters/wizard-helpers'
@@ -192,6 +196,9 @@ export function CharacterSheet({
   const [classList, setClassList] = useState<Class[]>([])
   const [subclassMap, setSubclassMap] = useState<Record<string, Subclass[]>>({})
   const [featList, setFeatList] = useState<Feat[]>([])
+  const [languageList, setLanguageList] = useState<Language[]>([])
+  const [toolList, setToolList] = useState<Tool[]>([])
+  const [maverickOptionRows, setMaverickOptionRows] = useState<FeatureOption[]>([])
   const [spellOptions, setSpellOptions] = useState<SpellOption[]>(initialSelectedSpells)
 
   const [skillProficiencies, setSkillProficiencies] = useState<string[]>(initialSkillProficiencies)
@@ -242,6 +249,14 @@ export function CharacterSheet({
   const [dmNotes, setDmNotes] = useState(initial.dm_notes ?? '')
   const [highlightedSection, setHighlightedSection] = useState<SectionId | null>(null)
   const highlightTimerRef = useRef<number | null>(null)
+  const initialFightingStyleKeys = useMemo(
+    () => new Set(
+      initialFeatureOptionChoices
+        .filter((choice) => choice.option_group_key.startsWith('fighting_style:'))
+        .map((choice) => `${choice.option_group_key}:${choice.option_key}`)
+    ),
+    [initialFeatureOptionChoices]
+  )
 
   // Load content options filtered by campaign allowlist
   useEffect(() => {
@@ -251,11 +266,21 @@ export function CharacterSheet({
       fetch(`/api/content/backgrounds${qs}`).then((r) => r.json()),
       fetch(`/api/content/classes${qs}`).then((r) => r.json()),
       fetch(`/api/content/feats${qs}`).then((r) => r.json()),
-    ]).then(([s, b, c, f]) => {
+      fetch(`/api/content/languages${qs}`).then((r) => r.json()),
+      fetch(`/api/content/tools${qs}`).then((r) => r.json()),
+      fetch(`/api/content/feature-options${qs}&group_key=maverick%3Aarcane_breakthrough_classes`).then((r) => r.json()),
+      fetch(`/api/content/feature-options${qs}&option_family=fighting_style`).then((r) => r.json()),
+    ]).then(([s, b, c, f, languages, tools, featureOptions, fightingStyleOptions]) => {
       setSpeciesList(s)
       setBackgroundList(b)
       setClassList(c)
       setFeatList(Array.isArray(f) ? f : [])
+      setLanguageList(Array.isArray(languages) ? languages : [])
+      setToolList(Array.isArray(tools) ? tools : [])
+      setMaverickOptionRows([
+        ...(Array.isArray(featureOptions) ? featureOptions : []),
+        ...(Array.isArray(fightingStyleOptions) ? fightingStyleOptions : []),
+      ])
     })
   }, [campaignId])
 
@@ -349,7 +374,10 @@ export function CharacterSheet({
     setSaving(true)
     try {
       const canonicalFeatureOptionChoices = [
-        ...featureOptionChoices.filter((choice) => choice.option_group_key !== MAVERICK_ARCANE_BREAKTHROUGH_GROUP_KEY),
+        ...featureOptionChoices.filter((choice) => (
+          choice.option_group_key !== MAVERICK_ARCANE_BREAKTHROUGH_GROUP_KEY
+          && !choice.option_group_key.startsWith('maverick:breakthrough:')
+        )),
         ...buildMaverickFeatureOptionChoices({
           selectedClassIds: maverickBreakthroughClassIds,
           definitions: maverickOptionDefinitions,
@@ -500,13 +528,32 @@ export function CharacterSheet({
     () => getFeatSpellChoiceDefinitions(activeFeats),
     [activeFeats]
   )
+  const fightingStyleDefinitions = useMemo(() => {
+    const maxLevelByClassId = new Map<string, number>()
+    for (const level of levels) {
+      maxLevelByClassId.set(level.class_id, Math.max(maxLevelByClassId.get(level.class_id) ?? 0, level.level))
+    }
+
+    return Array.from(maxLevelByClassId.entries()).flatMap(([classId, classLevel]) => {
+      const classDetail = classList.find((entry) => entry.id === classId) ?? null
+      return getFightingStyleFeatureOptionDefinition({
+        classId,
+        className: classDetail?.name ?? null,
+        classLevel,
+        optionRows: maverickOptionRows,
+      }).map((definition) => ({
+        ...definition,
+        optionKey: `${classId}:style`,
+      }))
+    })
+  }, [classList, levels, maverickOptionRows])
   const maverickOptionDefinitions = useMemo(
     () => getMaverickArcaneBreakthroughOptionDefinitions({
       classLevel: firstClassLevel,
       subclassId: firstClassSubclassIds[0] ?? null,
-      classList,
+      optionRows: maverickOptionRows,
     }),
-    [classList, firstClassLevel, firstClassSubclassIds]
+    [firstClassLevel, firstClassSubclassIds, maverickOptionRows]
   )
   const maverickFeatureSpellDefinitions = useMemo(
     () => getMaverickFeatureSpellChoiceDefinitions({
@@ -517,6 +564,38 @@ export function CharacterSheet({
     }),
     [classList, firstClassId, firstClassLevel, maverickBreakthroughClassIds]
   )
+
+  useEffect(() => {
+    const activeKeys = new Set(
+      fightingStyleDefinitions.map((definition) => `${definition.optionGroupKey}:${definition.optionKey}`)
+    )
+    setFeatureOptionChoices((prev) => prev.filter((choice) => (
+      !choice.option_group_key.startsWith('fighting_style:')
+      || initialFightingStyleKeys.has(`${choice.option_group_key}:${choice.option_key}`)
+      || activeKeys.has(`${choice.option_group_key}:${choice.option_key}`)
+    )))
+  }, [fightingStyleDefinitions, initialFightingStyleKeys])
+
+  useEffect(() => {
+    const hasCanonicalMaverickChoices = featureOptionChoices.some(
+      (choice) => choice.option_group_key === MAVERICK_ARCANE_BREAKTHROUGH_GROUP_KEY
+    )
+    const hasLegacyMaverickChoices = featureOptionChoices.some(
+      (choice) => choice.option_group_key.startsWith('maverick:breakthrough:')
+    )
+
+    if (hasCanonicalMaverickChoices || !hasLegacyMaverickChoices || maverickOptionDefinitions.length === 0) {
+      return
+    }
+
+    setFeatureOptionChoices((prev) => [
+      ...prev.filter((choice) => !choice.option_group_key.startsWith('maverick:breakthrough:')),
+      ...buildMaverickFeatureOptionChoices({
+        selectedClassIds: maverickBreakthroughClassIds,
+        definitions: maverickOptionDefinitions,
+      }),
+    ])
+  }, [featureOptionChoices, maverickBreakthroughClassIds, maverickOptionDefinitions])
 
   const failedChecks = legalityResult?.checks.filter((c) => !c.passed) ?? []
   const derivedCharacter = legalityResult?.derived ?? null
@@ -929,6 +1008,8 @@ export function CharacterSheet({
       <LanguagesToolsCard
         species={selectedSpecies}
         background={backgroundList.find((b) => b.id === backgroundId) ?? initial.background}
+        availableLanguages={languageList}
+        availableTools={toolList}
         languageChoices={languageChoices}
         toolChoices={toolChoices}
         canEdit={canEdit}
@@ -1078,6 +1159,14 @@ export function CharacterSheet({
             onChange={setSpellChoices}
           />
         )}
+
+        <FeatureOptionChoicesCard
+          title="Fighting Styles"
+          definitions={fightingStyleDefinitions}
+          choices={featureOptionChoices}
+          canEdit={canEdit}
+          onChange={setFeatureOptionChoices}
+        />
 
         <FeatureOptionChoicesCard
           title="Feature Option Choices"

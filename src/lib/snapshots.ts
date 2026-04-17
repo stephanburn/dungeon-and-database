@@ -8,7 +8,7 @@ export async function captureSnapshot(
   supabase: SupabaseClient<Database>,
   characterId: string
 ): Promise<void> {
-  const [characterResult, levelsResult, choicesResult, spellSelectionsResult, featChoicesResult, abilityBonusChoicesResult, asiChoicesResult, featureOptionChoicesResult, languageChoicesResult, toolChoicesResult, rollsResult, skillsResult] = await Promise.all([
+  const [characterResult, levelsResult, choicesResult, spellSelectionsResult, featChoicesResult, abilityBonusChoicesResult, asiChoicesResult, featureOptionChoicesResult, languageChoicesResult, toolChoicesResult, equipmentItemsResult, rollsResult, skillsResult] = await Promise.all([
     supabase.from('characters').select('*').eq('id', characterId).single(),
     supabase.from('character_levels').select('*').eq('character_id', characterId),
     supabase.from('character_choices').select('*').eq('character_id', characterId),
@@ -19,6 +19,7 @@ export async function captureSnapshot(
     supabase.from('character_feature_option_choices').select('*').eq('character_id', characterId),
     supabase.from('character_language_choices').select('*').eq('character_id', characterId),
     supabase.from('character_tool_choices').select('*').eq('character_id', characterId),
+    supabase.from('character_equipment_items').select('*').eq('character_id', characterId),
     supabase.from('character_stat_rolls').select('*').eq('character_id', characterId),
     supabase.from('character_skill_proficiencies').select('*').eq('character_id', characterId),
   ])
@@ -37,6 +38,7 @@ export async function captureSnapshot(
     feature_option_choices: featureOptionChoicesResult.data ?? [],
     language_choices: languageChoicesResult.data ?? [],
     tool_choices: toolChoicesResult.data ?? [],
+    equipment_items: equipmentItemsResult.data ?? [],
     stat_rolls: rollsResult.data ?? [],
     skill_proficiencies: skillsResult.data ?? [],
   }

@@ -20,6 +20,9 @@ import type {
   CharacterType,
   Class,
   Feat,
+  FeatureOption,
+  Language,
+  Tool,
   Species,
   Background,
   StatMethod,
@@ -34,6 +37,7 @@ import { SkillsCard } from '@/components/character-sheet/SkillsCard'
 import { SpellsCard } from '@/components/character-sheet/SpellsCard'
 import { FeatsCard } from '@/components/character-sheet/FeatsCard'
 import { FeatSpellChoicesCard } from '@/components/character-sheet/FeatSpellChoicesCard'
+import { FeatureOptionChoicesCard } from '@/components/character-sheet/FeatureOptionChoicesCard'
 import { LegalityBadge, LegalitySummaryBadge } from '@/components/character-sheet/LegalityBadge'
 import {
   buildCombinedSpellSelections,
@@ -53,6 +57,7 @@ import {
   type AsiSelection,
   type WizardLevel,
 } from '@/lib/characters/wizard-helpers'
+import type { FeatureOptionChoiceInput } from '@/lib/characters/choice-persistence'
 import {
   buildSpeciesAbilityBonusMap,
   getSpeciesAbilityChoiceLimit,
@@ -60,9 +65,13 @@ import {
 } from '@/lib/characters/species-ability-bonus-provenance'
 import { getFeatSpellChoiceDefinitions } from '@/lib/characters/feat-spell-options'
 import {
+  buildFeatureOptionChoicesFromDefinitionMap,
   buildMaverickFeatureOptionChoices,
-  isMaverickSubclass,
-} from '@/lib/characters/maverick'
+  getFeatureOptionChoiceValue,
+  getFightingStyleFeatureOptionDefinition,
+  getMaverickArcaneBreakthroughOptionDefinitions,
+} from '@/lib/characters/feature-grants'
+import { isMaverickSubclass } from '@/lib/characters/maverick'
 
 interface CharacterNewFormProps {
   isDm: boolean
@@ -109,6 +118,9 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
   const [backgroundList, setBackgroundList] = useState<Background[]>([])
   const [classList, setClassList] = useState<Class[]>([])
   const [featList, setFeatList] = useState<Feat[]>([])
+  const [languageList, setLanguageList] = useState<Language[]>([])
+  const [toolList, setToolList] = useState<Tool[]>([])
+  const [maverickOptionRows, setMaverickOptionRows] = useState<FeatureOption[]>([])
   const [subclassMap, setSubclassMap] = useState<Record<string, Subclass[]>>({})
   const [classDetailMap, setClassDetailMap] = useState<Record<string, ClassDetail>>({})
   const [spellOptions, setSpellOptions] = useState<SpellOption[]>([])
@@ -127,6 +139,7 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
   const [featSpellChoices, setFeatSpellChoices] = useState<Record<string, string>>({})
   const [featSpellOptions, setFeatSpellOptions] = useState<SpellOption[]>([])
   const [maverickBreakthroughClassIds, setMaverickBreakthroughClassIds] = useState<string[]>([])
+  const [featureOptionChoices, setFeatureOptionChoices] = useState<FeatureOptionChoiceInput[]>([])
 
   useEffect(() => {
     fetch('/api/campaigns')
@@ -145,11 +158,21 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
       fetch(`/api/content/backgrounds${qs}`).then((response) => response.json()),
       fetch(`/api/content/classes${qs}`).then((response) => response.json()),
       fetch(`/api/content/feats${qs}`).then((response) => response.json()),
-    ]).then(([species, backgrounds, classes, feats]) => {
+      fetch(`/api/content/languages${qs}`).then((response) => response.json()),
+      fetch(`/api/content/tools${qs}`).then((response) => response.json()),
+      fetch(`/api/content/feature-options${qs}&group_key=maverick%3Aarcane_breakthrough_classes`).then((response) => response.json()),
+      fetch(`/api/content/feature-options${qs}&option_family=fighting_style`).then((response) => response.json()),
+    ]).then(([species, backgrounds, classes, feats, languages, tools, featureOptions, fightingStyleOptions]) => {
       setSpeciesList(species)
       setBackgroundList(backgrounds)
       setClassList(classes)
       setFeatList(feats)
+      setLanguageList(Array.isArray(languages) ? languages : [])
+      setToolList(Array.isArray(tools) ? tools : [])
+      setMaverickOptionRows([
+        ...(Array.isArray(featureOptions) ? featureOptions : []),
+        ...(Array.isArray(fightingStyleOptions) ? fightingStyleOptions : []),
+      ])
       if (levels.length === 0 && Array.isArray(classes) && classes.length > 0) {
         setLevels([{ class_id: classes[0].id, level: 1, subclass_id: null }])
       }
@@ -234,7 +257,44 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
   const selectedSubclass = selectedClass
     ? (subclassMap[selectedClass.id] ?? []).find((entry) => entry.id === firstClassSubclassIds[0]) ?? null
     : null
-  const breakthroughClassOptions = classList.filter((cls) => !['Artificer'].includes(cls.name))
+  const fightingStyleDefinitions = useMemo(() => {
+    const maxLevelByClassId = new Map<string, number>()
+    for (const level of levels) {
+      maxLevelByClassId.set(level.class_id, Math.max(maxLevelByClassId.get(level.class_id) ?? 0, level.level))
+    }
+
+    return Array.from(maxLevelByClassId.entries()).flatMap(([classId, classLevel]) => {
+      const classDetail = classDetailMap[classId]
+      return getFightingStyleFeatureOptionDefinition({
+        classId,
+        className: classDetail?.name ?? null,
+        classLevel,
+        optionRows: maverickOptionRows,
+      }).map((definition) => ({
+        ...definition,
+        optionKey: `${classId}:style`,
+      }))
+    })
+  }, [classDetailMap, levels, maverickOptionRows])
+  const maverickOptionDefinitions = useMemo(
+    () => getMaverickArcaneBreakthroughOptionDefinitions({
+      classLevel: firstClassLevel,
+      subclassId: selectedSubclass?.id ?? null,
+      optionRows: maverickOptionRows,
+    }),
+    [firstClassLevel, maverickOptionRows, selectedSubclass?.id]
+  )
+  const breakthroughClassOptions = maverickOptionDefinitions[0]?.choices ?? []
+
+  useEffect(() => {
+    const activeKeys = new Set(
+      fightingStyleDefinitions.map((definition) => `${definition.optionGroupKey}:${definition.optionKey}`)
+    )
+    setFeatureOptionChoices((prev) => prev.filter((choice) => (
+      !choice.option_group_key.startsWith('fighting_style:')
+      || activeKeys.has(`${choice.option_group_key}:${choice.option_key}`)
+    )))
+  }, [fightingStyleDefinitions])
   const backgroundFeat = selectedBackground?.background_feat_id
     ? featList.find((feat) => feat.id === selectedBackground.background_feat_id) ?? null
     : null
@@ -297,23 +357,37 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
     abilityBonusChoices,
     languageChoices,
     toolChoices,
-    featureOptionChoices: buildMaverickFeatureOptionChoices({
-      subclassId: selectedSubclass?.id ?? null,
-      classLevel: firstClassLevel,
-      selectedClassIds: maverickBreakthroughClassIds,
-    }).map((choice) => ({
-      id: `${choice.option_group_key}:${choice.option_key}`,
-      character_id: 'local',
-      character_level_id: null,
-      option_group_key: choice.option_group_key,
-      option_key: choice.option_key,
-      selected_value: choice.selected_value ?? {},
-      choice_order: choice.choice_order ?? 0,
-      source_category: choice.source_category ?? 'subclass_choice',
-      source_entity_id: choice.source_entity_id ?? null,
-      source_feature_key: choice.source_feature_key ?? null,
-      created_at: '',
-    })),
+    featureOptionChoices: [
+      ...featureOptionChoices.map((choice) => ({
+        id: `${choice.option_group_key}:${choice.option_key}`,
+        character_id: 'local',
+        character_level_id: null,
+        option_group_key: choice.option_group_key,
+        option_key: choice.option_key,
+        selected_value: choice.selected_value ?? {},
+        choice_order: choice.choice_order ?? 0,
+        source_category: choice.source_category ?? 'feature',
+        source_entity_id: choice.source_entity_id ?? null,
+        source_feature_key: choice.source_feature_key ?? null,
+        created_at: '',
+      })),
+      ...buildMaverickFeatureOptionChoices({
+        selectedClassIds: maverickBreakthroughClassIds,
+        definitions: maverickOptionDefinitions,
+      }).map((choice) => ({
+        id: `${choice.option_group_key}:${choice.option_key}`,
+        character_id: 'local',
+        character_level_id: null,
+        option_group_key: choice.option_group_key,
+        option_key: choice.option_key,
+        selected_value: choice.selected_value ?? {},
+        choice_order: choice.choice_order ?? 0,
+        source_category: choice.source_category ?? 'subclass_choice',
+        source_entity_id: choice.source_entity_id ?? null,
+        source_feature_key: choice.source_feature_key ?? null,
+        created_at: '',
+      })),
+    ],
   })
   const derived = deriveLocalCharacter(localContext)
   const persistedSpellSelections = buildCombinedSpellSelections({
@@ -372,6 +446,17 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
         if (derived && localContext && derived.totalLevel > localContext.campaignSettings.max_level) {
           return `This build exceeds the campaign max level of ${localContext.campaignSettings.max_level}.`
         }
+        for (const definition of fightingStyleDefinitions) {
+          const selectedValue = getFeatureOptionChoiceValue(
+            featureOptionChoices,
+            definition.optionGroupKey,
+            definition.optionKey,
+            definition.valueKey ?? 'class_id'
+          )
+          if (!selectedValue) {
+            return 'Choose a fighting style for each class that unlocks one.'
+          }
+        }
         return null
       case 'stats': {
         const speciesAbilityChoiceLimit = getSpeciesAbilityChoiceLimit(selectedSpecies)
@@ -385,7 +470,7 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
         const missing = derived.subclassRequirements.find((entry) => entry.missingRequiredSubclass)
         if (missing) return `${missing.className} needs a subclass before continuing.`
         if (selectedSubclass && isMaverickSubclass(selectedSubclass)) {
-          const requiredChoices = firstClassLevel >= 17 ? 5 : firstClassLevel >= 13 ? 4 : firstClassLevel >= 9 ? 3 : firstClassLevel >= 5 ? 2 : firstClassLevel >= 3 ? 1 : 0
+          const requiredChoices = maverickOptionDefinitions.length
           if (maverickBreakthroughClassIds.filter(Boolean).length < requiredChoices) {
             return `Choose ${requiredChoices} Arcane Breakthrough class${requiredChoices === 1 ? '' : 'es'} for Maverick.`
           }
@@ -477,11 +562,26 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
           selectedClass,
           species: selectedSpecies,
         }),
-        feature_option_choices: buildMaverickFeatureOptionChoices({
-          subclassId: selectedSubclass?.id ?? null,
-          classLevel: firstClassLevel,
-          selectedClassIds: maverickBreakthroughClassIds,
-        }),
+        feature_option_choices: [
+          ...buildFeatureOptionChoicesFromDefinitionMap({
+            definitions: fightingStyleDefinitions,
+            selectedValues: Object.fromEntries(
+              fightingStyleDefinitions.map((definition) => [
+                definition.optionKey,
+                getFeatureOptionChoiceValue(
+                  featureOptionChoices,
+                  definition.optionGroupKey,
+                  definition.optionKey,
+                  definition.valueKey ?? 'class_id'
+                ) ?? '',
+              ])
+            ),
+          }),
+          ...buildMaverickFeatureOptionChoices({
+            selectedClassIds: maverickBreakthroughClassIds,
+            definitions: maverickOptionDefinitions,
+          }),
+        ],
         spell_choices: persistedSpellSelections,
         feat_choices: buildTypedFeatChoices(featChoices, derived?.featSlotLabels),
       }),
@@ -742,6 +842,14 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
                 <Button type="button" variant="outline" onClick={addClassLevelRow}>
                   Add Class
                 </Button>
+
+                <FeatureOptionChoicesCard
+                  title="Fighting Styles"
+                  definitions={fightingStyleDefinitions}
+                  choices={featureOptionChoices}
+                  canEdit
+                  onChange={setFeatureOptionChoices}
+                />
               </div>
             )}
 
@@ -781,7 +889,7 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
                 {selectedSubclass && isMaverickSubclass(selectedSubclass) && (
                   <MaverickBreakthroughCard
                     classLevel={firstClassLevel}
-                    availableClasses={breakthroughClassOptions}
+                    availableChoices={breakthroughClassOptions}
                     selectedClassIds={maverickBreakthroughClassIds}
                     canEdit
                     onChange={setMaverickBreakthroughClassIds}
@@ -842,6 +950,8 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
                 <LanguagesToolsCard
                   species={selectedSpecies}
                   background={selectedBackground}
+                  availableLanguages={languageList}
+                  availableTools={toolList}
                   languageChoices={languageChoices}
                   toolChoices={toolChoices}
                   canEdit

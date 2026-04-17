@@ -5,6 +5,7 @@ import type {
   CharacterAsiChoice,
   Character,
   CharacterFeatChoice,
+  CharacterEquipmentItem,
   CharacterFeatureOptionChoice,
   CharacterLanguageChoice,
   CharacterLevel,
@@ -37,6 +38,7 @@ export interface LoadedCharacterState {
   initialSelectedSpells: SpellOption[]
   initialFeatChoices: string[]
   initialFeatureOptionChoices: CharacterFeatureOptionChoice[]
+  initialEquipmentItems: CharacterEquipmentItem[]
   legality: LegalityResult | null
 }
 
@@ -52,7 +54,7 @@ export async function loadCharacterState(
 
   if (!character) return null
 
-  const [speciesResult, backgroundResult, levelsResult, skillsResult, abilityBonusChoicesResult, asiChoicesResult, languageChoicesResult, toolChoicesResult, featureOptionChoicesResult, typedSpellSelectionsResult, typedFeatChoicesResult, legalityInput] = await Promise.all([
+  const [speciesResult, backgroundResult, levelsResult, skillsResult, abilityBonusChoicesResult, asiChoicesResult, languageChoicesResult, toolChoicesResult, featureOptionChoicesResult, equipmentItemsResult, typedSpellSelectionsResult, typedFeatChoicesResult, legalityInput] = await Promise.all([
     character.species_id
       ? supabase.from('species').select('*').eq('id', character.species_id).single()
       : Promise.resolve({ data: null }),
@@ -66,6 +68,7 @@ export async function loadCharacterState(
     supabase.from('character_language_choices').select('*').eq('character_id', character.id),
     supabase.from('character_tool_choices').select('*').eq('character_id', character.id),
     supabase.from('character_feature_option_choices').select('*').eq('character_id', character.id),
+    supabase.from('character_equipment_items').select('*').eq('character_id', character.id),
     supabase.from('character_spell_selections').select('*').eq('character_id', character.id),
     supabase.from('character_feat_choices').select('*').eq('character_id', character.id),
     buildLegalityInput(supabase, character.id),
@@ -100,6 +103,7 @@ export async function loadCharacterState(
     .filter((value): value is 'str' | 'dex' | 'con' | 'int' | 'wis' | 'cha' => Boolean(value))
   const typedAsiChoices = buildAsiSelectionsFromRows((asiChoicesResult.data ?? []) as CharacterAsiChoice[])
   const typedFeatureOptionChoices = (featureOptionChoicesResult.data ?? []) as CharacterFeatureOptionChoice[]
+  const typedEquipmentItems = (equipmentItemsResult.data ?? []) as CharacterEquipmentItem[]
   const selectedSpellRowsById = new Map(
     typedSpellSelections.map((row) => [row.spell_id, row])
   )
@@ -130,6 +134,7 @@ export async function loadCharacterState(
     initialSelectedSpells,
     initialFeatChoices: typedFeatChoices,
     initialFeatureOptionChoices: typedFeatureOptionChoices,
+    initialEquipmentItems: typedEquipmentItems,
     legality: legalityInput ? runLegalityChecks(legalityInput) : null,
   }
 }

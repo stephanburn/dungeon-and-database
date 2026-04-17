@@ -29,9 +29,17 @@ export function FeatureOptionChoicesCard({
   if (definitions.length === 0) return null
 
   const selectedValuesByOptionKey = new Map(
-    choices
-      .filter((choice) => choice.option_group_key === definitions[0]?.optionGroupKey)
-      .map((choice) => [choice.option_key, choice.selected_value?.class_id])
+    definitions.map((definition) => {
+      const row = choices.find(
+        (choice) => choice.option_group_key === definition.optionGroupKey && choice.option_key === definition.optionKey
+      )
+      const valueKey = definition.valueKey ?? 'class_id'
+      const selectedValue = row?.selected_value?.[valueKey]
+      return [
+        definition.optionKey,
+        typeof selectedValue === 'string' ? selectedValue : '',
+      ] as const
+    })
   )
 
   function setChoice(definition: FeatureOptionChoiceDefinition, value: string) {
@@ -49,7 +57,7 @@ export function FeatureOptionChoicesCard({
       {
         option_group_key: definition.optionGroupKey,
         option_key: definition.optionKey,
-        selected_value: { class_id: value },
+        selected_value: { [definition.valueKey ?? 'class_id']: value },
         choice_order: definition.choiceOrder,
         character_level_id: null,
         source_category: definition.sourceCategory,
@@ -75,35 +83,59 @@ export function FeatureOptionChoicesCard({
               .map(([, value]) => value)
               .filter((value): value is string => typeof value === 'string' && value.length > 0)
           )
+          const selectedChoice = definition.choices.find((choice) => choice.value === selectedValue) ?? null
 
           return (
-            <div key={definition.optionKey} className="space-y-1">
-              <p className="text-sm font-medium text-neutral-200">{definition.label}</p>
-              {definition.description ? (
-                <p className="text-xs text-neutral-500">{definition.description}</p>
-              ) : null}
+            <div key={definition.optionKey} className="space-y-2 rounded-2xl border border-white/8 bg-white/[0.02] p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="space-y-1">
+                  <p className="text-sm font-medium text-neutral-200">{definition.label}</p>
+                  {definition.description ? (
+                    <p className="text-xs text-neutral-500">{definition.description}</p>
+                  ) : null}
+                </div>
+                {selectedChoice ? (
+                  <span className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-2.5 py-1 text-[11px] font-medium uppercase tracking-wide text-emerald-100">
+                    {selectedChoice.label}
+                  </span>
+                ) : (
+                  <span className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[11px] font-medium uppercase tracking-wide text-neutral-500">
+                    Unselected
+                  </span>
+                )}
+              </div>
               {canEdit ? (
-                <Select
-                  value={selectedValue || 'none'}
-                  onValueChange={(value) => setChoice(definition, value)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Choose an option" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none" className="text-neutral-400">Choose later</SelectItem>
-                    {definition.choices
-                      .filter((choice) => choice.value === selectedValue || !otherSelectedValues.has(choice.value))
-                      .map((choice) => (
-                        <SelectItem key={choice.value} value={choice.value} className="text-neutral-200">
-                          {choice.label}
-                        </SelectItem>
-                      ))}
-                  </SelectContent>
-                </Select>
+                <div className="space-y-2">
+                  <Select
+                    value={selectedValue || 'none'}
+                    onValueChange={(value) => setChoice(definition, value)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Choose an option" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none" className="text-neutral-400">Choose later</SelectItem>
+                      {definition.choices
+                        .filter((choice) => choice.value === selectedValue || !otherSelectedValues.has(choice.value))
+                        .map((choice) => (
+                          <SelectItem key={choice.value} value={choice.value} className="text-neutral-200">
+                            {choice.label}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                  {selectedChoice?.description ? (
+                    <p className="text-sm leading-6 text-neutral-300">{selectedChoice.description}</p>
+                  ) : null}
+                </div>
               ) : (
-                <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-3 text-sm text-neutral-300">
-                  {definition.choices.find((choice) => choice.value === selectedValue)?.label ?? 'No option selected'}
+                <div className="space-y-2">
+                  <div className="text-sm text-neutral-300">
+                    {selectedChoice?.label ?? 'No option selected'}
+                  </div>
+                  {selectedChoice?.description ? (
+                    <p className="text-sm leading-6 text-neutral-400">{selectedChoice.description}</p>
+                  ) : null}
                 </div>
               )}
             </div>

@@ -44,7 +44,7 @@ type ParsedBackgroundLanguages = {
   choiceCount: number
 }
 
-const STANDARD_LANGUAGE_OPTIONS = [
+export const STANDARD_LANGUAGE_OPTIONS = [
   'Common',
   'Dwarvish',
   'Elvish',
@@ -63,7 +63,7 @@ const STANDARD_LANGUAGE_OPTIONS = [
   'Undercommon',
 ]
 
-const STANDARD_TOOL_OPTIONS = [
+export const STANDARD_TOOL_OPTIONS = [
   "Alchemist's Supplies",
   "Brewer's Supplies",
   "Calligrapher's Supplies",
@@ -187,13 +187,13 @@ function parseBackgroundLanguages(background: Background | null): ParsedBackgrou
   }
 }
 
-function getSpeciesLanguageChoiceConfig(species: Species | null): LanguageChoiceConfig | null {
+function getSpeciesLanguageChoiceConfig(species: Species | null, availableLanguages = STANDARD_LANGUAGE_OPTIONS): LanguageChoiceConfig | null {
   if (!species) return null
 
   if (species.name === 'Changeling' && species.source === 'ERftLW') {
     return {
       count: 2,
-      options: STANDARD_LANGUAGE_OPTIONS.filter((language) => !species.languages.includes(language)),
+      options: availableLanguages.filter((language) => !species.languages.includes(language)),
       sourceCategory: 'species_choice',
       sourceEntityId: species.id,
       sourceFeatureKey: 'species_languages:changeling',
@@ -203,7 +203,7 @@ function getSpeciesLanguageChoiceConfig(species: Species | null): LanguageChoice
   if (species.name === 'Warforged' && species.source === 'ERftLW') {
     return {
       count: 1,
-      options: STANDARD_LANGUAGE_OPTIONS.filter((language) => !species.languages.includes(language)),
+      options: availableLanguages.filter((language) => !species.languages.includes(language)),
       sourceCategory: 'species_choice',
       sourceEntityId: species.id,
       sourceFeatureKey: 'species_languages:warforged',
@@ -217,7 +217,7 @@ function getSpeciesLanguageChoiceConfig(species: Species | null): LanguageChoice
   if (dragonmarkRule) {
     return {
       count: dragonmarkRule.count,
-      options: STANDARD_LANGUAGE_OPTIONS.filter((language) => !species.languages.includes(language)),
+      options: availableLanguages.filter((language) => !species.languages.includes(language)),
       sourceCategory: 'species_choice',
       sourceEntityId: species.id,
       sourceFeatureKey: dragonmarkRule.sourceFeatureKey,
@@ -227,7 +227,7 @@ function getSpeciesLanguageChoiceConfig(species: Species | null): LanguageChoice
   return null
 }
 
-function getBackgroundLanguageChoiceConfig(background: Background | null): LanguageChoiceConfig | null {
+function getBackgroundLanguageChoiceConfig(background: Background | null, availableLanguages = STANDARD_LANGUAGE_OPTIONS): LanguageChoiceConfig | null {
   if (!background) return null
 
   const parsed = parseBackgroundLanguages(background)
@@ -235,20 +235,20 @@ function getBackgroundLanguageChoiceConfig(background: Background | null): Langu
 
   return {
     count: parsed.choiceCount,
-    options: STANDARD_LANGUAGE_OPTIONS.filter((language) => !parsed.fixed.includes(language)),
+    options: availableLanguages.filter((language) => !parsed.fixed.includes(language)),
     sourceCategory: 'background_choice',
     sourceEntityId: background.id,
     sourceFeatureKey: 'background_languages',
   }
 }
 
-function getSpeciesToolChoiceConfig(species: Species | null): ToolChoiceConfig | null {
+function getSpeciesToolChoiceConfig(species: Species | null, availableTools = STANDARD_TOOL_OPTIONS): ToolChoiceConfig | null {
   if (!species) return null
 
   if (species.name === 'Warforged' && species.source === 'ERftLW') {
     return {
       count: 1,
-      options: STANDARD_TOOL_OPTIONS,
+      options: availableTools,
       sourceCategory: 'species_choice',
       sourceEntityId: species.id,
       sourceFeatureKey: 'species_trait:specialized_design',
@@ -275,15 +275,26 @@ export function getFixedBackgroundLanguages(background: Background | null) {
   return parseBackgroundLanguages(background).fixed
 }
 
-export function getAvailableLanguageChoices(background: Background | null, species: Species | null) {
+export function getAvailableLanguageChoices(
+  background: Background | null,
+  species: Species | null,
+  availableLanguages = STANDARD_LANGUAGE_OPTIONS
+) {
   return dedupe([
-    ...(getSpeciesLanguageChoiceConfig(species)?.options ?? []),
-    ...(getBackgroundLanguageChoiceConfig(background)?.options ?? []),
+    ...(getSpeciesLanguageChoiceConfig(species, availableLanguages)?.options ?? []),
+    ...(getBackgroundLanguageChoiceConfig(background, availableLanguages)?.options ?? []),
   ])
 }
 
 export function getAvailableToolChoices(species: Species | null) {
   return dedupe(getSpeciesToolChoiceConfig(species)?.options ?? [])
+}
+
+export function getAvailableToolChoicesFromCatalog(
+  species: Species | null,
+  availableTools = STANDARD_TOOL_OPTIONS
+) {
+  return dedupe(getSpeciesToolChoiceConfig(species, availableTools)?.options ?? [])
 }
 
 export function getLanguageChoiceLimit(background: Background | null, species: Species | null) {

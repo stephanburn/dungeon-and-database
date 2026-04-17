@@ -22,45 +22,42 @@ This roadmap now has meaningful implementation behind it.
   - per-source spellcasting summaries now exist for multiclass and mixed-caster builds
   - legality and picker caps can validate per source
 
-Recent content added as test/support data:
+Recent content added as test/support data during Batch 2:
 
 - `Oath of the Ancients` for Paladin (`PHB`)
 - `Orc` from `Eberron: Rising from the Last War` (`ERftLW`)
 - `Warforged` from `Eberron: Rising from the Last War` (`ERftLW`)
 - `Changeling` from `Eberron: Rising from the Last War` (`ERftLW`)
+- All ERftLW dragonmarked species rows with inherited language / tool / flexible ability choices
+- `School of Necromancy` for Wizard (`PHB`) and `Maverick` for Artificer (`EE`) subclass seeds
+- `Aberrant Dragonmark` feat (`ERftLW`) with structured spell-choice metadata
 
 Batch 2 is now effectively complete:
 
-- typed spell and feat persistence tables exist and are the active source for current app flows
+- typed spell and feat persistence tables exist and are the only active source for current app flows
 - save paths clear the old mirrored `character_choices` rows when typed spell/feat data is rewritten, preventing stale legacy data from resurfacing
 - older incompatible test characters can be discarded instead of carrying extra compatibility logic
 - chosen skill proficiencies now have provenance columns so class/background/species skill choices can be tagged on save
-- typed language and tool choice tables now flow through load/save, snapshots, and derived character state
-- the creation wizard and editable sheet can persist Changeling extra languages and Warforged extra language/tool picks with provenance
-- typed species ability-bonus choice rows exist, and Changeling / Warforged flexible `+1` bonuses flow through derivation instead of being treated as missing schema
+- typed language and tool choice tables flow through load/save, snapshots, and derived character state
+- the creation wizard and editable sheet persist Changeling extra languages and Warforged extra language/tool picks with provenance
+- typed species ability-bonus choice rows exist, and Changeling / Warforged flexible `+1` bonuses flow through derivation rather than being treated as missing schema
 - Warforged receives the shared derived `Integrated Protection` `+1` AC bonus
 - typed ASI rows exist, and unlocked ASI slots can persist explicit `+2` or split `+1/+1` allocations through creation, edit, and level-up flows
 - typed feature-option choice infrastructure exists and is now consumed by Maverick support
-- shared feature-grants support now covers:
-  - generic feature spell choices
-  - Maverick `Arcane Breakthrough` class picks
-  - Maverick bonus cantrip and free prepared breakthrough spells
-  - feat spell choices through the shared feature-spell path
-- `School of Necromancy` (`PHB`) is seeded as Wizard subclass content
-- `Maverick` (`EE`) is seeded as Artificer subclass content with creator, level-up, legality, and sheet support
-- dragonmarked species spell-list expansion is modeled through `species_bonus_spells`, so marked species can expose `Spells of the Mark` inside the spell picker instead of only in descriptive text
+- shared feature-grants support now covers generic feature spell choices, Maverick Arcane Breakthrough class picks, Maverick bonus cantrip and free prepared breakthrough spells, and feat spell choices through the shared feature-spell path
+- dragonmarked species spell-list expansion is modeled through `species_bonus_spells`, so marked species expose `Spells of the Mark` inside the spell picker
 - static dragonmark trait-granted spells are modeled in shared feature-grants derivation, including source fallback handling where local seeded spell sources differ
-- inherited dragonmark language / tool / flexible ability choices are wired through the shared typed-choice path for the currently modeled flattened species rows
-- species traits are now surfaced in derived state and on the character sheet, so traits such as `Vigilant Guardian` are visible on the build instead of hidden in seed data
-- dragonmark and Batch 2 follow-up amendment notes have been refreshed so implemented support is no longer described as missing
+- species traits (e.g. `Vigilant Guardian`) are surfaced in derived state and on the character sheet
 
-Important remaining limitation after Batch 2:
+Important remaining limitations after Batch 2:
 
 - some species rows are still intentionally flattened rather than fully inheriting parent-species structure
 - richer combat-time automation for reactive traits such as `Vigilant Guardian` does not exist yet
 - equipment remains outside Batch 2 normalization and is still future work
+- the generic `character_feature_option_choices` table exists but Maverick is its only consumer, and no `feature_option_groups` / `feature_options` content tables exist yet
+- languages and tools are still free-text strings across species, background, and character rows
 
-The intended next step is no longer Batch 2 prep; the next meaningful roadmap work is Batch 3 content-model expansion and/or Batch 4 workflow completion.
+The intended next step is Batch 3 content-model expansion, structured as the execution slices described in the Batch 3 section below.
 
 This plan is written for a single implementation agent working inside the repo, not for a human team. That changes the shape of the backlog:
 
@@ -232,63 +229,119 @@ The current `character_choices` table is too generic for a full 2014 builder. It
 - Every major player build choice has a first-class persistence path.
 - A character can be reconstructed exactly from rows.
 - The database can answer what a character chose and why.
-- Status: effectively complete in the current local repo state, with remaining gaps now belonging to later batches rather than Batch 2 normalization.
 
 ## Batch 3: Missing Content Model Expansion
 
 ### Objective
 
-Add the missing categories of content required to support a broad set of 2014 character builds.
+Add the missing categories of content required to support a broad set of 2014 character builds, and migrate already-hardcoded option families onto that same content-driven model.
 
 ### Why
 
-The current content model covers only part of the rules surface. It has core entities, but many 2014 build systems depend on reusable option families and equipment structures that do not yet exist as data.
+Batch 2 gave the app typed per-character persistence for the major recurring choice systems (spells, feats, ASI, languages, tools, species flex bonuses, feature options). What it did not do is describe those choice systems as data. Today the only recurring-choice helpers that drive picks are hand-coded, with Maverick as the sole consumer of the generic `character_feature_option_choices` table. The rest of the 2014 option surface (fighting styles, invocations, infusions, metamagic, maneuvers) is absent from both content and UI. At the same time, languages and tools are still free-text strings, and equipment does not exist as data at all.
+
+### Current State Going In
+
+- typed per-character `character_feature_option_choices` exists (Batch 2) but has only one consumer (Maverick subclass choices)
+- no `feature_option_groups` / `feature_options` content tables yet
+- languages and tools are still free-text strings on character rows and seed data — there are no `languages` or `tools` content tables
+- `classes.multiclass_prereqs` already exists (`001_initial_schema.sql`) and is consumed by the legality engine; no extra multiclass-prereq schema work is required
+- no equipment, weapon, armor, shield, or starting-equipment tables exist yet
+
+### Scope Decisions
+
+- Batch 3 is a content-model batch. It adds content tables and migrates per-character persistence to reference them. It should not rewrite the creation or level-up wizards (that is Batch 4 / Milestone 6) or the sheet (Batch 5 / Milestone 8).
+- Equipment can balloon. Batch 3 equipment work stops at catalog tables plus shield / armor / weapon data needed for later AC derivation, plus a thin per-character equipment-state table. Packaged starting gear is scoped, but inventory simulation is not.
+- The generic `character_feature_option_choices` table is the target for every recurring option family in this batch. New typed per-character tables should not be added unless a concrete requirement resists the generic one.
 
 ### Recommended New Content Types
 
-- `languages`
-- `tools`
-- `equipment_items`
-- `weapons`
-- `armor`
-- `shields`
-- `fighting_styles`
-- `feature_option_groups`
-- `feature_options`
-- `starting_equipment_packages`
+**Required for Batch 3**
 
-### Optional But Valuable Later
+- `languages` — catalog of 2014 languages, replacing free-text strings across species, background, and character persistence
+- `tools` — catalog of 2014 tools, same rationale
+- `feature_option_groups` — descriptor rows for each recurring option family (fighting_style, eldritch_invocation, metamagic, infusion, maneuver, etc.)
+- `feature_options` — option rows belonging to a group, with prerequisites and effect metadata sufficient to validate picks
+- `weapons`, `armor`, `shields` — catalog data that AC and attack derivation will later consume
+- `equipment_items` — generic gear catalog (packs, adventuring gear, etc.)
+- `character_equipment_items` — per-character equipped/owned state
+- `starting_equipment_packages` — class and background starting-gear references
 
-- `class_resource_progressions`
-- `conditions`
-- `damage_types`
-- `senses_catalog`
-- `spell_list_rules`
+**Deferred past Batch 3**
+
+- `class_resource_progressions`, `conditions`, `damage_types`, `senses_catalog`, `spell_list_rules` — valuable later but not load-bearing for Batch 4 creation/level-up work.
 
 ### Modeling Strategy
 
-Use `feature_option_groups` plus `feature_options` for reusable “choose N from this list” systems.
+Use `feature_option_groups` plus `feature_options` for reusable "choose N from this list" systems (fighting styles, metamagic, maneuvers, invocations, infusions). Per-character picks continue to land in `character_feature_option_choices`, which already exists and already has one working consumer. Prerequisite and effect columns on `feature_options` should be concrete enough to drive legality and sheet text for the first two consumers (Maverick and fighting styles) before being pushed further.
 
-That lets the app represent:
+### Execution Slices
 
-- Fighting Style
-- Metamagic
-- Maneuvers
-- Invocations
-- Infusions
-- Similar selectable feature families
+Each slice should fit in one Codex session and land schema + types + loader/save + at least one consuming UI or derivation surface + tests.
 
-without requiring a separate table for each mechanic in the first iteration.
+**Slice 3a — Feature option groups and options (content side)**
+
+- add `feature_option_groups` and `feature_options` migrations, types, and loaders
+- seed fighting-style options for 2014 classes that use them (Fighter, Paladin, Ranger) and seed the Maverick breakthrough class list as a group
+- expose read endpoints for admin and builder surfaces
+- migrate Maverick's hardcoded breakthrough class list off the helper constant and onto content rows, keeping the same `character_feature_option_choices` write path
+- acceptance: Maverick picks continue to work end-to-end, driven by content rows instead of constants; fighting-style content is queryable
+
+**Slice 3b — Fighting styles as the second consumer**
+
+- surface fighting-style option groups in legality and in the relevant wizard step (creation flow for Fighter/Paladin, level-2 step for Ranger and Fighter level-up)
+- persist through `character_feature_option_choices`
+- render selected fighting style on the character sheet
+- acceptance: a level-1 Fighter can choose a fighting style through the wizard, the pick persists and round-trips, and legality flags missing picks
+
+**Slice 3c — Languages as content**
+
+- add `languages` migration and seed from existing string constants
+- add foreign-key columns where the app needs to reference languages (species fixed languages, background fixed languages, `character_language_choices.language` → `language_id`, species flex-language grants)
+- leave display paths tolerant of unknown content for un-migrated rows during the transition
+- acceptance: all currently seeded species/background languages map to rows; existing character language picks still load and render
+
+**Slice 3d — Tools as content**
+
+- add `tools` migration and seed
+- parallel FK work for species/background/feature tool grants and `character_tool_choices.tool`
+- acceptance: existing tool picks continue to load, round-trip, and render
+
+**Slice 3e — Equipment catalog phase 1**
+
+- add `equipment_items`, `weapons`, `armor`, `shields`
+- seed 2014 PHB core weapons, armor, and shields
+- extend admin UI enough to inspect the new catalogs
+- no character-facing UI in this slice
+- acceptance: catalogs exist, seed data is queryable, admin can view
+
+**Slice 3f — Starting equipment and per-character equipment state**
+
+- add `starting_equipment_packages` and `character_equipment_items`
+- reference packages from class and background seed data
+- stop here for Batch 3; consumption by AC derivation and wizard is Batch 4 / Batch 5 work
+- acceptance: packages resolve to catalog rows; per-character equipment rows persist and reload
+
+**Slice 3g — Equipment catalog admin CRUD**
+
+- extend Content Admin from read-only inspection to full create / edit / delete flows for `equipment_items`, `weapons`, `armor`, `shields`, and `starting_equipment_packages`
+- support subtype-aware validation so weapon / armor / shield detail rows stay aligned with their base `equipment_items` entries
+- expose package-item editing against catalog item references rather than free-text names
+- keep this slice admin-only; no builder or sheet consumption changes
+- acceptance: a DM/admin can add a new equipment item and, where relevant, its weapon / armor / shield detail row through the admin UI, then attach it to a starting-equipment package without SQL
 
 ### Risks
 
-- Equipment modeling can balloon if full inventory simulation is attempted too early.
-- Keep first pass focused on what affects character legality and sheet output.
+- Designing `feature_option_groups` / `feature_options` too generically will push validation burden back into per-option code. Prerequisite and effect fields should be concrete enough to drive legality and sheet text for Maverick and fighting styles before being pushed further.
+- Equipment modeling can balloon. Batch 3 stops at catalog and packaging; Batch 5 is where AC and sheet presentation use this data.
+- Migrating languages/tools to FKs is only safe if display paths tolerate unknown entries during the transition. Every string-consuming component needs a short audit first.
 
 ### Exit Criteria
 
-- The database can represent all major categories of player-facing build choices required for 2014 support.
-- New rules systems can be added as data, not hardcoded UI logic.
+- The database can represent languages, tools, equipment categories, and recurring option families as first-class content.
+- At least two recurring option systems (Maverick breakthroughs, fighting styles) are driven by the content tables rather than hardcoded helpers.
+- Existing characters with free-text language/tool picks still load and round-trip through the new schema.
+- Creation wizard work (Batch 4) can consume the content model without needing to invent new persistence.
 
 ## Batch 4: Builder Workflow Completion
 
@@ -765,7 +818,7 @@ Add the content types needed for reusable class option systems.
   - `fighting_styles`
   - `feature_option_groups`
   - `feature_options`
-- Add multiclass prerequisite data to the `classes` table (minimum ability score requirements per class) so the level-up flow can validate multiclass eligibility.
+- Multiclass prerequisite data on the `classes` table (`multiclass_prereqs`) already exists from the initial schema and is consumed by the legality engine, so no extra schema work is needed; confirm seed coverage when the level-up flow is reworked in Milestone 9.
 - Add content API routes or extend existing admin routes.
 - Add option-group-aware derivation hooks.
 - Add minimal admin UI support for these new content types.

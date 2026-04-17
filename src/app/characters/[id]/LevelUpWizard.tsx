@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/select'
 import { FeatsCard } from '@/components/character-sheet/FeatsCard'
 import { FeatSpellChoicesCard } from '@/components/character-sheet/FeatSpellChoicesCard'
+import { FeatureOptionChoicesCard } from '@/components/character-sheet/FeatureOptionChoicesCard'
 import { LegalityBadge, LegalitySummaryBadge } from '@/components/character-sheet/LegalityBadge'
 import { MaverickBreakthroughCard } from '@/components/character-sheet/MaverickBreakthroughCard'
 import { SpellsCard } from '@/components/character-sheet/SpellsCard'
@@ -31,6 +32,7 @@ import type {
   CharacterLevel,
   Class,
   Feat,
+  FeatureOption,
   MulticlassPrereq,
   RuleSet,
   Species,
@@ -58,10 +60,16 @@ import {
 import { buildSpeciesAbilityBonusMap } from '@/lib/characters/species-ability-bonus-provenance'
 import { getFeatSpellChoiceDefinitions } from '@/lib/characters/feat-spell-options'
 import {
+  buildFeatureOptionChoicesFromDefinitionMap,
   buildMaverickFeatureOptionChoices,
-  getMaverickBreakthroughClassIds,
-  isMaverickSubclass,
-} from '@/lib/characters/maverick'
+  getFeatureOptionChoiceValue,
+  getFightingStyleFeatureOptionDefinition,
+  getMaverickArcaneBreakthroughOptionDefinitions,
+  getSelectedMaverickBreakthroughClassIds,
+  mergeFeatureOptionChoiceInputs,
+} from '@/lib/characters/feature-grants'
+import type { FeatureOptionChoiceInput } from '@/lib/characters/choice-persistence'
+import { isMaverickSubclass } from '@/lib/characters/maverick'
 import { getFixedHpGainValue } from '@/lib/characters/derived'
 
 type CharacterWithRelations = Character & {
@@ -170,6 +178,7 @@ export function LevelUpWizard({
 
   const [classList, setClassList] = useState<Class[]>([])
   const [featList, setFeatList] = useState<Feat[]>([])
+  const [maverickOptionRows, setMaverickOptionRows] = useState<FeatureOption[]>([])
   const [classDetailMap, setClassDetailMap] = useState<Record<string, ClassDetail>>({})
   const [subclassMap, setSubclassMap] = useState<Record<string, Subclass[]>>({})
   const [spellOptions, setSpellOptions] = useState<SpellOption[]>([])
@@ -180,8 +189,25 @@ export function LevelUpWizard({
   const [asiChoices, setAsiChoices] = useState<AsiSelection[]>(initialAsiChoices)
   const [languageChoices] = useState<string[]>(initialLanguageChoices)
   const [toolChoices] = useState<string[]>(initialToolChoices)
+  const [featureOptionChoices, setFeatureOptionChoices] = useState<FeatureOptionChoiceInput[]>(
+    initialFeatureOptionChoices
+      .filter((choice) => (
+        choice.option_group_key !== 'maverick:arcane_breakthrough_classes'
+        && !choice.option_group_key.startsWith('maverick:breakthrough:')
+      ))
+      .map((choice) => ({
+        option_group_key: choice.option_group_key,
+        option_key: choice.option_key,
+        selected_value: choice.selected_value,
+        choice_order: choice.choice_order,
+        character_level_id: choice.character_level_id,
+        source_category: choice.source_category,
+        source_entity_id: choice.source_entity_id,
+        source_feature_key: choice.source_feature_key,
+      }))
+  )
   const [maverickBreakthroughClassIds, setMaverickBreakthroughClassIds] = useState<string[]>(
-    getMaverickBreakthroughClassIds(initialFeatureOptionChoices)
+    getSelectedMaverickBreakthroughClassIds(initialFeatureOptionChoices)
   )
   const [spellChoices, setSpellChoices] = useState<string[]>(initialSpellChoices)
   const [featChoices] = useState<string[]>(initialFeatChoices)
@@ -193,6 +219,14 @@ export function LevelUpWizard({
   const [stepIndex, setStepIndex] = useState(0)
   const [working, setWorking] = useState(false)
   const [savedLegality, setSavedLegality] = useState<LegalityResult | null>(null)
+  const initialFightingStyleKeys = useMemo(
+    () => new Set(
+      initialFeatureOptionChoices
+        .filter((choice) => choice.option_group_key.startsWith('fighting_style:'))
+        .map((choice) => `${choice.option_group_key}:${choice.option_key}`)
+    ),
+    [initialFeatureOptionChoices]
+  )
 
   const currentClassIds = useMemo(
     () => Array.from(new Set(baseLevels.map((level) => level.class_id))),
@@ -204,9 +238,15 @@ export function LevelUpWizard({
     Promise.all([
       fetch(`/api/content/classes${qs}`).then((response) => response.json()),
       fetch(`/api/content/feats${qs}`).then((response) => response.json()),
-    ]).then(([classes, feats]) => {
+      fetch(`/api/content/feature-options${qs}&group_key=maverick%3Aarcane_breakthrough_classes`).then((response) => response.json()),
+      fetch(`/api/content/feature-options${qs}&option_family=fighting_style`).then((response) => response.json()),
+    ]).then(([classes, feats, featureOptions, fightingStyleOptions]) => {
       setClassList(Array.isArray(classes) ? classes : [])
       setFeatList(Array.isArray(feats) ? feats : [])
+      setMaverickOptionRows([
+        ...(Array.isArray(featureOptions) ? featureOptions : []),
+        ...(Array.isArray(fightingStyleOptions) ? fightingStyleOptions : []),
+      ])
       if (!selectedClassId && Array.isArray(classes) && classes.length > 0) {
         setSelectedClassId(classes[0].id)
       }
@@ -304,7 +344,66 @@ export function LevelUpWizard({
   const selectedSubclass = selectedClassId
     ? (subclassMap[selectedClassId] ?? []).find((entry) => entry.id === selectedSubclassId) ?? null
     : null
-  const breakthroughClassOptions = classList.filter((cls) => !['Artificer'].includes(cls.name))
+  const fightingStyleDefinitions = useMemo(
+    () => getFightingStyleFeatureOptionDefinition({
+      classId: selectedClassId || null,
+      className: selectedClassDetail?.name ?? null,
+      classLevel: nextTargetLevel,
+      optionRows: maverickOptionRows,
+    }).map((definition) => ({
+      ...definition,
+      optionKey: `${selectedClassId}:style`,
+    })),
+    [maverickOptionRows, nextTargetLevel, selectedClassDetail?.name, selectedClassId]
+  )
+  const maverickOptionDefinitions = useMemo(
+    () => getMaverickArcaneBreakthroughOptionDefinitions({
+      classLevel: nextTargetLevel,
+      subclassId: selectedSubclassId,
+      optionRows: maverickOptionRows,
+    }),
+    [maverickOptionRows, nextTargetLevel, selectedSubclassId]
+  )
+  const breakthroughClassOptions = maverickOptionDefinitions[0]?.choices ?? []
+
+  useEffect(() => {
+    const activeKeys = new Set(
+      fightingStyleDefinitions.map((definition) => `${definition.optionGroupKey}:${definition.optionKey}`)
+    )
+    setFeatureOptionChoices((prev) => prev.filter((choice) => (
+      !choice.option_group_key.startsWith('fighting_style:')
+      || initialFightingStyleKeys.has(`${choice.option_group_key}:${choice.option_key}`)
+      || activeKeys.has(`${choice.option_group_key}:${choice.option_key}`)
+    )))
+  }, [fightingStyleDefinitions, initialFightingStyleKeys])
+
+  const canonicalFeatureOptionChoices = useMemo(
+    () => mergeFeatureOptionChoiceInputs({
+      preservedChoices: featureOptionChoices,
+      replacementDefinitions: fightingStyleDefinitions,
+      replacements: [
+        ...buildFeatureOptionChoicesFromDefinitionMap({
+          definitions: fightingStyleDefinitions,
+          selectedValues: Object.fromEntries(
+            fightingStyleDefinitions.map((definition) => [
+              definition.optionKey,
+              getFeatureOptionChoiceValue(
+                featureOptionChoices,
+                definition.optionGroupKey,
+                definition.optionKey,
+                definition.valueKey ?? 'class_id'
+              ) ?? '',
+            ])
+          ),
+        }),
+        ...buildMaverickFeatureOptionChoices({
+          selectedClassIds: maverickBreakthroughClassIds,
+          definitions: maverickOptionDefinitions,
+        }),
+      ],
+    }),
+    [featureOptionChoices, fightingStyleDefinitions, maverickBreakthroughClassIds, maverickOptionDefinitions]
+  )
 
   const targetLevels = useMemo<WizardLevel[]>(() => {
     if (!selectedClassId) {
@@ -433,23 +532,21 @@ export function LevelUpWizard({
       abilityBonusChoices: initialAbilityBonusChoices,
       languageChoices,
       toolChoices,
-      featureOptionChoices: buildMaverickFeatureOptionChoices({
-        subclassId: selectedSubclassId,
-        classLevel: nextTargetLevel,
-        selectedClassIds: maverickBreakthroughClassIds,
-      }).map((choice) => ({
-        id: `${choice.option_group_key}:${choice.option_key}`,
-        character_id: character.id,
-        character_level_id: null,
-        option_group_key: choice.option_group_key,
-        option_key: choice.option_key,
-        selected_value: choice.selected_value ?? {},
-        choice_order: choice.choice_order ?? 0,
-        source_category: choice.source_category ?? 'subclass_choice',
-        source_entity_id: choice.source_entity_id ?? null,
-        source_feature_key: choice.source_feature_key ?? null,
-        created_at: '',
-      })),
+      featureOptionChoices: [
+        ...canonicalFeatureOptionChoices.map((choice) => ({
+          id: `${choice.option_group_key}:${choice.option_key}`,
+          character_id: character.id,
+          character_level_id: null,
+          option_group_key: choice.option_group_key,
+          option_key: choice.option_key,
+          selected_value: choice.selected_value ?? {},
+          choice_order: choice.choice_order ?? 0,
+          source_category: choice.source_category ?? 'feature',
+          source_entity_id: choice.source_entity_id ?? null,
+          source_feature_key: choice.source_feature_key ?? null,
+          created_at: '',
+        })),
+      ],
     })
     const nextSlots = deriveLocalCharacter(previewContext)?.totalAsiSlots ?? currentSlots
     if (nextSlots > currentSlots) {
@@ -473,11 +570,14 @@ export function LevelUpWizard({
     classDetailMap,
     featChoices,
     featList,
+    canonicalFeatureOptionChoices,
+    featureOptionChoices,
     mergedSpellOptions,
     maverickBreakthroughClassIds,
     newFeatChoice,
     asiChoices,
     languageChoices,
+    maverickOptionDefinitions,
     skillProficiencies,
     spellChoices,
     selectedSubclassId,
@@ -561,23 +661,21 @@ export function LevelUpWizard({
     abilityBonusChoices: initialAbilityBonusChoices,
     languageChoices,
     toolChoices,
-    featureOptionChoices: buildMaverickFeatureOptionChoices({
-      subclassId: selectedSubclassId,
-      classLevel: nextTargetLevel,
-      selectedClassIds: maverickBreakthroughClassIds,
-    }).map((choice) => ({
-      id: `${choice.option_group_key}:${choice.option_key}`,
-      character_id: character.id,
-      character_level_id: null,
-      option_group_key: choice.option_group_key,
-      option_key: choice.option_key,
-      selected_value: choice.selected_value ?? {},
-      choice_order: choice.choice_order ?? 0,
-      source_category: choice.source_category ?? 'subclass_choice',
-      source_entity_id: choice.source_entity_id ?? null,
-      source_feature_key: choice.source_feature_key ?? null,
-      created_at: '',
-    })),
+    featureOptionChoices: [
+      ...canonicalFeatureOptionChoices.map((choice) => ({
+        id: `${choice.option_group_key}:${choice.option_key}`,
+        character_id: character.id,
+        character_level_id: null,
+        option_group_key: choice.option_group_key,
+        option_key: choice.option_key,
+        selected_value: choice.selected_value ?? {},
+        choice_order: choice.choice_order ?? 0,
+        source_category: choice.source_category ?? 'feature',
+        source_entity_id: choice.source_entity_id ?? null,
+        source_feature_key: choice.source_feature_key ?? null,
+        created_at: '',
+      })),
+    ],
   })
 
   const currentDerived = deriveLocalCharacter(currentContext)
@@ -675,12 +773,21 @@ export function LevelUpWizard({
         if (enteringNewClass && multiclassCheck && !multiclassCheck.passed) {
           return multiclassCheck.message
         }
+        for (const definition of fightingStyleDefinitions) {
+          const selectedValue = getFeatureOptionChoiceValue(
+            featureOptionChoices,
+            definition.optionGroupKey,
+            definition.optionKey,
+            definition.valueKey ?? 'class_id'
+          )
+          if (!selectedValue) return 'Choose the fighting style unlocked by this level.'
+        }
         return null
       }
       case 'subclass':
         if (!selectedSubclassId) return 'Choose the subclass unlocked by this level.'
         if (selectedSubclass && isMaverickSubclass(selectedSubclass)) {
-          const requiredChoices = nextTargetLevel >= 17 ? 5 : nextTargetLevel >= 13 ? 4 : nextTargetLevel >= 9 ? 3 : nextTargetLevel >= 5 ? 2 : nextTargetLevel >= 3 ? 1 : 0
+          const requiredChoices = maverickOptionDefinitions.length
           if (maverickBreakthroughClassIds.filter(Boolean).length < requiredChoices) {
             return `Choose ${requiredChoices} Arcane Breakthrough class${requiredChoices === 1 ? '' : 'es'} for Maverick.`
           }
@@ -774,11 +881,7 @@ export function LevelUpWizard({
             selectedClass: selectedClassDetail,
             species: character.species,
           }),
-          feature_option_choices: buildMaverickFeatureOptionChoices({
-            subclassId: selectedSubclassId,
-            classLevel: nextTargetLevel,
-            selectedClassIds: maverickBreakthroughClassIds,
-          }),
+          feature_option_choices: canonicalFeatureOptionChoices,
           spell_choices: persistedNextSpellSelections,
           feat_choices: buildTypedFeatChoices(nextFeatChoices, nextDerived?.featSlotLabels),
         }),
@@ -918,6 +1021,14 @@ export function LevelUpWizard({
                   </AlertDescription>
                 </Alert>
               )}
+
+              <FeatureOptionChoicesCard
+                title="Fighting Style"
+                definitions={fightingStyleDefinitions}
+                choices={featureOptionChoices}
+                canEdit
+                onChange={setFeatureOptionChoices}
+              />
             </div>
           )}
 
@@ -941,7 +1052,7 @@ export function LevelUpWizard({
               {selectedSubclass && isMaverickSubclass(selectedSubclass) && (
                 <MaverickBreakthroughCard
                   classLevel={nextTargetLevel}
-                  availableClasses={breakthroughClassOptions}
+                  availableChoices={breakthroughClassOptions}
                   selectedClassIds={maverickBreakthroughClassIds}
                   canEdit
                   onChange={setMaverickBreakthroughClassIds}

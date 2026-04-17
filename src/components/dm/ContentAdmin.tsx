@@ -21,11 +21,21 @@ import {
 // ── Types ──────────────────────────────────────────────────
 
 type ContentItem = Record<string, unknown>
-type FormState = Record<string, string | number | boolean | string[]>
+type PackageItemFormRow = {
+  item_id: string
+  quantity: number
+  item_order: number
+  choice_group: string
+  notes: string
+}
+type FormValue = string | number | boolean | string[] | PackageItemFormRow[]
+type FormState = Record<string, FormValue>
 
 interface ClassRow { id: string; name: string; subclass_choice_level: number }
 interface SourceRow { key: string; full_name: string; is_srd: boolean; rule_set: '2014' | '2024' }
 interface FeatRow { id: string; name: string }
+interface EquipmentItemRow { id: string; key: string; name: string; item_category: string; source: string }
+interface StartingEquipmentPackageRow { id: string; key: string; name: string; source: string }
 
 const STAT_KEYS = ['str', 'dex', 'con', 'int', 'wis', 'cha'] as const
 const STAT_LABELS: Record<string, string> = {
@@ -37,11 +47,31 @@ const LEVEL_LABELS: Record<number, string> = {
 }
 const HIT_DICE = [6, 8, 10, 12] as const
 const SPELLCASTING_TYPES = ['', 'full', 'half', 'third', 'pact', 'none'] as const
+const ITEM_CATEGORIES = ['weapon', 'armor', 'shield', 'gear'] as const
+const READ_ONLY_TABS = new Set<string>()
+
+function tabLabel(tab: string) {
+  if (tab === 'equipment-items') return 'equipment item'
+  if (tab === 'starting-equipment-packages') return 'starting equipment package'
+  return tab === 'classes' ? 'class' : tab.slice(0, -1)
+}
+
+function getItemIdentifier(tab: string, item: ContentItem) {
+  if (tab === 'sources') return item.key as string
+  if (tab === 'weapons' || tab === 'armor' || tab === 'shields') return item.item_id as string
+  return item.id as string
+}
+
+function getDeleteParam(tab: string, itemKey: string) {
+  if (tab === 'sources') return `key=${itemKey}`
+  if (tab === 'weapons' || tab === 'armor' || tab === 'shields') return `item_id=${itemKey}`
+  return `id=${itemKey}`
+}
 
 // ── Defaults & conversions ─────────────────────────────────
 
 function defaultForm(tab: string, classes: ClassRow[]): FormState {
-  if (tab === 'backgrounds') return { name: '', skill_proficiencies: '', skill_choice_count: 0, skill_choice_from: '', tool_proficiencies: '', languages: '', feature: '', background_feat_id: '', source: '' }
+  if (tab === 'backgrounds') return { name: '', skill_proficiencies: '', skill_choice_count: 0, skill_choice_from: '', tool_proficiencies: '', languages: '', feature: '', background_feat_id: '', starting_equipment_package_id: '', source: '' }
   if (tab === 'species') return { name: '', size: 'medium', speed: 30, asb_str: 0, asb_dex: 0, asb_con: 0, asb_int: 0, asb_wis: 0, asb_cha: 0, darkvision_range: 0, languages: '', source: '' }
   if (tab === 'classes') return {
     name: '', hit_die: 8, primary_ability: '',
@@ -49,12 +79,17 @@ function defaultForm(tab: string, classes: ClassRow[]): FormState {
     armor_proficiencies: '', weapon_proficiencies: '', tool_proficiencies: '',
     multiclass_prereqs: '',
     skill_choice_count: 2, skill_choice_from: '',
-    spellcasting_type: '', spellcasting_progression: '{"mode":"none"}', subclass_choice_level: 3, source: '',
+    spellcasting_type: '', spellcasting_progression: '{"mode":"none"}', subclass_choice_level: 3, starting_equipment_package_id: '', source: '',
   }
   if (tab === 'subclasses') return { name: '', class_id: classes[0]?.id ?? '', source: '' }
   if (tab === 'spells') return { name: '', level: 0, school: '', casting_time: '1 action', range: '', comp_verbal: false, comp_somatic: false, comp_material: false, comp_materials: '', duration: 'Instantaneous', concentration: false, ritual: false, description: '', classes: [] as string[], source: '' }
   if (tab === 'feats') return { name: '', description: '', source: '' }
   if (tab === 'sources') return { key: '', full_name: '', rule_set: '2014' }
+  if (tab === 'equipment-items') return { key: '', name: '', item_category: 'gear', cost_quantity: 0, cost_unit: 'gp', weight_lb: 0, source: '' }
+  if (tab === 'weapons') return { item_id: '', weapon_category: 'simple', weapon_kind: 'melee', damage_dice: '1d6', damage_type: 'slashing', properties: '', normal_range: 0, long_range: 0, versatile_damage: '' }
+  if (tab === 'armor') return { item_id: '', armor_category: 'light', base_ac: 11, dex_bonus_cap: 0, minimum_strength: 0, stealth_disadvantage: false }
+  if (tab === 'shields') return { item_id: '', armor_class_bonus: 2 }
+  if (tab === 'starting-equipment-packages') return { key: '', name: '', description: '', source: '', package_items: [] as PackageItemFormRow[] }
   return {}
 }
 
@@ -69,6 +104,7 @@ function itemToForm(tab: string, item: ContentItem): FormState {
       languages: ((item.languages as string[]) ?? []).join(', '),
       feature: (item.feature as string) ?? '',
       background_feat_id: (item.background_feat_id as string) ?? '',
+      starting_equipment_package_id: (item.starting_equipment_package_id as string) ?? '',
       source: item.source as string,
     }
   }
@@ -109,6 +145,7 @@ function itemToForm(tab: string, item: ContentItem): FormState {
       spellcasting_type: (item.spellcasting_type as string) ?? '',
       spellcasting_progression: JSON.stringify((item.spellcasting_progression as Record<string, unknown> | null) ?? { mode: 'none' }, null, 2),
       subclass_choice_level: (item.subclass_choice_level as number) ?? 3,
+      starting_equipment_package_id: (item.starting_equipment_package_id as string) ?? '',
       source: item.source as string,
     }
   }
@@ -153,6 +190,61 @@ function itemToForm(tab: string, item: ContentItem): FormState {
       rule_set: (item.rule_set as '2014' | '2024') ?? '2014',
     }
   }
+  if (tab === 'equipment-items') {
+    return {
+      key: item.key as string,
+      name: item.name as string,
+      item_category: item.item_category as string,
+      cost_quantity: (item.cost_quantity as number) ?? 0,
+      cost_unit: (item.cost_unit as string) ?? 'gp',
+      weight_lb: (item.weight_lb as number | null) ?? 0,
+      source: item.source as string,
+    }
+  }
+  if (tab === 'weapons') {
+    return {
+      item_id: item.item_id as string,
+      weapon_category: item.weapon_category as string,
+      weapon_kind: item.weapon_kind as string,
+      damage_dice: item.damage_dice as string,
+      damage_type: item.damage_type as string,
+      properties: ((item.properties as string[]) ?? []).join(', '),
+      normal_range: (item.normal_range as number | null) ?? 0,
+      long_range: (item.long_range as number | null) ?? 0,
+      versatile_damage: (item.versatile_damage as string | null) ?? '',
+    }
+  }
+  if (tab === 'armor') {
+    return {
+      item_id: item.item_id as string,
+      armor_category: item.armor_category as string,
+      base_ac: item.base_ac as number,
+      dex_bonus_cap: (item.dex_bonus_cap as number | null) ?? 0,
+      minimum_strength: (item.minimum_strength as number | null) ?? 0,
+      stealth_disadvantage: (item.stealth_disadvantage as boolean) ?? false,
+    }
+  }
+  if (tab === 'shields') {
+    return {
+      item_id: item.item_id as string,
+      armor_class_bonus: (item.armor_class_bonus as number) ?? 2,
+    }
+  }
+  if (tab === 'starting-equipment-packages') {
+    return {
+      key: item.key as string,
+      name: item.name as string,
+      description: (item.description as string) ?? '',
+      source: item.source as string,
+      package_items: (((item.items as Array<Record<string, unknown>>) ?? []).map((entry) => ({
+        item_id: entry.item_id as string,
+        quantity: (entry.quantity as number) ?? 1,
+        item_order: (entry.item_order as number) ?? 0,
+        choice_group: (entry.choice_group as string) ?? '',
+        notes: (entry.notes as string) ?? '',
+      }))) as PackageItemFormRow[],
+    }
+  }
   return {}
 }
 
@@ -170,6 +262,7 @@ function formToPayload(tab: string, form: FormState, classes: ClassRow[] = []): 
       tool_proficiencies: splitComma(form.tool_proficiencies as string),
       languages: splitComma(form.languages as string),
       starting_equipment: [],
+      starting_equipment_package_id: (form.starting_equipment_package_id as string) || null,
       feature: form.feature,
       background_feat_id: (form.background_feat_id as string) || null,
       source: form.source,
@@ -213,6 +306,7 @@ function formToPayload(tab: string, form: FormState, classes: ClassRow[] = []): 
       skill_choices: { count: Number(form.skill_choice_count), from: splitComma(form.skill_choice_from as string) },
       multiclass_prereqs: prereqs,
       multiclass_proficiencies: {},
+      starting_equipment_package_id: (form.starting_equipment_package_id as string) || null,
       spellcasting_type: (form.spellcasting_type as string) || null,
       spellcasting_progression: spellcastingProgression,
       subclass_choice_level: Number(form.subclass_choice_level),
@@ -255,6 +349,61 @@ function formToPayload(tab: string, form: FormState, classes: ClassRow[] = []): 
   if (tab === 'sources') {
     return { key: form.key, full_name: form.full_name, rule_set: form.rule_set }
   }
+  if (tab === 'equipment-items') {
+    return {
+      key: form.key,
+      name: form.name,
+      item_category: form.item_category,
+      cost_quantity: Number(form.cost_quantity),
+      cost_unit: form.cost_unit,
+      weight_lb: Number(form.weight_lb),
+      source: form.source,
+    }
+  }
+  if (tab === 'weapons') {
+    return {
+      item_id: form.item_id,
+      weapon_category: form.weapon_category,
+      weapon_kind: form.weapon_kind,
+      damage_dice: form.damage_dice,
+      damage_type: form.damage_type,
+      properties: splitComma(form.properties as string),
+      normal_range: Number(form.normal_range) || null,
+      long_range: Number(form.long_range) || null,
+      versatile_damage: (form.versatile_damage as string) || null,
+    }
+  }
+  if (tab === 'armor') {
+    return {
+      item_id: form.item_id,
+      armor_category: form.armor_category,
+      base_ac: Number(form.base_ac),
+      dex_bonus_cap: Number(form.dex_bonus_cap) || null,
+      minimum_strength: Number(form.minimum_strength) || null,
+      stealth_disadvantage: Boolean(form.stealth_disadvantage),
+    }
+  }
+  if (tab === 'shields') {
+    return {
+      item_id: form.item_id,
+      armor_class_bonus: Number(form.armor_class_bonus),
+    }
+  }
+  if (tab === 'starting-equipment-packages') {
+    return {
+      key: form.key,
+      name: form.name,
+      description: form.description,
+      source: form.source,
+      items: (form.package_items as PackageItemFormRow[]).map((entry) => ({
+        item_id: entry.item_id,
+        quantity: Number(entry.quantity),
+        item_order: Number(entry.item_order),
+        choice_group: entry.choice_group,
+        notes: entry.notes || null,
+      })),
+    }
+  }
   return {}
 }
 
@@ -268,6 +417,11 @@ function renderTableHead(tab: string) {
   if (tab === 'spells') return <><TableHead>Name</TableHead><TableHead>Level</TableHead><TableHead>School</TableHead><TableHead>Source</TableHead></>
   if (tab === 'feats') return <><TableHead>Name</TableHead><TableHead>Source</TableHead></>
   if (tab === 'sources') return <><TableHead>Key</TableHead><TableHead>Full Name</TableHead><TableHead>Rule Set</TableHead></>
+  if (tab === 'equipment-items') return <><TableHead>Name</TableHead><TableHead>Category</TableHead><TableHead>Cost</TableHead><TableHead>Source</TableHead></>
+  if (tab === 'weapons') return <><TableHead>Name</TableHead><TableHead>Category</TableHead><TableHead>Damage</TableHead><TableHead>Properties</TableHead></>
+  if (tab === 'armor') return <><TableHead>Name</TableHead><TableHead>Category</TableHead><TableHead>AC</TableHead><TableHead>Source</TableHead></>
+  if (tab === 'shields') return <><TableHead>Name</TableHead><TableHead>AC Bonus</TableHead><TableHead>Weight</TableHead><TableHead>Source</TableHead></>
+  if (tab === 'starting-equipment-packages') return <><TableHead>Name</TableHead><TableHead>Items</TableHead><TableHead>Source</TableHead></>
   return null
 }
 
@@ -282,6 +436,11 @@ function renderTableCells(tab: string, item: ContentItem, classes: ClassRow[]) {
   if (tab === 'spells') return <><TableCell className="font-medium">{item.name as string}</TableCell><TableCell className="text-neutral-400 text-sm">{LEVEL_LABELS[item.level as number]}</TableCell><TableCell className="text-neutral-400 text-sm">{item.school as string}</TableCell><TableCell className="text-neutral-400 text-sm">{item.source as string}</TableCell></>
   if (tab === 'feats') return <><TableCell className="font-medium">{item.name as string}</TableCell><TableCell className="text-neutral-400 text-sm">{item.source as string}</TableCell></>
   if (tab === 'sources') return <><TableCell className="font-medium font-mono">{item.key as string}</TableCell><TableCell className="text-neutral-400 text-sm">{item.full_name as string}</TableCell><TableCell className="text-neutral-400 text-sm">{item.rule_set as string}</TableCell></>
+  if (tab === 'equipment-items') return <><TableCell className="font-medium">{item.name as string}</TableCell><TableCell className="text-neutral-400 text-sm capitalize">{String(item.item_category ?? '—')}</TableCell><TableCell className="text-neutral-400 text-sm">{item.cost_quantity as number} {item.cost_unit as string}</TableCell><TableCell className="text-neutral-400 text-sm">{item.source as string}</TableCell></>
+  if (tab === 'weapons') return <><TableCell className="font-medium">{item.name as string}</TableCell><TableCell className="text-neutral-400 text-sm capitalize">{item.weapon_category as string} {item.weapon_kind as string}</TableCell><TableCell className="text-neutral-400 text-sm">{item.damage_dice as string} {(item.damage_type as string) === 'none' ? '' : item.damage_type as string}</TableCell><TableCell className="text-neutral-400 text-sm">{((item.properties as string[]) ?? []).join(', ') || '—'}</TableCell></>
+  if (tab === 'armor') return <><TableCell className="font-medium">{item.name as string}</TableCell><TableCell className="text-neutral-400 text-sm capitalize">{item.armor_category as string}</TableCell><TableCell className="text-neutral-400 text-sm">{item.base_ac as number}{item.dex_bonus_cap == null ? ' + DEX' : item.dex_bonus_cap === 0 ? '' : ` + DEX (max ${item.dex_bonus_cap as number})`}</TableCell><TableCell className="text-neutral-400 text-sm">{item.source as string}</TableCell></>
+  if (tab === 'shields') return <><TableCell className="font-medium">{item.name as string}</TableCell><TableCell className="text-neutral-400 text-sm">+{item.armor_class_bonus as number}</TableCell><TableCell className="text-neutral-400 text-sm">{item.weight_lb as number} lb</TableCell><TableCell className="text-neutral-400 text-sm">{item.source as string}</TableCell></>
+  if (tab === 'starting-equipment-packages') return <><TableCell className="font-medium">{item.name as string}</TableCell><TableCell className="text-neutral-400 text-sm">{((item.items as Array<{ item_name: string; quantity: number }> | undefined) ?? []).map((entry) => `${entry.quantity}x ${entry.item_name}`).join(', ') || '—'}</TableCell><TableCell className="text-neutral-400 text-sm">{item.source as string}</TableCell></>
   return null
 }
 
@@ -290,14 +449,16 @@ function renderTableCells(tab: string, item: ContentItem, classes: ClassRow[]) {
 interface FormProps {
   tab: string
   form: FormState
-  setField: (key: string, value: string | number | boolean | string[]) => void
+  setField: (key: string, value: FormValue) => void
   classes: ClassRow[]
   sources: SourceRow[]
   feats: FeatRow[]
+  equipmentItems: EquipmentItemRow[]
+  startingPackages: StartingEquipmentPackageRow[]
   autoFocusFirst?: boolean
 }
 
-function ContentForm({ tab, form, setField, classes, sources, feats, autoFocusFirst }: FormProps) {
+function ContentForm({ tab, form, setField, classes, sources, feats, equipmentItems, startingPackages, autoFocusFirst }: FormProps) {
   let firstFieldRendered = false
 
   const field = (label: string, key: string, type: 'text' | 'number' = 'text', placeholder?: string) => {
@@ -346,6 +507,35 @@ function ContentForm({ tab, form, setField, classes, sources, feats, autoFocusFi
     </div>
   )
 
+  const weaponItems = equipmentItems.filter((item) => item.item_category === 'weapon')
+  const armorItems = equipmentItems.filter((item) => item.item_category === 'armor')
+  const shieldItems = equipmentItems.filter((item) => item.item_category === 'shield')
+  const packageItems = (form.package_items as PackageItemFormRow[] | undefined) ?? []
+
+  function updatePackageItem(index: number, fieldName: keyof PackageItemFormRow, value: string | number) {
+    const next = packageItems.map((entry, itemIndex) => (
+      itemIndex === index ? { ...entry, [fieldName]: value } : entry
+    ))
+    setField('package_items', next)
+  }
+
+  function addPackageItem() {
+    setField('package_items', [
+      ...packageItems,
+      {
+        item_id: equipmentItems[0]?.id ?? '',
+        quantity: 1,
+        item_order: (packageItems.length + 1) * 10,
+        choice_group: '',
+        notes: '',
+      },
+    ])
+  }
+
+  function removePackageItem(index: number) {
+    setField('package_items', packageItems.filter((_, itemIndex) => itemIndex !== index))
+  }
+
   if (tab === 'backgrounds') return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-4">
@@ -363,6 +553,25 @@ function ContentForm({ tab, form, setField, classes, sources, feats, autoFocusFi
         </div>
       </div>
       {field('Languages (comma-separated)', 'languages', 'text', 'Any two languages')}
+      <div>
+        <Label className="text-neutral-400 text-xs mb-1 block">Starting Equipment Package (optional)</Label>
+        <Select
+          value={(form.starting_equipment_package_id as string) || 'none'}
+          onValueChange={value => setField('starting_equipment_package_id', value === 'none' ? '' : value)}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder="No package" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none" className="text-neutral-400">No package</SelectItem>
+            {startingPackages.map((pkg) => (
+              <SelectItem key={pkg.id} value={pkg.id} className="text-neutral-200">
+                {pkg.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
       <div>
         <Label className="text-neutral-400 text-xs mb-1 block">Feature</Label>
         <Textarea
@@ -498,6 +707,25 @@ function ContentForm({ tab, form, setField, classes, sources, feats, autoFocusFi
         {field('Skill Choices (count)', 'skill_choice_count', 'number')}
         {field('Choose From (comma-separated)', 'skill_choice_from', 'text', 'Arcana, History, Insight')}
         {field('Multiclass Prereqs', 'multiclass_prereqs', 'text', 'STR 13')}
+      </div>
+      <div>
+        <Label className="text-neutral-400 text-xs mb-1 block">Starting Equipment Package (optional)</Label>
+        <Select
+          value={(form.starting_equipment_package_id as string) || 'none'}
+          onValueChange={value => setField('starting_equipment_package_id', value === 'none' ? '' : value)}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder="No package" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none" className="text-neutral-400">No package</SelectItem>
+            {startingPackages.map((pkg) => (
+              <SelectItem key={pkg.id} value={pkg.id} className="text-neutral-200">
+                {pkg.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
       <div>
         <Label className="text-neutral-400 text-xs mb-1 block">Spellcasting Progression (JSON)</Label>
@@ -652,12 +880,226 @@ function ContentForm({ tab, form, setField, classes, sources, feats, autoFocusFi
     </div>
   )
 
+  if (tab === 'equipment-items') return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-4">
+        {field('Key', 'key', 'text', 'holy_symbol')}
+        {sourceSelect}
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        {field('Name', 'name', 'text', 'Holy Symbol')}
+        <div>
+          <Label className="text-neutral-400 text-xs mb-1 block">Category</Label>
+          <Select value={form.item_category as string} onValueChange={value => setField('item_category', value)}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {ITEM_CATEGORIES.map((category) => (
+                <SelectItem key={category} value={category} className="capitalize text-neutral-200">
+                  {category}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      <div className="grid grid-cols-3 gap-4">
+        {field('Cost Quantity', 'cost_quantity', 'number')}
+        {field('Cost Unit', 'cost_unit', 'text', 'gp')}
+        {field('Weight (lb)', 'weight_lb', 'number')}
+      </div>
+    </div>
+  )
+
+  if (tab === 'weapons') return (
+    <div className="space-y-4">
+      <div>
+        <Label className="text-neutral-400 text-xs mb-1 block">Equipment Item</Label>
+        <Select value={(form.item_id as string) || 'none'} onValueChange={value => setField('item_id', value === 'none' ? '' : value)}>
+          <SelectTrigger><SelectValue placeholder="Select weapon item" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none" className="text-neutral-400">Select weapon item</SelectItem>
+            {weaponItems.map((item) => (
+              <SelectItem key={item.id} value={item.id} className="text-neutral-200">
+                {item.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <Label className="text-neutral-400 text-xs mb-1 block">Weapon Category</Label>
+          <Select value={form.weapon_category as string} onValueChange={value => setField('weapon_category', value)}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {['simple', 'martial'].map((value) => (
+                <SelectItem key={value} value={value} className="capitalize text-neutral-200">{value}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <Label className="text-neutral-400 text-xs mb-1 block">Weapon Kind</Label>
+          <Select value={form.weapon_kind as string} onValueChange={value => setField('weapon_kind', value)}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {['melee', 'ranged'].map((value) => (
+                <SelectItem key={value} value={value} className="capitalize text-neutral-200">{value}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        {field('Damage Dice', 'damage_dice', 'text', '1d8')}
+        {field('Damage Type', 'damage_type', 'text', 'slashing')}
+      </div>
+      <div className="grid grid-cols-3 gap-4">
+        {field('Normal Range', 'normal_range', 'number')}
+        {field('Long Range', 'long_range', 'number')}
+        {field('Versatile Damage', 'versatile_damage', 'text', '1d10')}
+      </div>
+      {field('Properties (comma-separated)', 'properties', 'text', 'finesse, light')}
+    </div>
+  )
+
+  if (tab === 'armor') return (
+    <div className="space-y-4">
+      <div>
+        <Label className="text-neutral-400 text-xs mb-1 block">Equipment Item</Label>
+        <Select value={(form.item_id as string) || 'none'} onValueChange={value => setField('item_id', value === 'none' ? '' : value)}>
+          <SelectTrigger><SelectValue placeholder="Select armor item" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none" className="text-neutral-400">Select armor item</SelectItem>
+            {armorItems.map((item) => (
+              <SelectItem key={item.id} value={item.id} className="text-neutral-200">
+                {item.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <Label className="text-neutral-400 text-xs mb-1 block">Armor Category</Label>
+          <Select value={form.armor_category as string} onValueChange={value => setField('armor_category', value)}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {['light', 'medium', 'heavy'].map((value) => (
+                <SelectItem key={value} value={value} className="capitalize text-neutral-200">{value}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        {field('Base AC', 'base_ac', 'number')}
+      </div>
+      <div className="grid grid-cols-3 gap-4">
+        {field('DEX Bonus Cap (0 = none)', 'dex_bonus_cap', 'number')}
+        {field('Minimum Strength (0 = none)', 'minimum_strength', 'number')}
+        <div className="flex items-end pb-1">{check('Stealth Disadvantage', 'stealth_disadvantage')}</div>
+      </div>
+    </div>
+  )
+
+  if (tab === 'shields') return (
+    <div className="space-y-4">
+      <div>
+        <Label className="text-neutral-400 text-xs mb-1 block">Equipment Item</Label>
+        <Select value={(form.item_id as string) || 'none'} onValueChange={value => setField('item_id', value === 'none' ? '' : value)}>
+          <SelectTrigger><SelectValue placeholder="Select shield item" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none" className="text-neutral-400">Select shield item</SelectItem>
+            {shieldItems.map((item) => (
+              <SelectItem key={item.id} value={item.id} className="text-neutral-200">
+                {item.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      {field('Armor Class Bonus', 'armor_class_bonus', 'number')}
+    </div>
+  )
+
+  if (tab === 'starting-equipment-packages') return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-4">
+        {field('Key', 'key', 'text', 'class:cleric:phb')}
+        {sourceSelect}
+      </div>
+      <div className="grid grid-cols-1 gap-4">
+        {field('Name', 'name', 'text', 'Cleric Starting Equipment')}
+      </div>
+      <div>
+        <Label className="text-neutral-400 text-xs mb-1 block">Description</Label>
+        <Textarea
+          value={form.description as string}
+          onChange={e => setField('description', e.target.value)}
+          rows={3}
+        />
+      </div>
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <Label className="text-neutral-400 text-xs">Package Items</Label>
+          <Button type="button" size="sm" variant="outline" onClick={addPackageItem}>
+            Add Item
+          </Button>
+        </div>
+        {packageItems.length === 0 ? (
+          <p className="text-sm text-neutral-500">No items yet.</p>
+        ) : packageItems.map((entry, index) => (
+          <div key={`${entry.item_id}-${index}`} className="rounded-2xl border border-white/10 p-3 space-y-3">
+            <div className="grid grid-cols-1 gap-4">
+              <div>
+                <Label className="text-neutral-400 text-xs mb-1 block">Item</Label>
+                <Select value={entry.item_id || 'none'} onValueChange={value => updatePackageItem(index, 'item_id', value === 'none' ? '' : value)}>
+                  <SelectTrigger><SelectValue placeholder="Select item" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none" className="text-neutral-400">Select item</SelectItem>
+                    {equipmentItems.map((item) => (
+                      <SelectItem key={item.id} value={item.id} className="text-neutral-200">
+                        {item.name} ({item.item_category})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <Label className="text-neutral-400 text-xs mb-1 block">Quantity</Label>
+                <Input type="number" value={entry.quantity} onChange={e => updatePackageItem(index, 'quantity', Number(e.target.value))} />
+              </div>
+              <div>
+                <Label className="text-neutral-400 text-xs mb-1 block">Order</Label>
+                <Input type="number" value={entry.item_order} onChange={e => updatePackageItem(index, 'item_order', Number(e.target.value))} />
+              </div>
+              <div>
+                <Label className="text-neutral-400 text-xs mb-1 block">Choice Group</Label>
+                <Input value={entry.choice_group} onChange={e => updatePackageItem(index, 'choice_group', e.target.value)} placeholder="optional" />
+              </div>
+            </div>
+            <div className="grid grid-cols-[1fr_auto] gap-3 items-end">
+              <div>
+                <Label className="text-neutral-400 text-xs mb-1 block">Notes</Label>
+                <Input value={entry.notes} onChange={e => updatePackageItem(index, 'notes', e.target.value)} placeholder="optional" />
+              </div>
+              <Button type="button" size="sm" variant="ghost" onClick={() => removePackageItem(index)} className="text-red-400 hover:text-red-300">
+                Remove
+              </Button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+
   return null
 }
 
 // ── Main component ─────────────────────────────────────────
 
-const TABS = ['backgrounds', 'species', 'classes', 'subclasses', 'spells', 'feats', 'sources'] as const
+const TABS = ['backgrounds', 'species', 'classes', 'subclasses', 'spells', 'feats', 'sources', 'equipment-items', 'weapons', 'armor', 'shields', 'starting-equipment-packages'] as const
 type Tab = typeof TABS[number]
 
 export default function ContentAdmin() {
@@ -666,6 +1108,8 @@ export default function ContentAdmin() {
   const [classes, setClasses] = useState<ClassRow[]>([])
   const [sources, setSources] = useState<SourceRow[]>([])
   const [feats, setFeats] = useState<FeatRow[]>([])
+  const [equipmentItems, setEquipmentItems] = useState<EquipmentItemRow[]>([])
+  const [startingPackages, setStartingPackages] = useState<StartingEquipmentPackageRow[]>([])
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [form, setForm] = useState<FormState>({})
@@ -694,11 +1138,23 @@ export default function ContentAdmin() {
     fetch('/api/content/feats').then(r => r.json()).then(d => setFeats(Array.isArray(d) ? d : []))
   }, [])
 
+  const fetchEquipmentItems = useCallback(() => {
+    fetch('/api/content/equipment-items').then(r => r.json()).then(d => setEquipmentItems(Array.isArray(d) ? d : []))
+  }, [])
+
+  const fetchStartingPackages = useCallback(() => {
+    fetch('/api/content/starting-equipment-packages')
+      .then(r => r.json())
+      .then(d => setStartingPackages(Array.isArray(d) ? d : []))
+  }, [])
+
   useEffect(() => {
     fetchClasses()
     fetchSources()
     fetchFeats()
-  }, [fetchClasses, fetchSources, fetchFeats])
+    fetchEquipmentItems()
+    fetchStartingPackages()
+  }, [fetchClasses, fetchSources, fetchFeats, fetchEquipmentItems, fetchStartingPackages])
 
   useEffect(() => {
     fetchItems(activeTab)
@@ -707,7 +1163,7 @@ export default function ContentAdmin() {
     setError(null)
   }, [activeTab, fetchItems])
 
-  function setField(key: string, value: string | number | boolean | string[]) {
+  function setField(key: string, value: FormValue) {
     setForm(prev => ({ ...prev, [key]: value }))
   }
 
@@ -719,7 +1175,7 @@ export default function ContentAdmin() {
   }
 
   function startEdit(item: ContentItem) {
-    setEditingId(activeTab === 'sources' ? item.key as string : item.id as string)
+    setEditingId(getItemIdentifier(activeTab, item))
     setForm(itemToForm(activeTab, item))
     setShowForm(true)
     setError(null)
@@ -740,6 +1196,8 @@ export default function ContentAdmin() {
       if (editingId) {
         if (activeTab === 'sources') {
           payload.original_key = editingId
+        } else if (activeTab === 'weapons' || activeTab === 'armor' || activeTab === 'shields') {
+          payload.item_id = editingId
         } else {
           payload.id = editingId
         }
@@ -753,6 +1211,8 @@ export default function ContentAdmin() {
       if (activeTab === 'classes') fetchClasses()
       if (activeTab === 'sources') fetchSources()
       if (activeTab === 'feats') fetchFeats()
+      if (activeTab === 'equipment-items') fetchEquipmentItems()
+      if (activeTab === 'starting-equipment-packages') fetchStartingPackages()
       cancel()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Save failed')
@@ -763,13 +1223,15 @@ export default function ContentAdmin() {
 
   async function deleteItem(itemKey: string) {
     if (!confirm('Delete this item? This cannot be undone.')) return
-    const param = activeTab === 'sources' ? `key=${itemKey}` : `id=${itemKey}`
+    const param = getDeleteParam(activeTab, itemKey)
     const res = await fetch(`${apiUrl(activeTab)}?${param}`, { method: 'DELETE' })
     if (res.ok) {
       await fetchItems(activeTab)
       if (activeTab === 'classes') fetchClasses()
       if (activeTab === 'sources') fetchSources()
       if (activeTab === 'feats') fetchFeats()
+      if (activeTab === 'equipment-items') fetchEquipmentItems()
+      if (activeTab === 'starting-equipment-packages') fetchStartingPackages()
       if (editingId === itemKey) cancel()
     } else {
       const json = await res.json().catch(() => ({}))
@@ -784,16 +1246,18 @@ export default function ContentAdmin() {
           <h2 className="section-heading">Library Sections</h2>
           <p className="mt-1 text-sm text-neutral-500">Choose a content type to review or edit.</p>
         </div>
-        <Button size="sm" onClick={startAdd} disabled={showForm && editingId === null}>
-          Add {activeTab === 'classes' ? 'class' : activeTab.slice(0, -1)}
-        </Button>
+        {!READ_ONLY_TABS.has(activeTab) && (
+          <Button size="sm" onClick={startAdd} disabled={showForm && editingId === null}>
+            Add {tabLabel(activeTab)}
+          </Button>
+        )}
       </div>
 
       <div className="mb-4 overflow-x-auto">
         <TabsList className="h-auto rounded-2xl border border-white/10 bg-white/[0.03] p-1">
           {TABS.map(t => (
             <TabsTrigger key={t} value={t} className="capitalize text-neutral-400 data-[state=active]:bg-white/[0.08] data-[state=active]:text-neutral-100">
-              {t}
+              {t.replaceAll('-', ' ')}
             </TabsTrigger>
           ))}
         </TabsList>
@@ -804,9 +1268,19 @@ export default function ContentAdmin() {
           {showForm && activeTab === tab && (
             <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-5 space-y-4">
               <h3 className="text-base font-semibold text-neutral-100">
-                {editingId ? 'Edit' : 'Add'} {tab === 'classes' ? 'class' : tab.slice(0, -1)}
+                {editingId ? 'Edit' : 'Add'} {tabLabel(tab)}
               </h3>
-              <ContentForm tab={tab} form={form} setField={setField} classes={classes} sources={sources} feats={feats} autoFocusFirst={!editingId} />
+              <ContentForm
+                tab={tab}
+                form={form}
+                setField={setField}
+                classes={classes}
+                sources={sources}
+                feats={feats}
+                equipmentItems={equipmentItems}
+                startingPackages={startingPackages}
+                autoFocusFirst={!editingId}
+              />
               {error && <p className="text-sm text-red-400">{error}</p>}
               <div className="flex gap-2">
                 <Button size="sm" onClick={save} disabled={saving}>
@@ -827,25 +1301,27 @@ export default function ContentAdmin() {
                 <TableHeader>
                   <TableRow className="hover:bg-transparent">
                     {renderTableHead(tab)}
-                    <TableHead className="w-24" />
+                    {!READ_ONLY_TABS.has(tab) && <TableHead className="w-24" />}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {items.map(item => {
-                    const itemKey = tab === 'sources' ? item.key as string : item.id as string
+                    const itemKey = getItemIdentifier(tab, item)
                     return (
                       <TableRow key={itemKey}>
                         {renderTableCells(tab, item, classes)}
-                        <TableCell>
-                          <div className="flex gap-1 justify-end">
-                            <Button size="sm" variant="ghost" onClick={() => startEdit(item)} className="h-7 px-2 text-xs">
-                              Edit
-                            </Button>
-                            <Button size="sm" variant="ghost" onClick={() => deleteItem(itemKey)} className="h-7 px-2 text-xs text-red-400 hover:text-red-300">
-                              Delete
-                            </Button>
-                          </div>
-                        </TableCell>
+                        {!READ_ONLY_TABS.has(tab) && (
+                          <TableCell>
+                            <div className="flex gap-1 justify-end">
+                              <Button size="sm" variant="ghost" onClick={() => startEdit(item)} className="h-7 px-2 text-xs">
+                                Edit
+                              </Button>
+                              <Button size="sm" variant="ghost" onClick={() => deleteItem(itemKey)} className="h-7 px-2 text-xs text-red-400 hover:text-red-300">
+                                Delete
+                              </Button>
+                            </div>
+                          </TableCell>
+                        )}
                       </TableRow>
                     )
                   })}

@@ -164,6 +164,7 @@ export type Class = {
   skill_choices: SkillChoices
   multiclass_prereqs: MulticlassPrereq[]
   multiclass_proficiencies: Record<string, unknown>
+  starting_equipment_package_id?: string | null
   spellcasting_type: SpellcastingType | null
   spellcasting_progression: SpellcastingProgression | null
   subclass_choice_level: number
@@ -267,8 +268,113 @@ export type Background = {
   tool_proficiencies: string[]
   languages: string[]
   starting_equipment: StartingEquipmentItem[]
+  starting_equipment_package_id?: string | null
   feature: string
   background_feat_id: string | null
+  source: string
+  amended: boolean
+  amendment_note: string | null
+}
+
+export type Language = {
+  key: string
+  name: string
+  sort_order: number
+  source: string
+  amended: boolean
+  amendment_note: string | null
+}
+
+export type Tool = {
+  key: string
+  name: string
+  sort_order: number
+  source: string
+  amended: boolean
+  amendment_note: string | null
+}
+
+export type EquipmentItem = {
+  id: string
+  key: string
+  name: string
+  item_category: string
+  cost_quantity: number
+  cost_unit: string
+  weight_lb: number | null
+  source: string
+  amended: boolean
+  amendment_note: string | null
+}
+
+export type Weapon = {
+  item_id: string
+  weapon_category: string
+  weapon_kind: string
+  damage_dice: string
+  damage_type: string
+  properties: string[]
+  normal_range: number | null
+  long_range: number | null
+  versatile_damage: string | null
+}
+
+export type Armor = {
+  item_id: string
+  armor_category: string
+  base_ac: number
+  dex_bonus_cap: number | null
+  minimum_strength: number | null
+  stealth_disadvantage: boolean
+}
+
+export type Shield = {
+  item_id: string
+  armor_class_bonus: number
+}
+
+export type StartingEquipmentPackage = {
+  id: string
+  key: string
+  name: string
+  description: string
+  source: string
+  amended: boolean
+  amendment_note: string | null
+}
+
+export type StartingEquipmentPackageItem = {
+  id: string
+  package_id: string
+  item_id: string
+  quantity: number
+  item_order: number
+  choice_group: string
+  notes: string | null
+}
+
+export type FeatureOptionGroup = {
+  key: string
+  name: string
+  option_family: string
+  description: string
+  selection_limit: number
+  allows_duplicate_selections: boolean
+  metadata: Record<string, unknown>
+  source: string
+  amended: boolean
+  amendment_note: string | null
+}
+
+export type FeatureOption = {
+  id: string
+  group_key: string
+  key: string
+  name: string
+  description: string
+  option_order: number
+  prerequisites: Record<string, unknown>
+  effects: Record<string, unknown>
   source: string
   amended: boolean
   amendment_note: string | null
@@ -368,6 +474,7 @@ export type CharacterFeatChoice = {
 export type CharacterLanguageChoice = {
   character_id: string
   language: string
+  language_key: string | null
   character_level_id: string | null
   source_category: string
   source_entity_id: string | null
@@ -378,6 +485,7 @@ export type CharacterLanguageChoice = {
 export type CharacterToolChoice = {
   character_id: string
   tool: string
+  tool_key: string | null
   character_level_id: string | null
   source_category: string
   source_entity_id: string | null
@@ -422,6 +530,19 @@ export type CharacterFeatureOptionChoice = {
   created_at: string
 }
 
+export type CharacterEquipmentItem = {
+  id: string
+  character_id: string
+  item_id: string
+  quantity: number
+  equipped: boolean
+  source_package_item_id: string | null
+  source_category: string
+  source_entity_id: string | null
+  notes: string | null
+  created_at: string
+}
+
 export type AuditLog = {
   id: string
   actor_user_id: string | null
@@ -460,6 +581,16 @@ export type Database = {
       spells: { Row: Spell; Insert: Omit<Spell, 'id'>; Update: Partial<Omit<Spell, 'id'>>; Relationships: R }
       feats: { Row: Feat; Insert: Omit<Feat, 'id'>; Update: Partial<Omit<Feat, 'id'>>; Relationships: R }
       backgrounds: { Row: Background; Insert: Omit<Background, 'id'>; Update: Partial<Omit<Background, 'id'>>; Relationships: R }
+      languages: { Row: Language; Insert: Omit<Language, 'amended' | 'amendment_note'> & { amended?: boolean; amendment_note?: string | null }; Update: Partial<Omit<Language, 'key'>>; Relationships: R }
+      tools: { Row: Tool; Insert: Omit<Tool, 'amended' | 'amendment_note'> & { amended?: boolean; amendment_note?: string | null }; Update: Partial<Omit<Tool, 'key'>>; Relationships: R }
+      equipment_items: { Row: EquipmentItem; Insert: Omit<EquipmentItem, 'id' | 'amended' | 'amendment_note'> & { amended?: boolean; amendment_note?: string | null }; Update: Partial<Omit<EquipmentItem, 'id'>>; Relationships: R }
+      weapons: { Row: Weapon; Insert: Weapon; Update: Partial<Weapon>; Relationships: R }
+      armor: { Row: Armor; Insert: Armor; Update: Partial<Armor>; Relationships: R }
+      shields: { Row: Shield; Insert: Shield; Update: Partial<Shield>; Relationships: R }
+      starting_equipment_packages: { Row: StartingEquipmentPackage; Insert: Omit<StartingEquipmentPackage, 'id' | 'amended' | 'amendment_note'> & { amended?: boolean; amendment_note?: string | null }; Update: Partial<Omit<StartingEquipmentPackage, 'id'>>; Relationships: R }
+      starting_equipment_package_items: { Row: StartingEquipmentPackageItem; Insert: Omit<StartingEquipmentPackageItem, 'id'>; Update: Partial<Omit<StartingEquipmentPackageItem, 'id'>>; Relationships: R }
+      feature_option_groups: { Row: FeatureOptionGroup; Insert: Omit<FeatureOptionGroup, 'amended' | 'amendment_note'> & { amended?: boolean; amendment_note?: string | null }; Update: Partial<Omit<FeatureOptionGroup, 'key'>>; Relationships: R }
+      feature_options: { Row: FeatureOption; Insert: Omit<FeatureOption, 'id' | 'amended' | 'amendment_note'> & { amended?: boolean; amendment_note?: string | null }; Update: Partial<Omit<FeatureOption, 'id'>>; Relationships: R }
       characters: { Row: Character; Insert: { user_id: string; campaign_id: string; name: string; character_type?: CharacterType; stat_method?: StatMethod; status?: CharacterStatus; species_id?: string | null; background_id?: string | null; alignment?: Alignment | null; experience_points?: number; base_str?: number; base_dex?: number; base_con?: number; base_int?: number; base_wis?: number; base_cha?: number; hp_max?: number; dm_notes?: string | null }; Update: Partial<Omit<Character, 'id' | 'created_at'>>; Relationships: R }
       character_levels: { Row: CharacterLevel; Insert: Omit<CharacterLevel, 'id' | 'taken_at'>; Update: Partial<Omit<CharacterLevel, 'id'>>; Relationships: R }
       character_stat_rolls: { Row: CharacterStatRoll; Insert: Omit<CharacterStatRoll, 'id' | 'rolled_at'>; Update: Partial<Omit<CharacterStatRoll, 'id'>>; Relationships: R }
@@ -472,6 +603,7 @@ export type Database = {
       character_ability_bonus_choices: { Row: CharacterAbilityBonusChoice; Insert: Omit<CharacterAbilityBonusChoice, 'id' | 'created_at'>; Update: Partial<Omit<CharacterAbilityBonusChoice, 'id' | 'created_at'>>; Relationships: R }
       character_asi_choices: { Row: CharacterAsiChoice; Insert: Omit<CharacterAsiChoice, 'id' | 'created_at'>; Update: Partial<Omit<CharacterAsiChoice, 'id' | 'created_at'>>; Relationships: R }
       character_feature_option_choices: { Row: CharacterFeatureOptionChoice; Insert: Omit<CharacterFeatureOptionChoice, 'id' | 'created_at'>; Update: Partial<Omit<CharacterFeatureOptionChoice, 'id' | 'created_at'>>; Relationships: R }
+      character_equipment_items: { Row: CharacterEquipmentItem; Insert: Omit<CharacterEquipmentItem, 'id' | 'created_at'>; Update: Partial<Omit<CharacterEquipmentItem, 'id' | 'created_at'>>; Relationships: R }
       character_skill_proficiencies: { Row: CharacterSkillProficiency; Insert: CharacterSkillProficiency; Update: Partial<CharacterSkillProficiency>; Relationships: R }
       audit_logs: { Row: AuditLog; Insert: Omit<AuditLog, 'id' | 'created_at'> & { details?: Record<string, unknown>; succeeded?: boolean }; Update: Partial<Omit<AuditLog, 'id' | 'created_at'>>; Relationships: R }
     }

@@ -1,7 +1,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
+  replaceCharacterEquipmentItems,
   replaceCharacterFeatureOptionChoices,
+  type EquipmentItemChoiceInput,
   type FeatureOptionChoiceInput,
 } from '@/lib/characters/choice-persistence'
 
@@ -93,4 +95,42 @@ test('replaceCharacterFeatureOptionChoices skips blank option keys after clearin
     value: 'character-2',
   }])
   assert.deepEqual(supabase.inserted, [])
+})
+
+test('replaceCharacterEquipmentItems rewrites typed equipment rows with defaults', async () => {
+  const supabase = createSupabaseMock()
+  const items: EquipmentItemChoiceInput[] = [{
+    item_id: 'item-1',
+    quantity: 2,
+    equipped: true,
+    source_category: 'package',
+    source_entity_id: 'pkg-1',
+    notes: 'two torches',
+  }]
+
+  const error = await replaceCharacterEquipmentItems(
+    supabase.client as never,
+    'character-3',
+    items
+  )
+
+  assert.equal(error, null)
+  assert.deepEqual(supabase.deleted, [{
+    table: 'character_equipment_items',
+    column: 'character_id',
+    value: 'character-3',
+  }])
+  assert.deepEqual(supabase.inserted, [{
+    table: 'character_equipment_items',
+    rows: [{
+      character_id: 'character-3',
+      item_id: 'item-1',
+      quantity: 2,
+      equipped: true,
+      source_package_item_id: null,
+      source_category: 'package',
+      source_entity_id: 'pkg-1',
+      notes: 'two torches',
+    }],
+  }])
 })

@@ -1,10 +1,11 @@
 'use client'
 
 import { Checkbox } from '@/components/ui/checkbox'
-import type { Background, Species } from '@/lib/types/database'
+import type { Background, Language, Species, Tool } from '@/lib/types/database'
 import {
   getAvailableLanguageChoices,
   getAvailableToolChoices,
+  getAvailableToolChoicesFromCatalog,
   getFixedBackgroundLanguages,
   getLanguageChoiceLimit,
   getToolChoiceLimit,
@@ -13,6 +14,8 @@ import {
 type LanguagesToolsCardProps = {
   species: Species | null
   background: Background | null
+  availableLanguages?: Language[]
+  availableTools?: Tool[]
   languageChoices: string[]
   toolChoices: string[]
   canEdit: boolean
@@ -36,6 +39,8 @@ function toggleChoice(current: string[], value: string, enabled: boolean, limit:
 export function LanguagesToolsCard({
   species,
   background,
+  availableLanguages,
+  availableTools,
   languageChoices,
   toolChoices,
   canEdit,
@@ -47,16 +52,35 @@ export function LanguagesToolsCard({
     ...getFixedBackgroundLanguages(background),
   ]))
   const fixedTools = Array.from(new Set(background?.tool_proficiencies ?? []))
-  const availableLanguages = getAvailableLanguageChoices(background, species)
-  const availableTools = getAvailableToolChoices(species)
+  const configuredLanguageOptions = getAvailableLanguageChoices(
+    background,
+    species,
+    availableLanguages && availableLanguages.length > 0
+      ? availableLanguages.map((language) => language.name)
+      : undefined
+  )
+  const languageOptions = Array.from(new Set([
+    ...configuredLanguageOptions,
+    ...languageChoices,
+  ]))
+  const configuredToolOptions = getAvailableToolChoicesFromCatalog(
+    species,
+    availableTools && availableTools.length > 0
+      ? availableTools.map((tool) => tool.name)
+      : undefined
+  )
+  const toolOptions = Array.from(new Set([
+    ...configuredToolOptions,
+    ...toolChoices,
+  ]))
   const languageLimit = getLanguageChoiceLimit(background, species)
   const toolLimit = getToolChoiceLimit(species)
 
   if (
     fixedLanguages.length === 0 &&
     fixedTools.length === 0 &&
-    availableLanguages.length === 0 &&
-    availableTools.length === 0
+    languageOptions.length === 0 &&
+    toolOptions.length === 0
   ) {
     return null
   }
@@ -77,13 +101,13 @@ export function LanguagesToolsCard({
         </div>
       )}
 
-      {availableLanguages.length > 0 && (
+      {languageOptions.length > 0 && (
         <div className="space-y-3">
           <p className="text-sm font-medium text-neutral-200">
             Chosen languages ({languageChoices.length}/{languageLimit})
           </p>
           <div className="grid gap-2 sm:grid-cols-2">
-            {availableLanguages.map((language) => (
+            {languageOptions.map((language) => (
               <label
                 key={language}
                 className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2 text-sm text-neutral-300"
@@ -109,13 +133,13 @@ export function LanguagesToolsCard({
         </div>
       )}
 
-      {availableTools.length > 0 && (
+      {toolOptions.length > 0 && (
         <div className="space-y-3">
           <p className="text-sm font-medium text-neutral-200">
             Chosen tool proficiencies ({toolChoices.length}/{toolLimit})
           </p>
           <div className="grid gap-2 sm:grid-cols-2">
-            {availableTools.map((tool) => (
+            {toolOptions.map((tool) => (
               <label
                 key={tool}
                 className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2 text-sm text-neutral-300"

@@ -1,10 +1,12 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import type { Class, Campaign, Species } from '@/lib/types/database'
+import type { Class, Campaign, FeatureOption, Species } from '@/lib/types/database'
 import { deriveLocalCharacter, buildLocalCharacterContext, type ClassDetail } from '@/lib/characters/wizard-helpers'
 import {
   getMaverickArcaneBreakthroughOptionDefinitions,
   getMaverickFeatureSpellChoiceDefinitions,
+  getSelectedMaverickBreakthroughClassIds,
+  mergeFeatureOptionChoiceInputs,
 } from '@/lib/characters/feature-grants'
 
 const campaign: Campaign = {
@@ -80,14 +82,56 @@ test('Maverick Arcane Breakthrough exposes the expected option and spell definit
       amendment_note: null,
     },
   ]
+  const maverickOptions: FeatureOption[] = [
+    {
+      id: 'opt-wizard',
+      group_key: 'maverick:arcane_breakthrough_classes',
+      key: 'wizard',
+      name: 'Wizard',
+      description: '',
+      option_order: 80,
+      prerequisites: {},
+      effects: { class_id: 'wizard' },
+      source: 'EE',
+      amended: false,
+      amendment_note: null,
+    },
+    {
+      id: 'opt-cleric',
+      group_key: 'maverick:arcane_breakthrough_classes',
+      key: 'cleric',
+      name: 'Cleric',
+      description: '',
+      option_order: 20,
+      prerequisites: {},
+      effects: { class_id: 'cleric' },
+      source: 'EE',
+      amended: false,
+      amendment_note: null,
+    },
+    {
+      id: 'opt-bard',
+      group_key: 'maverick:arcane_breakthrough_classes',
+      key: 'bard',
+      name: 'Bard',
+      description: '',
+      option_order: 10,
+      prerequisites: {},
+      effects: { class_id: 'bard' },
+      source: 'EE',
+      amended: false,
+      amendment_note: null,
+    },
+  ]
 
   const optionDefinitions = getMaverickArcaneBreakthroughOptionDefinitions({
     classLevel: 9,
     subclassId: 'maverick-subclass',
-    classList,
+    optionRows: maverickOptions,
   })
   assert.equal(optionDefinitions.length, 3)
   assert.deepEqual(optionDefinitions.map((definition) => definition.optionKey), ['class_3', 'class_5', 'class_9'])
+  assert.deepEqual(optionDefinitions[0].choices.map((choice) => choice.label), ['Bard', 'Cleric', 'Wizard'])
 
   const spellDefinitions = getMaverickFeatureSpellChoiceDefinitions({
     classLevel: 9,
@@ -129,6 +173,69 @@ test('Maverick Arcane Breakthrough exposes the expected option and spell definit
       },
     ]
   )
+})
+
+test('legacy Maverick feature option rows still read back into selected class ids', () => {
+  const selected = getSelectedMaverickBreakthroughClassIds([
+    {
+      option_group_key: 'maverick:breakthrough:5',
+      option_key: 'wizard',
+      selected_value: {},
+    },
+    {
+      option_group_key: 'maverick:breakthrough:3',
+      option_key: 'cleric',
+      selected_value: {},
+    },
+  ])
+
+  assert.deepEqual(selected, ['cleric', 'wizard'])
+})
+
+test('mergeFeatureOptionChoiceInputs preserves unrelated feature options while replacing the active definition set', () => {
+  const merged = mergeFeatureOptionChoiceInputs({
+    preservedChoices: [
+      {
+        option_group_key: 'fighting_style:paladin:2014',
+        option_key: 'paladin:style',
+        selected_value: { feature_option_key: 'defense' },
+      },
+      {
+        option_group_key: 'fighting_style:fighter:2014',
+        option_key: 'fighter:style',
+        selected_value: { feature_option_key: 'archery' },
+      },
+    ],
+    replacementDefinitions: [{
+      optionGroupKey: 'fighting_style:fighter:2014',
+      optionKey: 'fighter:style',
+      label: 'Fighting Style',
+      choiceOrder: 0,
+      choices: [],
+      sourceCategory: 'class_feature',
+      sourceEntityId: 'fighter',
+      sourceFeatureKey: 'class_feature:fighting_style:fighter',
+      valueKey: 'feature_option_key',
+    }],
+    replacements: [{
+      option_group_key: 'fighting_style:fighter:2014',
+      option_key: 'fighter:style',
+      selected_value: { feature_option_key: 'dueling' },
+    }],
+  })
+
+  assert.deepEqual(merged, [
+    {
+      option_group_key: 'fighting_style:paladin:2014',
+      option_key: 'paladin:style',
+      selected_value: { feature_option_key: 'defense' },
+    },
+    {
+      option_group_key: 'fighting_style:fighter:2014',
+      option_key: 'fighter:style',
+      selected_value: { feature_option_key: 'dueling' },
+    },
+  ])
 })
 
 test('static dragonmark trait grants become free derived spells when the spell exists locally', () => {

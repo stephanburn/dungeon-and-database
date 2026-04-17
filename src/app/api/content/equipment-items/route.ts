@@ -1,8 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
-import { requireAuth, requireAdmin, jsonError, readJsonBody } from '@/lib/api-helpers'
-import { getAllowedSources } from '@/lib/content-helpers'
+import { requireAdmin, requireAuth, jsonError, readJsonBody } from '@/lib/api-helpers'
+import { listEquipmentItems } from '@/lib/content/equipment-content'
 import { writeAuditLog } from '@/lib/server/audit'
-import type { StartingEquipmentItem } from '@/lib/types/database'
 
 export async function GET(request: NextRequest) {
   const auth = await requireAuth()
@@ -10,41 +9,33 @@ export async function GET(request: NextRequest) {
   const { supabase } = auth
 
   const campaignId = request.nextUrl.searchParams.get('campaign_id')
-  const allowedSources = await getAllowedSources(supabase, campaignId)
-
-  let query = supabase.from('backgrounds').select('*').order('name')
-  if (allowedSources) {
-    query = query.in('source', Array.from(allowedSources))
-  }
-
-  const { data, error } = await query
+  const { data, error } = await listEquipmentItems(supabase, { campaignId })
   if (error) return jsonError(error.message, 500)
+
   return NextResponse.json(data)
 }
 
 export async function POST(request: NextRequest) {
   const auth = await requireAdmin()
   if (auth instanceof NextResponse) return auth
-  const { user, supabase } = auth
+  const { supabase, user } = auth
 
   const bodyResult = await readJsonBody<Record<string, unknown>>(request)
   if ('response' in bodyResult) return bodyResult.response
   const body = bodyResult.data
-  if (!body.name || !body.source) return jsonError('name and source are required', 400)
+  if (!body.key || !body.name || !body.item_category || !body.source) {
+    return jsonError('key, name, item_category, and source are required', 400)
+  }
 
   const { data, error } = await supabase
-    .from('backgrounds')
+    .from('equipment_items')
     .insert({
+      key: body.key as string,
       name: body.name as string,
-      skill_proficiencies: (body.skill_proficiencies as string[] | undefined) ?? [],
-      skill_choice_count: (body.skill_choice_count as number | undefined) ?? 0,
-      skill_choice_from: (body.skill_choice_from as string[] | undefined) ?? [],
-      tool_proficiencies: (body.tool_proficiencies as string[] | undefined) ?? [],
-      languages: (body.languages as string[] | undefined) ?? [],
-      starting_equipment: (body.starting_equipment as StartingEquipmentItem[] | undefined) ?? [],
-      starting_equipment_package_id: (body.starting_equipment_package_id as string | null | undefined) ?? null,
-      feature: (body.feature as string | undefined) ?? '',
-      background_feat_id: (body.background_feat_id as string | null | undefined) || null,
+      item_category: body.item_category as string,
+      cost_quantity: Number(body.cost_quantity ?? 0),
+      cost_unit: (body.cost_unit as string | undefined) ?? 'gp',
+      weight_lb: body.weight_lb == null || body.weight_lb === '' ? null : Number(body.weight_lb),
       source: body.source as string,
       amended: false,
       amendment_note: null,
@@ -55,10 +46,10 @@ export async function POST(request: NextRequest) {
   if (error) return jsonError(error.message, 500)
   await writeAuditLog({
     actorUserId: user.id,
-    action: 'content.background_created',
-    targetTable: 'backgrounds',
+    action: 'content.equipment_item_created',
+    targetTable: 'equipment_items',
     targetId: data.id,
-    details: { name: data.name, source: data.source },
+    details: { key: data.key, name: data.name, source: data.source },
   })
   return NextResponse.json(data, { status: 201 })
 }
@@ -66,7 +57,7 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   const auth = await requireAdmin()
   if (auth instanceof NextResponse) return auth
-  const { user, supabase } = auth
+  const { supabase, user } = auth
 
   const bodyResult = await readJsonBody<Record<string, unknown>>(request)
   if ('response' in bodyResult) return bodyResult.response
@@ -74,9 +65,14 @@ export async function PUT(request: NextRequest) {
   if (!body.id) return jsonError('id is required', 400)
 
   const id = body.id as string
-  const fields = Object.fromEntries(Object.entries(body).filter(([key]) => key !== 'id'))
+  const fields = {
+    ...Object.fromEntries(Object.entries(body).filter(([key]) => key !== 'id')),
+    weight_lb: body.weight_lb == null || body.weight_lb === '' ? null : Number(body.weight_lb),
+    cost_quantity: body.cost_quantity == null ? undefined : Number(body.cost_quantity),
+  }
+
   const { data, error } = await supabase
-    .from('backgrounds')
+    .from('equipment_items')
     .update(fields)
     .eq('id', id)
     .select()
@@ -85,8 +81,8 @@ export async function PUT(request: NextRequest) {
   if (error) return jsonError(error.message, 500)
   await writeAuditLog({
     actorUserId: user.id,
-    action: 'content.background_updated',
-    targetTable: 'backgrounds',
+    action: 'content.equipment_item_updated',
+    targetTable: 'equipment_items',
     targetId: id,
     details: { id },
   })
@@ -96,17 +92,17 @@ export async function PUT(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   const auth = await requireAdmin()
   if (auth instanceof NextResponse) return auth
-  const { user, supabase } = auth
+  const { supabase, user } = auth
 
   const id = request.nextUrl.searchParams.get('id')
   if (!id) return jsonError('id is required', 400)
 
-  const { error } = await supabase.from('backgrounds').delete().eq('id', id)
+  const { error } = await supabase.from('equipment_items').delete().eq('id', id)
   if (error) return jsonError(error.message, 500)
   await writeAuditLog({
     actorUserId: user.id,
-    action: 'content.background_deleted',
-    targetTable: 'backgrounds',
+    action: 'content.equipment_item_deleted',
+    targetTable: 'equipment_items',
     targetId: id,
     details: { id },
   })

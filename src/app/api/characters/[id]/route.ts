@@ -9,6 +9,7 @@ import {
   replaceCharacterAsiChoices,
   replaceCharacterFeatChoices,
   replaceCharacterFeatureOptionChoices,
+  replaceCharacterEquipmentItems,
   replaceCharacterLanguageChoices,
   replaceCharacterSkillProficiencies,
   replaceCharacterSpellSelections,
@@ -17,6 +18,7 @@ import {
   type AsiChoiceInput,
   type FeatChoiceInput,
   type FeatureOptionChoiceInput,
+  type EquipmentItemChoiceInput,
   type LanguageChoiceInput,
   type SkillProficiencyInput,
   type SpellChoiceInput,
@@ -64,6 +66,7 @@ const languageChoiceSchema = z.union([
   z.string().min(1),
   z.object({
     language: z.string().min(1),
+    language_key: z.string().min(1).nullable().optional(),
     character_level_id: z.string().uuid().nullable().optional(),
     source_category: z.string().min(1).optional(),
     source_entity_id: z.string().uuid().nullable().optional(),
@@ -75,6 +78,7 @@ const toolChoiceSchema = z.union([
   z.string().min(1),
   z.object({
     tool: z.string().min(1),
+    tool_key: z.string().min(1).nullable().optional(),
     character_level_id: z.string().uuid().nullable().optional(),
     source_category: z.string().min(1).optional(),
     source_entity_id: z.string().uuid().nullable().optional(),
@@ -110,6 +114,16 @@ const featureOptionChoiceSchema = z.object({
   source_feature_key: z.string().nullable().optional(),
 })
 
+const equipmentItemSchema = z.object({
+  item_id: z.string().uuid(),
+  quantity: z.number().int().min(1).optional(),
+  equipped: z.boolean().optional(),
+  source_package_item_id: z.string().uuid().nullable().optional(),
+  source_category: z.string().min(1).optional(),
+  source_entity_id: z.string().uuid().nullable().optional(),
+  notes: z.string().nullable().optional(),
+})
+
 const updateCharacterSchema = z.object({
   name: z.string().min(1).max(100).optional(),
   species_id: z.string().uuid().nullable().optional(),
@@ -131,6 +145,7 @@ const updateCharacterSchema = z.object({
   ability_bonus_choices: z.array(abilityBonusChoiceSchema).optional(),
   asi_choices: z.array(asiChoiceSchema).optional(),
   feature_option_choices: z.array(featureOptionChoiceSchema).optional(),
+  equipment_items: z.array(equipmentItemSchema).optional(),
   language_choices: z.array(languageChoiceSchema).optional(),
   tool_choices: z.array(toolChoiceSchema).optional(),
   // Spell choices: full replacement of the character's typed spell selections
@@ -173,6 +188,7 @@ export async function GET(
     spell_selections: loadedState.initialSpellSelections,
     feat_choices: loadedState.initialFeatChoices,
     feature_option_choices: loadedState.initialFeatureOptionChoices,
+    equipment_items: loadedState.initialEquipmentItems,
     legality: loadedState.legality,
     derived: loadedState.legality?.derived ?? null,
   })
@@ -204,7 +220,7 @@ export async function PUT(
   const parsed = updateCharacterSchema.safeParse(body)
   if (!parsed.success) return jsonError(parsed.error.message, 400)
 
-  const { levels, stat_rolls, skill_proficiencies, ability_bonus_choices, asi_choices, feature_option_choices, language_choices, tool_choices, spell_choices, feat_choices, character_type, dm_notes, ...characterFields } = parsed.data
+  const { levels, stat_rolls, skill_proficiencies, ability_bonus_choices, asi_choices, feature_option_choices, equipment_items, language_choices, tool_choices, spell_choices, feat_choices, character_type, dm_notes, ...characterFields } = parsed.data
 
   // DM-only fields
   if (hasDmAccess(profile.role)) {
@@ -300,6 +316,15 @@ export async function PUT(
       supabase,
       params.id,
       feature_option_choices as FeatureOptionChoiceInput[]
+    )
+    if (error) return jsonError(error.message, 500)
+  }
+
+  if (equipment_items !== undefined) {
+    const error = await replaceCharacterEquipmentItems(
+      supabase,
+      params.id,
+      equipment_items as EquipmentItemChoiceInput[]
     )
     if (error) return jsonError(error.message, 500)
   }

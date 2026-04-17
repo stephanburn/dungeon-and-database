@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { requireAuth, requireAdmin, jsonError, readJsonBody } from '@/lib/api-helpers'
 import { getAllowedSources } from '@/lib/content-helpers'
-import { MAVERICK_BREAKTHROUGH_SOURCE_FEATURE_KEY } from '@/lib/characters/maverick'
+import { MAVERICK_ARCANE_BREAKTHROUGH_SOURCE_KEY } from '@/lib/characters/feature-grants'
 import { writeAuditLog } from '@/lib/server/audit'
 import type { SpellComponents } from '@/lib/types/database'
 
@@ -82,7 +82,7 @@ export async function GET(request: NextRequest) {
           : []),
       ],
       source_feature_key: breakthroughOnly && spell.level > 0
-        ? MAVERICK_BREAKTHROUGH_SOURCE_FEATURE_KEY
+        ? MAVERICK_ARCANE_BREAKTHROUGH_SOURCE_KEY
         : null,
     }
   })

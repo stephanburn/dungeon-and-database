@@ -47,6 +47,7 @@ export async function POST(request: NextRequest) {
       skill_choices: (body.skill_choices as SkillChoices | undefined) ?? { count: 0, from: [] },
       multiclass_prereqs: (body.multiclass_prereqs as MulticlassPrereq[] | undefined) ?? [],
       multiclass_proficiencies: (body.multiclass_proficiencies as Record<string, unknown> | undefined) ?? {},
+      starting_equipment_package_id: (body.starting_equipment_package_id as string | null | undefined) ?? null,
       spellcasting_type: (body.spellcasting_type as SpellcastingType | null | undefined) ?? null,
       spellcasting_progression: (body.spellcasting_progression as SpellcastingProgression | undefined) ?? { mode: 'none' },
       subclass_choice_level: (body.subclass_choice_level as number | undefined) ?? 3,

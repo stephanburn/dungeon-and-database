@@ -9,12 +9,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import type { Class } from '@/lib/types/database'
 import { getUnlockedMaverickBreakthroughSlots } from '@/lib/characters/maverick'
 
 type MaverickBreakthroughCardProps = {
   classLevel: number
-  availableClasses: Class[]
+  availableChoices: Array<{
+    value: string
+    label: string
+  }>
   selectedClassIds: string[]
   canEdit: boolean
   onChange: (classIds: string[]) => void
@@ -22,7 +24,7 @@ type MaverickBreakthroughCardProps = {
 
 export function MaverickBreakthroughCard({
   classLevel,
-  availableClasses,
+  availableChoices,
   selectedClassIds,
   canEdit,
   onChange,
@@ -58,16 +60,16 @@ export function MaverickBreakthroughCard({
                   <SelectValue placeholder="Choose class" />
                 </SelectTrigger>
                 <SelectContent>
-                  {availableClasses.map((entry) => {
-                    const chosenElsewhere = selectedClassIds.some((classId, classIndex) => classIndex !== index && classId === entry.id)
+                  {availableChoices.map((entry) => {
+                    const chosenElsewhere = selectedClassIds.some((classId, classIndex) => classIndex !== index && classId === entry.value)
                     return (
                       <SelectItem
-                        key={entry.id}
-                        value={entry.id}
+                        key={entry.value}
+                        value={entry.value}
                         disabled={chosenElsewhere}
                         className="text-neutral-200"
                       >
-                        {entry.name}
+                        {entry.label}
                       </SelectItem>
                     )
                   })}

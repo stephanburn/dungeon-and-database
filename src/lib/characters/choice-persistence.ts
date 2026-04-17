@@ -1,4 +1,6 @@
 import type { Database } from '@/lib/types/database'
+import { buildLanguageKeyByNameMap, normalizeLanguageName } from '@/lib/content/language-content'
+import { buildToolKeyByNameMap, normalizeToolName } from '@/lib/content/tool-content'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 export type SpellChoiceInput =
@@ -37,6 +39,7 @@ export type LanguageChoiceInput =
   | string
   | {
       language: string
+      language_key?: string | null
       character_level_id?: string | null
       source_category?: string
       source_entity_id?: string | null
@@ -47,6 +50,7 @@ export type ToolChoiceInput =
   | string
   | {
       tool: string
+      tool_key?: string | null
       character_level_id?: string | null
       source_category?: string
       source_entity_id?: string | null
@@ -80,6 +84,16 @@ export type FeatureOptionChoiceInput = {
   source_category?: string
   source_entity_id?: string | null
   source_feature_key?: string | null
+}
+
+export type EquipmentItemChoiceInput = {
+  item_id: string
+  quantity?: number
+  equipped?: boolean
+  source_package_item_id?: string | null
+  source_category?: string
+  source_entity_id?: string | null
+  notes?: string | null
 }
 
 function normalizeSpellChoice(choice: SpellChoiceInput) {
@@ -150,6 +164,7 @@ function normalizeLanguageChoice(choice: LanguageChoiceInput) {
   if (typeof choice === 'string') {
     return {
       language: choice,
+      language_key: null,
       character_level_id: null,
       source_category: 'manual',
       source_entity_id: null,
@@ -159,6 +174,7 @@ function normalizeLanguageChoice(choice: LanguageChoiceInput) {
 
   return {
     language: choice.language,
+    language_key: choice.language_key ?? null,
     character_level_id: choice.character_level_id ?? null,
     source_category: choice.source_category ?? 'manual',
     source_entity_id: choice.source_entity_id ?? null,
@@ -170,6 +186,7 @@ function normalizeToolChoice(choice: ToolChoiceInput) {
   if (typeof choice === 'string') {
     return {
       tool: choice,
+      tool_key: null,
       character_level_id: null,
       source_category: 'manual',
       source_entity_id: null,
@@ -179,6 +196,7 @@ function normalizeToolChoice(choice: ToolChoiceInput) {
 
   return {
     tool: choice.tool,
+    tool_key: choice.tool_key ?? null,
     character_level_id: choice.character_level_id ?? null,
     source_category: choice.source_category ?? 'manual',
     source_entity_id: choice.source_entity_id ?? null,
@@ -217,6 +235,18 @@ function normalizeFeatureOptionChoice(choice: FeatureOptionChoiceInput) {
     source_category: choice.source_category ?? 'feature',
     source_entity_id: choice.source_entity_id ?? null,
     source_feature_key: choice.source_feature_key ?? null,
+  }
+}
+
+function normalizeEquipmentItemChoice(choice: EquipmentItemChoiceInput) {
+  return {
+    item_id: choice.item_id,
+    quantity: choice.quantity ?? 1,
+    equipped: choice.equipped ?? false,
+    source_package_item_id: choice.source_package_item_id ?? null,
+    source_category: choice.source_category ?? 'manual',
+    source_entity_id: choice.source_entity_id ?? null,
+    notes: choice.notes ?? null,
   }
 }
 
@@ -336,10 +366,18 @@ export async function replaceCharacterLanguageChoices(
 
   if (normalizedChoices.length === 0) return null
 
+  const { data: languageRows, error: languageLookupError } = await supabase
+    .from('languages')
+    .select('key, name')
+  if (languageLookupError) return languageLookupError
+
+  const languageKeyByName = buildLanguageKeyByNameMap(languageRows ?? [])
+
   const { error } = await supabase.from('character_language_choices').insert(
     normalizedChoices.map((choice) => ({
       character_id: characterId,
       ...choice,
+      language_key: languageKeyByName.get(normalizeLanguageName(choice.language)) ?? choice.language_key ?? null,
     }))
   )
   return error
@@ -362,10 +400,18 @@ export async function replaceCharacterToolChoices(
 
   if (normalizedChoices.length === 0) return null
 
+  const { data: toolRows, error: toolLookupError } = await supabase
+    .from('tools')
+    .select('key, name')
+  if (toolLookupError) return toolLookupError
+
+  const toolKeyByName = buildToolKeyByNameMap(toolRows ?? [])
+
   const { error } = await supabase.from('character_tool_choices').insert(
     normalizedChoices.map((choice) => ({
       character_id: characterId,
       ...choice,
+      tool_key: toolKeyByName.get(normalizeToolName(choice.tool)) ?? choice.tool_key ?? null,
     }))
   )
   return error
@@ -440,6 +486,32 @@ export async function replaceCharacterFeatureOptionChoices(
     normalizedChoices.map((choice) => ({
       character_id: characterId,
       ...choice,
+    }))
+  )
+  return error
+}
+
+export async function replaceCharacterEquipmentItems(
+  supabase: SupabaseClient<Database>,
+  characterId: string,
+  equipmentItems: EquipmentItemChoiceInput[]
+) {
+  const { error: deleteEquipmentError } = await supabase
+    .from('character_equipment_items')
+    .delete()
+    .eq('character_id', characterId)
+  if (deleteEquipmentError) return deleteEquipmentError
+
+  const normalizedItems = equipmentItems
+    .filter((item) => item.item_id.trim().length > 0)
+    .map(normalizeEquipmentItemChoice)
+
+  if (normalizedItems.length === 0) return null
+
+  const { error } = await supabase.from('character_equipment_items').insert(
+    normalizedItems.map((item) => ({
+      character_id: characterId,
+      ...item,
     }))
   )
   return error

@@ -2,6 +2,7 @@ import type {
   CharacterFeatureOptionChoice,
   CharacterSpellSelection,
   Class,
+  FeatureOption,
   Spell,
 } from '@/lib/types/database'
 import type {
@@ -25,10 +26,12 @@ export interface FeatureOptionChoiceDefinition {
   optionKey: string
   label: string
   description?: string
+  valueKey?: string
   choiceOrder: number
   choices: Array<{
     value: string
     label: string
+    description?: string
   }>
   sourceCategory: string
   sourceEntityId: string | null
@@ -40,20 +43,22 @@ export const MAVERICK_SUBCLASS_SOURCE = 'EE'
 export const MAVERICK_ARCANE_BREAKTHROUGH_GROUP_KEY = 'maverick:arcane_breakthrough_classes'
 export const MAVERICK_ARCANE_BREAKTHROUGH_SOURCE_KEY = 'subclass_feature:maverick:arcane_breakthroughs'
 export const MAVERICK_CANTRIP_SPECIALIST_SOURCE_KEY = 'feature_spell:maverick:cantrip_specialist'
+export const FIGHTING_STYLE_VALUE_KEY = 'feature_option_key'
+
+const FIGHTING_STYLE_GROUP_KEYS: Record<string, string> = {
+  Fighter: 'fighting_style:fighter:2014',
+  Paladin: 'fighting_style:paladin:2014',
+  Ranger: 'fighting_style:ranger:2014',
+}
+
+const FIGHTING_STYLE_UNLOCK_LEVELS: Record<string, number> = {
+  Fighter: 1,
+  Paladin: 2,
+  Ranger: 2,
+}
 
 const INTERACTIVE_FEATURE_SPELL_PREFIXES = ['feat_spell:', 'feature_spell:'] as const
 const MAVERICK_BREAKTHROUGH_LEVELS = [3, 5, 9, 13, 17] as const
-const MAVERICK_BREAKTHROUGH_CLASS_NAMES = [
-  'Bard',
-  'Cleric',
-  'Druid',
-  'Paladin',
-  'Ranger',
-  'Sorcerer',
-  'Warlock',
-  'Wizard',
-] as const
-
 type StaticGrantedSpellRule = {
   spellName: string
   spellSource?: string
@@ -224,10 +229,11 @@ export function buildMaverickFeatureOptionChoices(args: {
     const classId = args.selectedClassIds[index] ?? ''
     if (!classId) return []
 
+    const valueKey = definition.valueKey ?? 'class_id'
     return [{
       option_group_key: definition.optionGroupKey,
       option_key: definition.optionKey,
-      selected_value: { class_id: classId },
+      selected_value: { [valueKey]: classId },
       choice_order: definition.choiceOrder,
       character_level_id: null,
       source_category: definition.sourceCategory,
@@ -240,17 +246,26 @@ export function buildMaverickFeatureOptionChoices(args: {
 export function getMaverickArcaneBreakthroughOptionDefinitions(args: {
   classLevel: number
   subclassId: string | null
-  classList: Class[]
+  optionRows: FeatureOption[]
 }): FeatureOptionChoiceDefinition[] {
   if (!args.subclassId || args.classLevel < 3) return []
 
-  const allowedClasses = MAVERICK_BREAKTHROUGH_CLASS_NAMES
-    .map((name) => args.classList.find((entry) => entry.name === name))
-    .filter((entry): entry is Class => Boolean(entry))
-    .map((entry) => ({
-      value: entry.id,
-      label: entry.name,
-    }))
+  const allowedClasses = args.optionRows
+    .filter((option) => option.group_key === MAVERICK_ARCANE_BREAKTHROUGH_GROUP_KEY)
+    .sort((left, right) => {
+      if (left.option_order !== right.option_order) return left.option_order - right.option_order
+      return left.name.localeCompare(right.name)
+    })
+    .flatMap((option) => {
+      const classId = typeof option.effects?.class_id === 'string' ? option.effects.class_id : null
+      if (!classId) return []
+
+      return [{
+        value: classId,
+        label: option.name,
+        description: option.description,
+      }]
+    })
 
   return MAVERICK_BREAKTHROUGH_LEVELS
     .filter((requiredLevel) => args.classLevel >= requiredLevel)
@@ -268,12 +283,112 @@ export function getMaverickArcaneBreakthroughOptionDefinitions(args: {
 }
 
 export function getSelectedMaverickBreakthroughClassIds(
-  rows: Array<Pick<CharacterFeatureOptionChoice, 'option_group_key' | 'selected_value'>> | FeatureOptionChoiceInput[]
+  rows: Array<Pick<CharacterFeatureOptionChoice, 'option_group_key' | 'option_key' | 'selected_value'>> | FeatureOptionChoiceInput[]
 ) {
-  return rows
+  const canonicalRows = rows
     .filter((row) => row.option_group_key === MAVERICK_ARCANE_BREAKTHROUGH_GROUP_KEY)
     .map((row) => row.selected_value?.class_id)
     .filter((value): value is string => typeof value === 'string' && value.length > 0)
+
+  if (canonicalRows.length > 0) return canonicalRows
+
+  return rows
+    .filter((row) => row.option_group_key.startsWith('maverick:breakthrough:'))
+    .sort((left, right) => {
+      const leftLevel = Number.parseInt(left.option_group_key.split(':').at(-1) ?? '0', 10)
+      const rightLevel = Number.parseInt(right.option_group_key.split(':').at(-1) ?? '0', 10)
+      return leftLevel - rightLevel
+    })
+    .map((row) => ('option_key' in row ? row.option_key : undefined))
+    .filter((value): value is string => typeof value === 'string' && value.length > 0)
+}
+
+export function buildFeatureOptionChoicesFromDefinitionMap(args: {
+  definitions: FeatureOptionChoiceDefinition[]
+  selectedValues: Record<string, string>
+}): FeatureOptionChoiceInput[] {
+  return args.definitions.flatMap((definition) => {
+    const selectedValue = args.selectedValues[definition.optionKey] ?? ''
+    if (!selectedValue) return []
+
+    const valueKey = definition.valueKey ?? 'class_id'
+    return [{
+      option_group_key: definition.optionGroupKey,
+      option_key: definition.optionKey,
+      selected_value: { [valueKey]: selectedValue },
+      choice_order: definition.choiceOrder,
+      character_level_id: null,
+      source_category: definition.sourceCategory,
+      source_entity_id: definition.sourceEntityId,
+      source_feature_key: definition.sourceFeatureKey,
+    }]
+  })
+}
+
+export function mergeFeatureOptionChoiceInputs(args: {
+  preservedChoices: FeatureOptionChoiceInput[]
+  replacementDefinitions: FeatureOptionChoiceDefinition[]
+  replacements: FeatureOptionChoiceInput[]
+}) {
+  const replacementKeys = new Set(
+    args.replacementDefinitions.map((definition) => `${definition.optionGroupKey}:${definition.optionKey}`)
+  )
+
+  return [
+    ...args.preservedChoices.filter(
+      (choice) => !replacementKeys.has(`${choice.option_group_key}:${choice.option_key}`)
+    ),
+    ...args.replacements,
+  ]
+}
+
+export function getFightingStyleGroupKey(className: string | null | undefined) {
+  if (!className) return null
+  return FIGHTING_STYLE_GROUP_KEYS[className] ?? null
+}
+
+export function getFightingStyleUnlockLevel(className: string | null | undefined) {
+  if (!className) return null
+  return FIGHTING_STYLE_UNLOCK_LEVELS[className] ?? null
+}
+
+export function getFightingStyleFeatureOptionDefinition(args: {
+  classId: string | null
+  className: string | null
+  classLevel: number
+  optionRows: FeatureOption[]
+}): FeatureOptionChoiceDefinition[] {
+  const groupKey = getFightingStyleGroupKey(args.className)
+  const unlockLevel = getFightingStyleUnlockLevel(args.className)
+  const className = args.className
+  if (!groupKey || !unlockLevel || !className || args.classLevel < unlockLevel) return []
+
+  const choices = args.optionRows
+    .filter((option) => option.group_key === groupKey)
+    .sort((left, right) => {
+      if (left.option_order !== right.option_order) return left.option_order - right.option_order
+      return left.name.localeCompare(right.name)
+    })
+    .map((option) => ({
+      value: option.key,
+      label: option.name,
+      description: option.description,
+    }))
+
+  if (choices.length === 0) return []
+
+  return [{
+    optionGroupKey: groupKey,
+    optionKey: 'style',
+    label: 'Fighting Style',
+    description: `Choose the fighting style granted by ${className}.`,
+    valueKey: FIGHTING_STYLE_VALUE_KEY,
+    choiceOrder: 0,
+    choices,
+    sourceCategory: 'class_feature',
+    sourceEntityId: args.classId,
+    sourceFeatureKey: `class_feature:fighting_style:${className.toLowerCase()}`,
+  }]
 }
 
 export function getMaverickFeatureSpellChoiceDefinitions(args: {
