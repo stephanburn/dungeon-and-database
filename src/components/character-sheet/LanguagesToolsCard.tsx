@@ -4,7 +4,6 @@ import { Checkbox } from '@/components/ui/checkbox'
 import type { Background, Language, Species, Tool } from '@/lib/types/database'
 import {
   getAvailableLanguageChoices,
-  getAvailableToolChoices,
   getAvailableToolChoicesFromCatalog,
   getFixedBackgroundLanguages,
   getLanguageChoiceLimit,
