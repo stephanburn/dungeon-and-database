@@ -150,10 +150,10 @@ SET
   source = EXCLUDED.source;
 
 INSERT INTO public.starting_equipment_packages (key, name, description, source) VALUES
-  ('background:acolyte:srd', 'Acolyte Starting Equipment', 'Prayerful gear for a devout acolyte.', 'srd'),
-  ('class:fighter:srd', 'Fighter Starting Equipment', 'A simple seeded fighter loadout using the phase 1 equipment catalog.', 'srd'),
-  ('class:rogue:srd', 'Rogue Starting Equipment', 'A simple seeded rogue loadout using the phase 1 equipment catalog.', 'srd'),
-  ('class:wizard:srd', 'Wizard Starting Equipment', 'A simple seeded wizard loadout using the phase 1 equipment catalog.', 'srd')
+  ('background:acolyte:srd', 'Acolyte Starting Equipment', 'Prayerful gear for a devout acolyte.', 'SRD'),
+  ('class:fighter:srd', 'Fighter Starting Equipment', 'A simple seeded fighter loadout using the phase 1 equipment catalog.', 'SRD'),
+  ('class:rogue:srd', 'Rogue Starting Equipment', 'A simple seeded rogue loadout using the phase 1 equipment catalog.', 'SRD'),
+  ('class:wizard:srd', 'Wizard Starting Equipment', 'A simple seeded wizard loadout using the phase 1 equipment catalog.', 'SRD')
 ON CONFLICT (key) DO UPDATE
 SET
   name = EXCLUDED.name,
@@ -185,16 +185,16 @@ ON CONFLICT (package_id, item_id, choice_group) DO NOTHING;
 
 UPDATE public.backgrounds
 SET starting_equipment_package_id = (SELECT id FROM public.starting_equipment_packages WHERE key = 'background:acolyte:srd')
-WHERE name = 'Acolyte' AND source = 'srd';
+WHERE name = 'Acolyte' AND source = 'SRD';
 
 UPDATE public.classes
 SET starting_equipment_package_id = (SELECT id FROM public.starting_equipment_packages WHERE key = 'class:fighter:srd')
-WHERE name = 'Fighter' AND source = 'srd';
+WHERE name = 'Fighter' AND source = 'SRD';
 
 UPDATE public.classes
 SET starting_equipment_package_id = (SELECT id FROM public.starting_equipment_packages WHERE key = 'class:rogue:srd')
-WHERE name = 'Rogue' AND source = 'srd';
+WHERE name = 'Rogue' AND source = 'SRD';
 
 UPDATE public.classes
 SET starting_equipment_package_id = (SELECT id FROM public.starting_equipment_packages WHERE key = 'class:wizard:srd')
-WHERE name = 'Wizard' AND source = 'srd';
+WHERE name = 'Wizard' AND source = 'SRD';
