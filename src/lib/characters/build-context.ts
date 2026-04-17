@@ -232,7 +232,7 @@ export interface DerivedFeatureSummary {
   subclassName: string | null
 }
 
-export interface DerivedSpeciesTraitSummary extends BuildSpeciesTraitSummary {}
+export type DerivedSpeciesTraitSummary = BuildSpeciesTraitSummary
 
 export interface DerivedSpellcastingSourceSummary {
   classId: string
