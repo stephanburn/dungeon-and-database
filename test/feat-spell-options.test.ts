@@ -30,6 +30,7 @@ function createContext(overrides: Partial<CharacterBuildContext> = {}): Characte
     speciesSpeed: 30,
     speciesSize: 'medium',
     speciesLanguages: [],
+    speciesTraits: [],
     speciesSenses: [],
     speciesDamageResistances: [],
     speciesConditionImmunities: [],

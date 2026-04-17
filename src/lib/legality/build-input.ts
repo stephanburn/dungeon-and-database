@@ -15,6 +15,7 @@ import type {
   Feat,
   MulticlassSpellSlotTable,
   Species,
+  SpeciesTrait,
   Spell,
   SpellSlotTable,
   SpeciesBonusSpell,
@@ -26,6 +27,7 @@ import {
   createBuildBackgroundSummary,
   normalizeToolProficiencies,
   progressionRowToSummary,
+  createBuildSpeciesTraitSummaries,
   type AbilityKey,
   type BuildClassSummary,
   type BuildFeatSummary,
@@ -129,6 +131,7 @@ export async function buildCharacterBuildContext(
   const levels = levelsResult.data ?? []
   const background = (backgroundResult.data as Background | null) ?? null
   const species = (speciesResult.data as Species | null) ?? null
+  const speciesTraitIds = species?.traits ?? []
   const classIds = Array.from(new Set(levels.map((level) => level.class_id)))
   const subclassIds = levels
     .map((level) => level.subclass_id)
@@ -156,6 +159,7 @@ export async function buildCharacterBuildContext(
     multiclassSlotsResult,
     subclassBonusSpellsResult,
     speciesBonusSpellsResult,
+    speciesTraitsResult,
     spellsResult,
     featsResult,
   ] = await Promise.all([
@@ -183,6 +187,9 @@ export async function buildCharacterBuildContext(
       : Promise.resolve({ data: [] }),
     species?.id
       ? supabase.from('species_bonus_spells').select('*').eq('species_id', species.id)
+      : Promise.resolve({ data: [] }),
+    speciesTraitIds.length > 0
+      ? supabase.from('species_traits').select('*').in('id', speciesTraitIds)
       : Promise.resolve({ data: [] }),
     spellIds.length > 0
       ? supabase.from('spells').select('*').in('id', Array.from(new Set(spellIds)))
@@ -233,6 +240,14 @@ export async function buildCharacterBuildContext(
     return totalLevel >= row.minimum_character_level
   })
   const speciesBonusSpellIds = new Set(activeSpeciesBonusSpells.map((row) => row.spell_id))
+  const speciesTraitsById = new Map<string, SpeciesTrait>(
+    ((speciesTraitsResult.data ?? []) as SpeciesTrait[]).map((row) => [row.id, row])
+  )
+  const buildSpeciesTraits = createBuildSpeciesTraitSummaries(
+    speciesTraitIds
+      .map((traitId) => speciesTraitsById.get(traitId))
+      .filter((trait): trait is SpeciesTrait => Boolean(trait))
+  )
 
   const buildClasses: BuildClassSummary[] = levels.flatMap((level) => {
     const cls = classesById.get(level.class_id)
@@ -406,6 +421,7 @@ export async function buildCharacterBuildContext(
     speciesSpeed: species?.speed ?? null,
     speciesSize: species?.size ?? null,
     speciesLanguages: species?.languages ?? [],
+    speciesTraits: buildSpeciesTraits,
     speciesSenses: species?.senses ?? [],
     speciesDamageResistances: species?.damage_resistances ?? [],
     speciesConditionImmunities: species?.condition_immunities ?? [],

@@ -34,6 +34,7 @@ function createContext(overrides: Partial<CharacterBuildContext> = {}): Characte
     speciesSpeed: 30,
     speciesSize: 'medium',
     speciesLanguages: [],
+    speciesTraits: [],
     speciesSenses: [],
     speciesDamageResistances: [],
     speciesConditionImmunities: [],
@@ -738,6 +739,26 @@ test('deriveCharacter applies selected species ability bonuses and warforged int
   assert.equal(derived.abilities.wis.adjusted, 11)
   assert.equal(derived.armorClass.value, 13)
   assert.equal(derived.armorClass.formula, '10 + DEX + 1 (Unarmored, Integrated Protection)')
+})
+
+test('deriveCharacter surfaces species traits like Vigilant Guardian', () => {
+  const derived = deriveCharacter(createContext({
+    speciesName: 'Human (Mark of Sentinel)',
+    speciesSource: 'ERftLW',
+    speciesTraits: [{
+      id: 'vigilant-guardian',
+      name: 'Vigilant Guardian',
+      description: 'You can swap places with a nearby ally who is hit by an attack, taking the hit yourself.',
+      source: 'ERftLW',
+    }],
+  }))
+
+  assert.deepEqual(derived.speciesTraits, [{
+    id: 'vigilant-guardian',
+    name: 'Vigilant Guardian',
+    description: 'You can swap places with a nearby ally who is hit by an attack, taking the hit yourself.',
+    source: 'ERftLW',
+  }])
 })
 
 test('legality blocks invalid flexible species ability bonus selections', () => {

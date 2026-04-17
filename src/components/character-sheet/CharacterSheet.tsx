@@ -752,6 +752,26 @@ export function CharacterSheet({
             )
           })()}
 
+          {derivedCharacter && derivedCharacter.speciesTraits.length > 0 && (
+            <div className="space-y-3 col-span-2">
+              <Label className="text-neutral-300">Species Traits</Label>
+              <div className="grid gap-3">
+                {derivedCharacter.speciesTraits.map((trait) => (
+                  <div
+                    key={trait.id}
+                    className="rounded-xl border border-white/10 bg-white/[0.03] p-3"
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-sm font-medium text-neutral-200">{trait.name}</p>
+                      <SourceTag source={trait.source} />
+                    </div>
+                    <p className="mt-2 text-sm text-neutral-400 leading-relaxed">{trait.description}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="space-y-2">
             <Label className="text-neutral-300">Experience Points</Label>
             {canEdit ? (

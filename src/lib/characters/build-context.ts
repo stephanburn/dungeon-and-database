@@ -10,6 +10,7 @@ import type {
   SpellcastingProgression,
   SpellcastingType,
   StatMethod,
+  SpeciesTrait,
 } from '@/lib/types/database'
 import {
   abilityModifier,
@@ -76,6 +77,13 @@ export interface BuildBackgroundSummary {
   backgroundFeatId: string | null
 }
 
+export interface BuildSpeciesTraitSummary {
+  id: string
+  name: string
+  description: string
+  source: string
+}
+
 export interface BuildSpellSummary {
   id: string
   name: string
@@ -122,6 +130,7 @@ export interface CharacterBuildContext {
   speciesSpeed: number | null
   speciesSize: SizeCategory | null
   speciesLanguages: string[]
+  speciesTraits: BuildSpeciesTraitSummary[]
   speciesSenses: Sense[]
   speciesDamageResistances: string[]
   speciesConditionImmunities: string[]
@@ -223,6 +232,8 @@ export interface DerivedFeatureSummary {
   subclassName: string | null
 }
 
+export interface DerivedSpeciesTraitSummary extends BuildSpeciesTraitSummary {}
+
 export interface DerivedSpellcastingSourceSummary {
   classId: string
   className: string
@@ -281,6 +292,7 @@ export type DerivedCharacter = DerivedCharacterCore & CharacterProgressionSummar
   speed: number | null
   size: SizeCategory | null
   languages: string[]
+  speciesTraits: DerivedSpeciesTraitSummary[]
   senses: Sense[]
   damageResistances: string[]
   conditionImmunities: string[]
@@ -780,6 +792,7 @@ export function deriveCharacter(context: CharacterBuildContext): DerivedCharacte
       ...(context.background?.fixedLanguages ?? []),
       ...context.selectedLanguages,
     ])),
+    speciesTraits: context.speciesTraits,
     senses: context.speciesSenses,
     damageResistances: context.speciesDamageResistances,
     conditionImmunities: context.speciesConditionImmunities,
@@ -825,6 +838,15 @@ export function createBuildBackgroundSummary(background: Background | null): Bui
     fixedLanguages: getFixedBackgroundLanguages(background),
     backgroundFeatId: background.background_feat_id,
   }
+}
+
+export function createBuildSpeciesTraitSummaries(traits: SpeciesTrait[]): BuildSpeciesTraitSummary[] {
+  return traits.map((trait) => ({
+    id: trait.id,
+    name: trait.name,
+    description: trait.description,
+    source: trait.source,
+  }))
 }
 
 function combineAbilityBonuses(context: Pick<CharacterBuildContext, 'speciesAbilityBonuses' | 'selectedAbilityBonuses' | 'selectedAsiBonuses'>) {

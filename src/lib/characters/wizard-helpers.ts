@@ -281,12 +281,13 @@ export function buildLocalCharacterContext({
       acc[bonus.ability] = (acc[bonus.ability] ?? 0) + bonus.bonus
       return acc
     }, {}) ?? {},
-    speciesSpeed: selectedSpecies?.speed ?? null,
-    speciesSize: selectedSpecies?.size ?? null,
-    speciesLanguages: selectedSpecies?.languages ?? [],
-    speciesSenses: selectedSpecies?.senses ?? [],
-    speciesDamageResistances: selectedSpecies?.damage_resistances ?? [],
-    speciesConditionImmunities: selectedSpecies?.condition_immunities ?? [],
+  speciesSpeed: selectedSpecies?.speed ?? null,
+  speciesSize: selectedSpecies?.size ?? null,
+  speciesLanguages: selectedSpecies?.languages ?? [],
+  speciesTraits: [],
+  speciesSenses: selectedSpecies?.senses ?? [],
+  speciesDamageResistances: selectedSpecies?.damage_resistances ?? [],
+  speciesConditionImmunities: selectedSpecies?.condition_immunities ?? [],
     background,
     backgroundFeat: backgroundFeat
       ? {
