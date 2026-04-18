@@ -193,32 +193,50 @@ ON CONFLICT (subclass_id, name, level) DO UPDATE SET
   amended = EXCLUDED.amended,
   amendment_note = EXCLUDED.amendment_note;
 
+WITH subclass_spell_links(subclass_name, spell_name, required_class_level, counts_against_selection_limit) AS (
+  VALUES
+    ('Knowledge Domain', 'Command', 1, false),
+    ('Knowledge Domain', 'Identify', 1, false),
+    ('Knowledge Domain', 'Suggestion', 3, false),
+    ('Knowledge Domain', 'Nondetection', 3, false),
+    ('Knowledge Domain', 'Speak with Dead', 5, false),
+    ('Knowledge Domain', 'Arcane Eye', 5, false),
+    ('Knowledge Domain', 'Confusion', 7, false),
+    ('Knowledge Domain', 'Legend Lore', 7, false),
+    ('Knowledge Domain', 'Scrying', 9, false),
+    ('Oath of Vengeance', 'Bane', 3, false),
+    ('Oath of Vengeance', 'Hunter''s Mark', 3, false),
+    ('Oath of Vengeance', 'Hold Person', 5, false),
+    ('Oath of Vengeance', 'Misty Step', 5, false),
+    ('Oath of Vengeance', 'Haste', 9, false),
+    ('Oath of Vengeance', 'Protection from Energy', 9, false),
+    ('Oath of Vengeance', 'Banishment', 13, false),
+    ('Oath of Vengeance', 'Dimension Door', 13, false),
+    ('Oath of Vengeance', 'Hold Monster', 17, false),
+    ('Oath of Vengeance', 'Scrying', 17, false)
+)
 INSERT INTO public.subclass_bonus_spells (
   subclass_id,
   spell_id,
   required_class_level,
   counts_against_selection_limit
 )
-VALUES
-  ((SELECT id FROM public.subclasses WHERE name = 'Knowledge Domain' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Command' AND source = 'PHB'), 1, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'Knowledge Domain' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Identify' AND source = 'PHB'), 1, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'Knowledge Domain' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Suggestion' AND source = 'PHB'), 3, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'Knowledge Domain' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Nondetection' AND source = 'PHB'), 3, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'Knowledge Domain' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Speak with Dead' AND source = 'PHB'), 5, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'Knowledge Domain' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Arcane Eye' AND source = 'PHB'), 5, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'Knowledge Domain' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Confusion' AND source = 'PHB'), 7, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'Knowledge Domain' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Legend Lore' AND source = 'PHB'), 7, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'Knowledge Domain' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Scrying' AND source = 'PHB'), 9, false),
-
-  ((SELECT id FROM public.subclasses WHERE name = 'Oath of Vengeance' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Bane' AND source = 'PHB'), 3, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'Oath of Vengeance' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Hunter''s Mark' AND source = 'PHB'), 3, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'Oath of Vengeance' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Hold Person' AND source = 'PHB'), 5, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'Oath of Vengeance' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Misty Step' AND source = 'PHB'), 5, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'Oath of Vengeance' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Haste' AND source = 'PHB'), 9, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'Oath of Vengeance' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Protection from Energy' AND source = 'PHB'), 9, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'Oath of Vengeance' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Banishment' AND source = 'PHB'), 13, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'Oath of Vengeance' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Dimension Door' AND source = 'PHB'), 13, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'Oath of Vengeance' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Hold Monster' AND source = 'PHB'), 17, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'Oath of Vengeance' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Scrying' AND source = 'PHB'), 17, false)
+SELECT
+  subclasses.id,
+  spell_lookup.id,
+  links.required_class_level,
+  links.counts_against_selection_limit
+FROM subclass_spell_links AS links
+JOIN public.subclasses AS subclasses
+  ON subclasses.name = links.subclass_name
+ AND subclasses.source = 'PHB'
+JOIN LATERAL (
+  SELECT id
+  FROM public.spells
+  WHERE lower(name) = lower(links.spell_name)
+    AND source IN ('PHB', 'SRD', 'ERftLW')
+  ORDER BY CASE source WHEN 'PHB' THEN 0 WHEN 'SRD' THEN 1 WHEN 'ERftLW' THEN 2 ELSE 3 END, source, id
+  LIMIT 1
+) AS spell_lookup ON true
 ON CONFLICT (subclass_id, spell_id, required_class_level) DO UPDATE SET
   counts_against_selection_limit = EXCLUDED.counts_against_selection_limit;
