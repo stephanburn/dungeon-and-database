@@ -273,88 +273,107 @@ ON CONFLICT (subclass_id, name, level) DO UPDATE SET
   amended = EXCLUDED.amended,
   amendment_note = EXCLUDED.amendment_note;
 
+WITH subclass_spell_links(subclass_name, spell_name, required_class_level, counts_against_selection_limit) AS (
+  VALUES
+    ('Life Domain', 'Bless', 1, false),
+    ('Life Domain', 'Cure Wounds', 1, false),
+    ('Life Domain', 'Lesser Restoration', 3, false),
+    ('Life Domain', 'Spiritual Weapon', 3, false),
+    ('Life Domain', 'Beacon of Hope', 5, false),
+    ('Life Domain', 'Revivify', 5, false),
+    ('Life Domain', 'Death Ward', 7, false),
+    ('Life Domain', 'Guardian of Faith', 7, false),
+    ('Life Domain', 'Mass Cure Wounds', 9, false),
+    ('Life Domain', 'Raise Dead', 9, false),
+    ('Light Domain', 'Burning Hands', 1, false),
+    ('Light Domain', 'Faerie Fire', 1, false),
+    ('Light Domain', 'Flaming Sphere', 3, false),
+    ('Light Domain', 'Scorching Ray', 3, false),
+    ('Light Domain', 'Daylight', 5, false),
+    ('Light Domain', 'Fireball', 5, false),
+    ('Light Domain', 'Guardian of Faith', 7, false),
+    ('Light Domain', 'Wall of Fire', 7, false),
+    ('Light Domain', 'Flame Strike', 9, false),
+    ('Light Domain', 'Scrying', 9, false),
+    ('Nature Domain', 'Animal Friendship', 1, false),
+    ('Nature Domain', 'Speak with Animals', 1, false),
+    ('Nature Domain', 'Barkskin', 3, false),
+    ('Nature Domain', 'Spike Growth', 3, false),
+    ('Nature Domain', 'Plant Growth', 5, false),
+    ('Nature Domain', 'Wind Wall', 5, false),
+    ('Nature Domain', 'Dominate Beast', 7, false),
+    ('Nature Domain', 'Grasping Vine', 7, false),
+    ('Nature Domain', 'Insect Plague', 9, false),
+    ('Nature Domain', 'Tree Stride', 9, false),
+    ('Tempest Domain', 'Fog Cloud', 1, false),
+    ('Tempest Domain', 'Thunderwave', 1, false),
+    ('Tempest Domain', 'Gust of Wind', 3, false),
+    ('Tempest Domain', 'Shatter', 3, false),
+    ('Tempest Domain', 'Call Lightning', 5, false),
+    ('Tempest Domain', 'Sleet Storm', 5, false),
+    ('Tempest Domain', 'Control Water', 7, false),
+    ('Tempest Domain', 'Ice Storm', 7, false),
+    ('Tempest Domain', 'Destructive Wave', 9, false),
+    ('Tempest Domain', 'Insect Plague', 9, false),
+    ('Trickery Domain', 'Charm Person', 1, false),
+    ('Trickery Domain', 'Disguise Self', 1, false),
+    ('Trickery Domain', 'Mirror Image', 3, false),
+    ('Trickery Domain', 'Pass without Trace', 3, false),
+    ('Trickery Domain', 'Blink', 5, false),
+    ('Trickery Domain', 'Dispel Magic', 5, false),
+    ('Trickery Domain', 'Dimension Door', 7, false),
+    ('Trickery Domain', 'Polymorph', 7, false),
+    ('Trickery Domain', 'Dominate Person', 9, false),
+    ('Trickery Domain', 'Modify Memory', 9, false),
+    ('War Domain', 'Divine Favor', 1, false),
+    ('War Domain', 'Shield of Faith', 1, false),
+    ('War Domain', 'Magic Weapon', 3, false),
+    ('War Domain', 'Spiritual Weapon', 3, false),
+    ('War Domain', 'Crusader''s Mantle', 5, false),
+    ('War Domain', 'Spirit Guardians', 5, false),
+    ('War Domain', 'Freedom of Movement', 7, false),
+    ('War Domain', 'Stoneskin', 7, false),
+    ('War Domain', 'Flame Strike', 9, false),
+    ('War Domain', 'Hold Monster', 9, false),
+    ('Oath of Devotion', 'Protection from Evil and Good', 3, false),
+    ('Oath of Devotion', 'Sanctuary', 3, false),
+    ('Oath of Devotion', 'Lesser Restoration', 5, false),
+    ('Oath of Devotion', 'Zone of Truth', 5, false),
+    ('Oath of Devotion', 'Beacon of Hope', 9, false),
+    ('Oath of Devotion', 'Dispel Magic', 9, false),
+    ('Oath of Devotion', 'Freedom of Movement', 13, false),
+    ('Oath of Devotion', 'Guardian of Faith', 13, false),
+    ('Oath of Devotion', 'Commune', 17, false),
+    ('Oath of Devotion', 'Flame Strike', 17, false)
+)
 INSERT INTO public.subclass_bonus_spells (
   subclass_id,
   spell_id,
   required_class_level,
   counts_against_selection_limit
 )
-VALUES
-  ((SELECT id FROM public.subclasses WHERE name = 'Life Domain' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Bless' AND source IN ('PHB', 'SRD', 'srd') ORDER BY CASE source WHEN 'PHB' THEN 0 WHEN 'SRD' THEN 1 WHEN 'srd' THEN 2 ELSE 3 END LIMIT 1), 1, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'Life Domain' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Cure Wounds' AND source IN ('PHB', 'SRD', 'srd') ORDER BY CASE source WHEN 'PHB' THEN 0 WHEN 'SRD' THEN 1 WHEN 'srd' THEN 2 ELSE 3 END LIMIT 1), 1, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'Life Domain' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Lesser Restoration' AND source IN ('PHB', 'SRD', 'srd') ORDER BY CASE source WHEN 'PHB' THEN 0 WHEN 'SRD' THEN 1 WHEN 'srd' THEN 2 ELSE 3 END LIMIT 1), 3, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'Life Domain' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Spiritual Weapon' AND source IN ('PHB', 'SRD', 'srd') ORDER BY CASE source WHEN 'PHB' THEN 0 WHEN 'SRD' THEN 1 WHEN 'srd' THEN 2 ELSE 3 END LIMIT 1), 3, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'Life Domain' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Beacon of Hope' AND source IN ('PHB', 'SRD', 'srd') ORDER BY CASE source WHEN 'PHB' THEN 0 WHEN 'SRD' THEN 1 WHEN 'srd' THEN 2 ELSE 3 END LIMIT 1), 5, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'Life Domain' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Revivify' AND source IN ('PHB', 'SRD', 'srd') ORDER BY CASE source WHEN 'PHB' THEN 0 WHEN 'SRD' THEN 1 WHEN 'srd' THEN 2 ELSE 3 END LIMIT 1), 5, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'Life Domain' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Death Ward' AND source IN ('PHB', 'SRD', 'srd') ORDER BY CASE source WHEN 'PHB' THEN 0 WHEN 'SRD' THEN 1 WHEN 'srd' THEN 2 ELSE 3 END LIMIT 1), 7, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'Life Domain' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Guardian of Faith' AND source IN ('PHB', 'SRD', 'srd') ORDER BY CASE source WHEN 'PHB' THEN 0 WHEN 'SRD' THEN 1 WHEN 'srd' THEN 2 ELSE 3 END LIMIT 1), 7, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'Life Domain' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Mass Cure Wounds' AND source IN ('PHB', 'SRD', 'srd') ORDER BY CASE source WHEN 'PHB' THEN 0 WHEN 'SRD' THEN 1 WHEN 'srd' THEN 2 ELSE 3 END LIMIT 1), 9, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'Life Domain' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Raise Dead' AND source IN ('PHB', 'SRD', 'srd') ORDER BY CASE source WHEN 'PHB' THEN 0 WHEN 'SRD' THEN 1 WHEN 'srd' THEN 2 ELSE 3 END LIMIT 1), 9, false),
-
-  ((SELECT id FROM public.subclasses WHERE name = 'Light Domain' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Burning Hands' AND source IN ('PHB', 'SRD', 'srd') ORDER BY CASE source WHEN 'PHB' THEN 0 WHEN 'SRD' THEN 1 WHEN 'srd' THEN 2 ELSE 3 END LIMIT 1), 1, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'Light Domain' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Faerie Fire' AND source IN ('PHB', 'SRD', 'srd') ORDER BY CASE source WHEN 'PHB' THEN 0 WHEN 'SRD' THEN 1 WHEN 'srd' THEN 2 ELSE 3 END LIMIT 1), 1, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'Light Domain' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Flaming Sphere' AND source IN ('PHB', 'SRD', 'srd') ORDER BY CASE source WHEN 'PHB' THEN 0 WHEN 'SRD' THEN 1 WHEN 'srd' THEN 2 ELSE 3 END LIMIT 1), 3, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'Light Domain' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Scorching Ray' AND source IN ('PHB', 'SRD', 'srd') ORDER BY CASE source WHEN 'PHB' THEN 0 WHEN 'SRD' THEN 1 WHEN 'srd' THEN 2 ELSE 3 END LIMIT 1), 3, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'Light Domain' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Daylight' AND source IN ('PHB', 'SRD', 'srd') ORDER BY CASE source WHEN 'PHB' THEN 0 WHEN 'SRD' THEN 1 WHEN 'srd' THEN 2 ELSE 3 END LIMIT 1), 5, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'Light Domain' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Fireball' AND source IN ('PHB', 'SRD', 'srd') ORDER BY CASE source WHEN 'PHB' THEN 0 WHEN 'SRD' THEN 1 WHEN 'srd' THEN 2 ELSE 3 END LIMIT 1), 5, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'Light Domain' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Guardian of Faith' AND source IN ('PHB', 'SRD', 'srd') ORDER BY CASE source WHEN 'PHB' THEN 0 WHEN 'SRD' THEN 1 WHEN 'srd' THEN 2 ELSE 3 END LIMIT 1), 7, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'Light Domain' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Wall of Fire' AND source IN ('PHB', 'SRD', 'srd') ORDER BY CASE source WHEN 'PHB' THEN 0 WHEN 'SRD' THEN 1 WHEN 'srd' THEN 2 ELSE 3 END LIMIT 1), 7, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'Light Domain' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Flame Strike' AND source IN ('PHB', 'SRD', 'srd') ORDER BY CASE source WHEN 'PHB' THEN 0 WHEN 'SRD' THEN 1 WHEN 'srd' THEN 2 ELSE 3 END LIMIT 1), 9, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'Light Domain' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Scrying' AND source IN ('PHB', 'SRD', 'srd') ORDER BY CASE source WHEN 'PHB' THEN 0 WHEN 'SRD' THEN 1 WHEN 'srd' THEN 2 ELSE 3 END LIMIT 1), 9, false),
-
-  ((SELECT id FROM public.subclasses WHERE name = 'Nature Domain' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Animal Friendship' AND source IN ('PHB', 'SRD', 'srd') ORDER BY CASE source WHEN 'PHB' THEN 0 WHEN 'SRD' THEN 1 WHEN 'srd' THEN 2 ELSE 3 END LIMIT 1), 1, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'Nature Domain' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Speak with Animals' AND source IN ('PHB', 'SRD', 'srd') ORDER BY CASE source WHEN 'PHB' THEN 0 WHEN 'SRD' THEN 1 WHEN 'srd' THEN 2 ELSE 3 END LIMIT 1), 1, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'Nature Domain' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Barkskin' AND source IN ('PHB', 'SRD', 'srd') ORDER BY CASE source WHEN 'PHB' THEN 0 WHEN 'SRD' THEN 1 WHEN 'srd' THEN 2 ELSE 3 END LIMIT 1), 3, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'Nature Domain' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Spike Growth' AND source IN ('PHB', 'SRD', 'srd') ORDER BY CASE source WHEN 'PHB' THEN 0 WHEN 'SRD' THEN 1 WHEN 'srd' THEN 2 ELSE 3 END LIMIT 1), 3, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'Nature Domain' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Plant Growth' AND source IN ('PHB', 'SRD', 'srd') ORDER BY CASE source WHEN 'PHB' THEN 0 WHEN 'SRD' THEN 1 WHEN 'srd' THEN 2 ELSE 3 END LIMIT 1), 5, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'Nature Domain' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Wind Wall' AND source IN ('PHB', 'SRD', 'srd') ORDER BY CASE source WHEN 'PHB' THEN 0 WHEN 'SRD' THEN 1 WHEN 'srd' THEN 2 ELSE 3 END LIMIT 1), 5, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'Nature Domain' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Dominate Beast' AND source IN ('PHB', 'SRD', 'srd') ORDER BY CASE source WHEN 'PHB' THEN 0 WHEN 'SRD' THEN 1 WHEN 'srd' THEN 2 ELSE 3 END LIMIT 1), 7, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'Nature Domain' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Grasping Vine' AND source IN ('PHB', 'SRD', 'srd') ORDER BY CASE source WHEN 'PHB' THEN 0 WHEN 'SRD' THEN 1 WHEN 'srd' THEN 2 ELSE 3 END LIMIT 1), 7, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'Nature Domain' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Insect Plague' AND source IN ('PHB', 'SRD', 'srd') ORDER BY CASE source WHEN 'PHB' THEN 0 WHEN 'SRD' THEN 1 WHEN 'srd' THEN 2 ELSE 3 END LIMIT 1), 9, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'Nature Domain' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Tree Stride' AND source IN ('PHB', 'SRD', 'srd') ORDER BY CASE source WHEN 'PHB' THEN 0 WHEN 'SRD' THEN 1 WHEN 'srd' THEN 2 ELSE 3 END LIMIT 1), 9, false),
-
-  ((SELECT id FROM public.subclasses WHERE name = 'Tempest Domain' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Fog Cloud' AND source IN ('PHB', 'SRD', 'srd') ORDER BY CASE source WHEN 'PHB' THEN 0 WHEN 'SRD' THEN 1 WHEN 'srd' THEN 2 ELSE 3 END LIMIT 1), 1, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'Tempest Domain' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Thunderwave' AND source IN ('PHB', 'SRD', 'srd') ORDER BY CASE source WHEN 'PHB' THEN 0 WHEN 'SRD' THEN 1 WHEN 'srd' THEN 2 ELSE 3 END LIMIT 1), 1, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'Tempest Domain' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Gust of Wind' AND source IN ('PHB', 'SRD', 'srd') ORDER BY CASE source WHEN 'PHB' THEN 0 WHEN 'SRD' THEN 1 WHEN 'srd' THEN 2 ELSE 3 END LIMIT 1), 3, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'Tempest Domain' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Shatter' AND source IN ('PHB', 'SRD', 'srd') ORDER BY CASE source WHEN 'PHB' THEN 0 WHEN 'SRD' THEN 1 WHEN 'srd' THEN 2 ELSE 3 END LIMIT 1), 3, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'Tempest Domain' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Call Lightning' AND source IN ('PHB', 'SRD', 'srd') ORDER BY CASE source WHEN 'PHB' THEN 0 WHEN 'SRD' THEN 1 WHEN 'srd' THEN 2 ELSE 3 END LIMIT 1), 5, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'Tempest Domain' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Sleet Storm' AND source IN ('PHB', 'SRD', 'srd') ORDER BY CASE source WHEN 'PHB' THEN 0 WHEN 'SRD' THEN 1 WHEN 'srd' THEN 2 ELSE 3 END LIMIT 1), 5, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'Tempest Domain' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Control Water' AND source IN ('PHB', 'SRD', 'srd') ORDER BY CASE source WHEN 'PHB' THEN 0 WHEN 'SRD' THEN 1 WHEN 'srd' THEN 2 ELSE 3 END LIMIT 1), 7, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'Tempest Domain' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Ice Storm' AND source IN ('PHB', 'SRD', 'srd') ORDER BY CASE source WHEN 'PHB' THEN 0 WHEN 'SRD' THEN 1 WHEN 'srd' THEN 2 ELSE 3 END LIMIT 1), 7, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'Tempest Domain' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Destructive Wave' AND source IN ('PHB', 'SRD', 'srd') ORDER BY CASE source WHEN 'PHB' THEN 0 WHEN 'SRD' THEN 1 WHEN 'srd' THEN 2 ELSE 3 END LIMIT 1), 9, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'Tempest Domain' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Insect Plague' AND source IN ('PHB', 'SRD', 'srd') ORDER BY CASE source WHEN 'PHB' THEN 0 WHEN 'SRD' THEN 1 WHEN 'srd' THEN 2 ELSE 3 END LIMIT 1), 9, false),
-
-  ((SELECT id FROM public.subclasses WHERE name = 'Trickery Domain' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Charm Person' AND source IN ('PHB', 'SRD', 'srd') ORDER BY CASE source WHEN 'PHB' THEN 0 WHEN 'SRD' THEN 1 WHEN 'srd' THEN 2 ELSE 3 END LIMIT 1), 1, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'Trickery Domain' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Disguise Self' AND source IN ('PHB', 'SRD', 'srd') ORDER BY CASE source WHEN 'PHB' THEN 0 WHEN 'SRD' THEN 1 WHEN 'srd' THEN 2 ELSE 3 END LIMIT 1), 1, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'Trickery Domain' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Mirror Image' AND source IN ('PHB', 'SRD', 'srd') ORDER BY CASE source WHEN 'PHB' THEN 0 WHEN 'SRD' THEN 1 WHEN 'srd' THEN 2 ELSE 3 END LIMIT 1), 3, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'Trickery Domain' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Pass without Trace' AND source IN ('PHB', 'SRD', 'srd') ORDER BY CASE source WHEN 'PHB' THEN 0 WHEN 'SRD' THEN 1 WHEN 'srd' THEN 2 ELSE 3 END LIMIT 1), 3, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'Trickery Domain' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Blink' AND source IN ('PHB', 'SRD', 'srd') ORDER BY CASE source WHEN 'PHB' THEN 0 WHEN 'SRD' THEN 1 WHEN 'srd' THEN 2 ELSE 3 END LIMIT 1), 5, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'Trickery Domain' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Dispel Magic' AND source IN ('PHB', 'SRD', 'srd') ORDER BY CASE source WHEN 'PHB' THEN 0 WHEN 'SRD' THEN 1 WHEN 'srd' THEN 2 ELSE 3 END LIMIT 1), 5, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'Trickery Domain' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Dimension Door' AND source IN ('PHB', 'SRD', 'srd') ORDER BY CASE source WHEN 'PHB' THEN 0 WHEN 'SRD' THEN 1 WHEN 'srd' THEN 2 ELSE 3 END LIMIT 1), 7, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'Trickery Domain' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Polymorph' AND source IN ('PHB', 'SRD', 'srd') ORDER BY CASE source WHEN 'PHB' THEN 0 WHEN 'SRD' THEN 1 WHEN 'srd' THEN 2 ELSE 3 END LIMIT 1), 7, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'Trickery Domain' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Dominate Person' AND source IN ('PHB', 'SRD', 'srd') ORDER BY CASE source WHEN 'PHB' THEN 0 WHEN 'SRD' THEN 1 WHEN 'srd' THEN 2 ELSE 3 END LIMIT 1), 9, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'Trickery Domain' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Modify Memory' AND source IN ('PHB', 'SRD', 'srd') ORDER BY CASE source WHEN 'PHB' THEN 0 WHEN 'SRD' THEN 1 WHEN 'srd' THEN 2 ELSE 3 END LIMIT 1), 9, false),
-
-  ((SELECT id FROM public.subclasses WHERE name = 'War Domain' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Divine Favor' AND source IN ('PHB', 'SRD', 'srd') ORDER BY CASE source WHEN 'PHB' THEN 0 WHEN 'SRD' THEN 1 WHEN 'srd' THEN 2 ELSE 3 END LIMIT 1), 1, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'War Domain' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Shield of Faith' AND source IN ('PHB', 'SRD', 'srd') ORDER BY CASE source WHEN 'PHB' THEN 0 WHEN 'SRD' THEN 1 WHEN 'srd' THEN 2 ELSE 3 END LIMIT 1), 1, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'War Domain' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Magic Weapon' AND source IN ('PHB', 'SRD', 'srd') ORDER BY CASE source WHEN 'PHB' THEN 0 WHEN 'SRD' THEN 1 WHEN 'srd' THEN 2 ELSE 3 END LIMIT 1), 3, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'War Domain' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Spiritual Weapon' AND source IN ('PHB', 'SRD', 'srd') ORDER BY CASE source WHEN 'PHB' THEN 0 WHEN 'SRD' THEN 1 WHEN 'srd' THEN 2 ELSE 3 END LIMIT 1), 3, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'War Domain' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Crusader''s Mantle' AND source IN ('PHB', 'SRD', 'srd') ORDER BY CASE source WHEN 'PHB' THEN 0 WHEN 'SRD' THEN 1 WHEN 'srd' THEN 2 ELSE 3 END LIMIT 1), 5, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'War Domain' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Spirit Guardians' AND source IN ('PHB', 'SRD', 'srd') ORDER BY CASE source WHEN 'PHB' THEN 0 WHEN 'SRD' THEN 1 WHEN 'srd' THEN 2 ELSE 3 END LIMIT 1), 5, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'War Domain' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Freedom of Movement' AND source IN ('PHB', 'SRD', 'srd') ORDER BY CASE source WHEN 'PHB' THEN 0 WHEN 'SRD' THEN 1 WHEN 'srd' THEN 2 ELSE 3 END LIMIT 1), 7, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'War Domain' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Stoneskin' AND source IN ('PHB', 'SRD', 'srd') ORDER BY CASE source WHEN 'PHB' THEN 0 WHEN 'SRD' THEN 1 WHEN 'srd' THEN 2 ELSE 3 END LIMIT 1), 7, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'War Domain' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Flame Strike' AND source IN ('PHB', 'SRD', 'srd') ORDER BY CASE source WHEN 'PHB' THEN 0 WHEN 'SRD' THEN 1 WHEN 'srd' THEN 2 ELSE 3 END LIMIT 1), 9, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'War Domain' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Hold Monster' AND source IN ('PHB', 'SRD', 'srd') ORDER BY CASE source WHEN 'PHB' THEN 0 WHEN 'SRD' THEN 1 WHEN 'srd' THEN 2 ELSE 3 END LIMIT 1), 9, false),
-
-  ((SELECT id FROM public.subclasses WHERE name = 'Oath of Devotion' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Protection from Evil and Good' AND source IN ('PHB', 'SRD', 'srd') ORDER BY CASE source WHEN 'PHB' THEN 0 WHEN 'SRD' THEN 1 WHEN 'srd' THEN 2 ELSE 3 END LIMIT 1), 3, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'Oath of Devotion' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Sanctuary' AND source IN ('PHB', 'SRD', 'srd') ORDER BY CASE source WHEN 'PHB' THEN 0 WHEN 'SRD' THEN 1 WHEN 'srd' THEN 2 ELSE 3 END LIMIT 1), 3, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'Oath of Devotion' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Lesser Restoration' AND source IN ('PHB', 'SRD', 'srd') ORDER BY CASE source WHEN 'PHB' THEN 0 WHEN 'SRD' THEN 1 WHEN 'srd' THEN 2 ELSE 3 END LIMIT 1), 5, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'Oath of Devotion' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Zone of Truth' AND source IN ('PHB', 'SRD', 'srd') ORDER BY CASE source WHEN 'PHB' THEN 0 WHEN 'SRD' THEN 1 WHEN 'srd' THEN 2 ELSE 3 END LIMIT 1), 5, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'Oath of Devotion' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Beacon of Hope' AND source IN ('PHB', 'SRD', 'srd') ORDER BY CASE source WHEN 'PHB' THEN 0 WHEN 'SRD' THEN 1 WHEN 'srd' THEN 2 ELSE 3 END LIMIT 1), 9, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'Oath of Devotion' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Dispel Magic' AND source IN ('PHB', 'SRD', 'srd') ORDER BY CASE source WHEN 'PHB' THEN 0 WHEN 'SRD' THEN 1 WHEN 'srd' THEN 2 ELSE 3 END LIMIT 1), 9, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'Oath of Devotion' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Freedom of Movement' AND source IN ('PHB', 'SRD', 'srd') ORDER BY CASE source WHEN 'PHB' THEN 0 WHEN 'SRD' THEN 1 WHEN 'srd' THEN 2 ELSE 3 END LIMIT 1), 13, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'Oath of Devotion' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Guardian of Faith' AND source IN ('PHB', 'SRD', 'srd') ORDER BY CASE source WHEN 'PHB' THEN 0 WHEN 'SRD' THEN 1 WHEN 'srd' THEN 2 ELSE 3 END LIMIT 1), 13, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'Oath of Devotion' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Commune' AND source IN ('PHB', 'SRD', 'srd') ORDER BY CASE source WHEN 'PHB' THEN 0 WHEN 'SRD' THEN 1 WHEN 'srd' THEN 2 ELSE 3 END LIMIT 1), 17, false),
-  ((SELECT id FROM public.subclasses WHERE name = 'Oath of Devotion' AND source = 'PHB'), (SELECT id FROM public.spells WHERE name = 'Flame Strike' AND source IN ('PHB', 'SRD', 'srd') ORDER BY CASE source WHEN 'PHB' THEN 0 WHEN 'SRD' THEN 1 WHEN 'srd' THEN 2 ELSE 3 END LIMIT 1), 17, false)
+SELECT
+  subclasses.id,
+  spell_lookup.id,
+  subclass_spell_links.required_class_level,
+  subclass_spell_links.counts_against_selection_limit
+FROM subclass_spell_links
+JOIN public.subclasses
+  ON subclasses.name = subclass_spell_links.subclass_name
+ AND subclasses.source = 'PHB'
+JOIN LATERAL (
+  SELECT spells.id
+  FROM public.spells
+  WHERE lower(spells.name) = lower(subclass_spell_links.spell_name)
+    AND spells.source IN ('PHB', 'SRD', 'srd', 'ERftLW')
+  ORDER BY CASE spells.source
+    WHEN 'PHB' THEN 0
+    WHEN 'SRD' THEN 1
+    WHEN 'srd' THEN 2
+    WHEN 'ERftLW' THEN 3
+    ELSE 4
+  END
+  LIMIT 1
+) AS spell_lookup ON TRUE
 ON CONFLICT (subclass_id, spell_id, required_class_level) DO UPDATE SET
   counts_against_selection_limit = EXCLUDED.counts_against_selection_limit;
