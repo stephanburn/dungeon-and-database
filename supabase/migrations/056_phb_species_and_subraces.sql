@@ -42,7 +42,7 @@ VALUES
   ('Natural Illusionist', 'You know the Minor Illusion cantrip.', 'PHB', true, 'Species-granted cantrips are not yet automated.'),
   ('Speak with Small Beasts', 'You can communicate simple ideas with Small or smaller beasts.', 'PHB', false, NULL),
   ('Artificer''s Lore', 'You add doubled proficiency on History checks about magic items, alchemy, or technology.', 'PHB', true, 'Specialized expertise riders are not yet automated.'),
-  ('Tinker', 'You can create tiny clockwork devices with tinker's tools.', 'PHB', true, 'Species crafting side activity is not yet automated.'),
+  ('Tinker', 'You can create tiny clockwork devices with tinker''s tools.', 'PHB', true, 'Species crafting side activity is not yet automated.'),
   ('Skill Versatility', 'You gain proficiency in two skills of your choice.', 'PHB', false, NULL),
   ('Menacing', 'You are proficient in the Intimidation skill.', 'PHB', true, 'Species-granted fixed skill proficiencies are not yet surfaced as locked entries in the sheet picker.'),
   ('Relentless Endurance', 'Once per long rest, you can drop to 1 hit point instead of 0.', 'PHB', true, 'Once-per-rest survival riders are not yet automated.'),
