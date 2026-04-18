@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { deriveCharacter, deriveCharacterProgression, type CharacterBuildContext } from '@/lib/characters/build-context'
 import { buildTypedAsiChoices } from '@/lib/characters/asi-provenance'
+import { createAsiFeatSlotDefinition } from '@/lib/characters/feat-slots'
 import { buildTypedLanguageChoices, buildTypedToolChoices } from '@/lib/characters/language-tool-provenance'
 import { buildTypedAbilityBonusChoices } from '@/lib/characters/species-ability-bonus-provenance'
 import { buildTypedSkillProficiencies } from '@/lib/characters/skill-provenance'
@@ -122,11 +123,24 @@ test('deriveCharacterProgression computes ASI slots and spell slots from class p
 
   assert.equal(derived.totalLevel, 4)
   assert.equal(derived.totalAsiSlots, 1)
+  assert.equal(derived.featSlots[0]?.choiceKind, 'asi_or_feat')
   assert.deepEqual(derived.featSlotLabels, ['Wizard 4'])
   assert.deepEqual(derived.spellSlots, [4, 3])
   assert.equal(derived.maxSpellLevel, 2)
   assert.equal(derived.cantripSelectionCap, 4)
   assert.equal(derived.leveledSpellSelectionCap, 5)
+})
+
+test('deriveCharacterProgression prepends feat-only slot for Variant Human', () => {
+  const derived = deriveCharacterProgression(createContext({
+    speciesName: 'Variant Human',
+    speciesSource: 'PHB',
+  }))
+
+  assert.equal(derived.totalAsiSlots, 2)
+  assert.deepEqual(derived.featSlotLabels, ['Variant Human', 'Wizard 4'])
+  assert.equal(derived.featSlots[0]?.choiceKind, 'feat_only')
+  assert.equal(derived.featSlots[0]?.sourceFeatureKey, 'species_feat:variant_human')
 })
 
 test('deriveCharacter exposes milestone 1A core sheet values', () => {
@@ -317,6 +331,93 @@ test('buildTypedSkillProficiencies tags changeling and warforged species skill p
   ])
 })
 
+test('buildTypedSkillProficiencies tags half-elf and variant human PHB picks as species choices', () => {
+  const halfElfChoices = buildTypedSkillProficiencies({
+    skillProficiencies: ['insight', 'perception'],
+    background: null,
+    selectedClass: null,
+    species: {
+      id: 'half-elf',
+      name: 'Half-Elf',
+      size: 'medium',
+      speed: 30,
+      ability_score_bonuses: [{ ability: 'cha', bonus: 2 }],
+      languages: ['Common', 'Elvish'],
+      traits: [],
+      senses: [{ type: 'darkvision', range_ft: 60 }],
+      damage_resistances: [],
+      condition_immunities: [],
+      source: 'PHB',
+      amended: false,
+      amendment_note: null,
+    },
+  })
+
+  const variantHumanChoices = buildTypedSkillProficiencies({
+    skillProficiencies: ['perception'],
+    background: null,
+    selectedClass: null,
+    species: {
+      id: 'variant-human',
+      name: 'Variant Human',
+      size: 'medium',
+      speed: 30,
+      ability_score_bonuses: [],
+      languages: ['Common'],
+      traits: [],
+      senses: [],
+      damage_resistances: [],
+      condition_immunities: [],
+      source: 'PHB',
+      amended: false,
+      amendment_note: null,
+    },
+  })
+
+  assert.deepEqual(halfElfChoices, [
+    {
+      skill: 'insight',
+      expertise: false,
+      character_level_id: null,
+      source_category: 'species_choice',
+      source_entity_id: 'half-elf',
+      source_feature_key: 'species_trait:skill_versatility',
+    },
+    {
+      skill: 'perception',
+      expertise: false,
+      character_level_id: null,
+      source_category: 'species_choice',
+      source_entity_id: 'half-elf',
+      source_feature_key: 'species_trait:skill_versatility',
+    },
+  ])
+
+  assert.deepEqual(variantHumanChoices, [
+    {
+      skill: 'perception',
+      expertise: false,
+      character_level_id: null,
+      source_category: 'species_choice',
+      source_entity_id: 'variant-human',
+      source_feature_key: 'species_trait:variant_human_skill',
+    },
+  ])
+})
+
+test('runLegalityChecks allows overlapping class and half-elf skill selections when slot counts still fit', () => {
+  const result = runLegalityChecks(createContext({
+    allowedSources: ['SRD', 'PHB'],
+    allSourceRuleSets: { SRD: '2014', PHB: '2014' },
+    skillProficiencies: ['arcana', 'history', 'insight', 'perception'],
+    speciesName: 'Half-Elf',
+    speciesSource: 'PHB',
+    speciesAbilityBonuses: { cha: 2 },
+  }))
+
+  assert.equal(result.checks.find((check) => check.key === 'skill_proficiencies')?.passed, true)
+})
+
 test('buildTypedLanguageChoices tags changeling and background language picks with provenance', () => {
   const choices = buildTypedLanguageChoices({
     languageChoices: ['Elvish', 'Draconic', 'Dwarvish', 'Infernal'],
@@ -497,6 +598,68 @@ test('buildTypedLanguageChoices tags dragonmarked inherited language picks with 
   ])
 })
 
+test('buildTypedLanguageChoices tags PHB human lineage language picks with provenance', () => {
+  const halfElfChoices = buildTypedLanguageChoices({
+    languageChoices: ['Draconic'],
+    background: null,
+    species: {
+      id: 'half-elf',
+      name: 'Half-Elf',
+      size: 'medium',
+      speed: 30,
+      ability_score_bonuses: [{ ability: 'cha', bonus: 2 }],
+      languages: ['Common', 'Elvish'],
+      traits: [],
+      senses: [{ type: 'darkvision', range_ft: 60 }],
+      damage_resistances: [],
+      condition_immunities: [],
+      source: 'PHB',
+      amended: false,
+      amendment_note: null,
+    },
+  })
+
+  const variantHumanChoices = buildTypedLanguageChoices({
+    languageChoices: ['Draconic'],
+    background: null,
+    species: {
+      id: 'variant-human',
+      name: 'Variant Human',
+      size: 'medium',
+      speed: 30,
+      ability_score_bonuses: [],
+      languages: ['Common'],
+      traits: [],
+      senses: [],
+      damage_resistances: [],
+      condition_immunities: [],
+      source: 'PHB',
+      amended: false,
+      amendment_note: null,
+    },
+  })
+
+  assert.deepEqual(halfElfChoices, [
+    {
+      language: 'Draconic',
+      character_level_id: null,
+      source_category: 'species_choice',
+      source_entity_id: 'half-elf',
+      source_feature_key: 'species_languages:half_elf',
+    },
+  ])
+
+  assert.deepEqual(variantHumanChoices, [
+    {
+      language: 'Draconic',
+      character_level_id: null,
+      source_category: 'species_choice',
+      source_entity_id: 'variant-human',
+      source_feature_key: 'species_languages:variant_human',
+    },
+  ])
+})
+
 test('buildTypedToolChoices tags warforged specialized design picks', () => {
   const choices = buildTypedToolChoices({
     toolChoices: ["Thieves' Tools"],
@@ -672,10 +835,82 @@ test('buildTypedAbilityBonusChoices tags dragonmarked flexible species bonuses',
   }])
 })
 
+test('buildTypedAbilityBonusChoices tags PHB half-elf and variant human flexible bonuses', () => {
+  const halfElfChoices = buildTypedAbilityBonusChoices({
+    id: 'half-elf',
+    name: 'Half-Elf',
+    size: 'medium',
+    speed: 30,
+    ability_score_bonuses: [{ ability: 'cha', bonus: 2 }],
+    languages: ['Common', 'Elvish'],
+    traits: [],
+    senses: [{ type: 'darkvision', range_ft: 60 }],
+    damage_resistances: [],
+    condition_immunities: [],
+    source: 'PHB',
+    amended: false,
+    amendment_note: null,
+  }, ['dex', 'wis'])
+
+  const variantHumanChoices = buildTypedAbilityBonusChoices({
+    id: 'variant-human',
+    name: 'Variant Human',
+    size: 'medium',
+    speed: 30,
+    ability_score_bonuses: [],
+    languages: ['Common'],
+    traits: [],
+    senses: [],
+    damage_resistances: [],
+    condition_immunities: [],
+    source: 'PHB',
+    amended: false,
+    amendment_note: null,
+  }, ['str', 'con'])
+
+  assert.deepEqual(halfElfChoices, [
+    {
+      ability: 'dex',
+      bonus: 1,
+      character_level_id: null,
+      source_category: 'species_choice',
+      source_entity_id: 'half-elf',
+      source_feature_key: 'species_asi:half_elf',
+    },
+    {
+      ability: 'wis',
+      bonus: 1,
+      character_level_id: null,
+      source_category: 'species_choice',
+      source_entity_id: 'half-elf',
+      source_feature_key: 'species_asi:half_elf',
+    },
+  ])
+
+  assert.deepEqual(variantHumanChoices, [
+    {
+      ability: 'str',
+      bonus: 1,
+      character_level_id: null,
+      source_category: 'species_choice',
+      source_entity_id: 'variant-human',
+      source_feature_key: 'species_asi:variant_human',
+    },
+    {
+      ability: 'con',
+      bonus: 1,
+      character_level_id: null,
+      source_category: 'species_choice',
+      source_entity_id: 'variant-human',
+      source_feature_key: 'species_asi:variant_human',
+    },
+  ])
+})
+
 test('buildTypedAsiChoices persists +2 and split +1/+1 allocations by slot', () => {
   const choices = buildTypedAsiChoices(
     [['str', 'str'], ['dex', 'wis']],
-    ['Wizard 4', 'Wizard 8'],
+    [createAsiFeatSlotDefinition('Wizard 4'), createAsiFeatSlotDefinition('Wizard 8')],
     ['', '']
   )
 
@@ -700,6 +935,27 @@ test('buildTypedAsiChoices persists +2 and split +1/+1 allocations by slot', () 
       bonus: 1,
       character_level_id: null,
       source_feature_key: 'asi_slot:Wizard 8',
+    },
+  ])
+})
+
+test('buildTypedAsiChoices ignores feat-only slots', () => {
+  const choices = buildTypedAsiChoices(
+    [['str', 'dex'], ['wis', 'wis']],
+    [
+      { label: 'Variant Human', choiceKind: 'feat_only', sourceFeatureKey: 'species_feat:variant_human' },
+      createAsiFeatSlotDefinition('Wizard 4'),
+    ],
+    ['', '']
+  )
+
+  assert.deepEqual(choices, [
+    {
+      slot_index: 1,
+      ability: 'wis',
+      bonus: 2,
+      character_level_id: null,
+      source_feature_key: 'asi_slot:Wizard 4',
     },
   ])
 })

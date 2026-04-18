@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/select'
 import type { Feat, Background } from '@/lib/types/database'
 import type { AsiSelection } from '@/lib/characters/asi-provenance'
+import type { FeatSlotDefinition } from '@/lib/characters/feat-slots'
 
 const ABILITY_OPTIONS = [
   { value: 'str', label: 'Strength' },
@@ -37,7 +38,7 @@ interface FeatsCardProps {
   featChoices: string[]
   asiChoices: AsiSelection[]
   totalLevel: number
-  featSlotLabels?: string[]
+  featSlots?: FeatSlotDefinition[]
   canEdit: boolean
   onChange: (featChoices: string[]) => void
   onAsiChange: (asiChoices: AsiSelection[]) => void
@@ -50,12 +51,12 @@ export function FeatsCard({
   featChoices,
   asiChoices,
   totalLevel,
-  featSlotLabels,
+  featSlots,
   canEdit,
   onChange,
   onAsiChange,
 }: FeatsCardProps) {
-  const slots = featSlotLabels?.length ?? asiSlotsEarned(totalLevel)
+  const slots = featSlots?.length ?? asiSlotsEarned(totalLevel)
   const hasBgFeat = !!backgroundFeat
   const hasAnything = hasBgFeat || slots > 0
 
@@ -102,19 +103,27 @@ export function FeatsCard({
           const chosenId = featChoices[i] ?? ''
           const chosenFeat = availableFeats.find((f) => f.id === chosenId)
           const chosenAsi = asiChoices[i] ?? []
+          const slotDefinition = featSlots?.[i]
+          const slotLabel = slotDefinition?.label ?? `level ${DEFAULT_ASI_LEVELS[i]}`
+          const featOnly = slotDefinition?.choiceKind === 'feat_only'
 
           return (
             <div key={i} className="space-y-1">
               <p className="text-xs text-neutral-500">
-                ASI slot {i + 1} ({featSlotLabels?.[i] ?? `level ${DEFAULT_ASI_LEVELS[i]}`})
+                {featOnly ? `Feat slot ${i + 1}` : `ASI slot ${i + 1}`} ({slotLabel})
               </p>
               {canEdit ? (
-                <Select value={chosenId || 'asi'} onValueChange={(value) => setSlot(i, value === 'asi' ? '' : value)}>
+                <Select
+                  value={featOnly ? (chosenId || undefined) : (chosenId || 'asi')}
+                  onValueChange={(value) => setSlot(i, !featOnly && value === 'asi' ? '' : value)}
+                >
                   <SelectTrigger>
-                    <SelectValue placeholder="Take ASI or choose feat" />
+                    <SelectValue placeholder={featOnly ? 'Choose feat' : 'Take ASI or choose feat'} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="asi" className="text-neutral-400">Take ASI instead</SelectItem>
+                    {!featOnly && (
+                      <SelectItem value="asi" className="text-neutral-400">Take ASI instead</SelectItem>
+                    )}
                     {availableFeats.map((f) => (
                       <SelectItem key={f.id} value={f.id} className="text-neutral-200">
                         {f.name}
@@ -133,6 +142,8 @@ export function FeatsCard({
                           <p className="text-xs text-neutral-400 mt-1">{chosenFeat.description}</p>
                         )}
                       </>
+                    ) : featOnly ? (
+                      <p className="text-sm text-neutral-500">No feat selected yet.</p>
                     ) : (
                       <p className="text-sm text-neutral-500">
                         ASI {chosenAsi.length > 0 ? `(${chosenAsi.map((ability) => ability.toUpperCase()).join(', ')})` : '(not allocated yet)'}
@@ -142,7 +153,7 @@ export function FeatsCard({
                 </div>
               )}
 
-              {canEdit && !chosenFeat && (
+              {canEdit && !chosenFeat && !featOnly && (
                 <div className="grid gap-2 sm:grid-cols-2">
                   {[0, 1].map((pickIndex) => {
                     const selectedAbility = chosenAsi[pickIndex] ?? ''

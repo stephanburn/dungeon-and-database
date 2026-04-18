@@ -240,6 +240,17 @@ export async function buildCharacterBuildContext(
     return totalLevel >= row.minimum_character_level
   })
   const speciesBonusSpellIds = new Set(activeSpeciesBonusSpells.map((row) => row.spell_id))
+  const missingSpeciesSpellIds = Array.from(speciesBonusSpellIds).filter((spellId) => !spellById.has(spellId))
+  if (missingSpeciesSpellIds.length > 0) {
+    const missingSpeciesSpellsResult = await supabase
+      .from('spells')
+      .select('*')
+      .in('id', missingSpeciesSpellIds)
+
+    for (const row of (missingSpeciesSpellsResult.data ?? []) as Spell[]) {
+      spellById.set(row.id, row)
+    }
+  }
   const speciesTraitsById = new Map<string, SpeciesTrait>(
     ((speciesTraitsResult.data ?? []) as SpeciesTrait[]).map((row) => [row.id, row])
   )
@@ -341,6 +352,8 @@ export async function buildCharacterBuildContext(
         : null,
       countsAgainstSelectionLimit: typedSpellSelections.length > 0
         ? !((typedSpellSelectionsBySpellId.get(spell.id) ?? []).some((row) => !row.counts_against_selection_limit))
+        : speciesBonusSpellIds.has(spell.id)
+          ? false
         : !(bonusSpellRowsBySpellId.get(spell.id) ?? []).some(
             (row) => !row.counts_against_selection_limit
           ),

@@ -31,7 +31,21 @@ const ABILITY_LABELS: Record<AbilityKey, string> = {
 
 const ALL_ABILITIES: AbilityKey[] = ['str', 'dex', 'con', 'int', 'wis', 'cha']
 
-const DRAGONMARK_ABILITY_CHOICE_RULES: SpeciesAbilityBonusChoiceRule[] = [
+const SPECIES_ABILITY_CHOICE_RULES: SpeciesAbilityBonusChoiceRule[] = [
+  {
+    names: ['Half-Elf'],
+    count: 2,
+    bonus: 1,
+    allowedAbilities: ALL_ABILITIES.filter((ability) => ability !== 'cha'),
+    sourceFeatureKey: 'species_asi:half_elf',
+  },
+  {
+    names: ['Variant Human'],
+    count: 2,
+    bonus: 1,
+    allowedAbilities: ALL_ABILITIES,
+    sourceFeatureKey: 'species_asi:variant_human',
+  },
   {
     names: ['Half-Elf (Mark of Detection)', 'Mark of Detection Half-Elf'],
     count: 1,
@@ -87,17 +101,15 @@ export function getSpeciesAbilityBonusChoiceConfig(species: Species | null): Spe
     }
   }
 
-  if (species.source === 'ERftLW') {
-    const dragonmarkRule = DRAGONMARK_ABILITY_CHOICE_RULES.find((rule) => rule.names.includes(species.name))
-    if (!dragonmarkRule) return null
-
+  const speciesRule = SPECIES_ABILITY_CHOICE_RULES.find((rule) => rule.names.includes(species.name))
+  if (speciesRule) {
     return {
-      count: dragonmarkRule.count,
-      bonus: dragonmarkRule.bonus,
-      allowedAbilities: dragonmarkRule.allowedAbilities,
+      count: speciesRule.count,
+      bonus: speciesRule.bonus,
+      allowedAbilities: speciesRule.allowedAbilities,
       sourceCategory: 'species_choice',
       sourceEntityId: species.id,
-      sourceFeatureKey: dragonmarkRule.sourceFeatureKey,
+      sourceFeatureKey: speciesRule.sourceFeatureKey,
     }
   }
 

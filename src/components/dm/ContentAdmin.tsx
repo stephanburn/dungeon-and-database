@@ -36,6 +36,7 @@ interface SourceRow { key: string; full_name: string; is_srd: boolean; rule_set:
 interface FeatRow { id: string; name: string }
 interface EquipmentItemRow { id: string; key: string; name: string; item_category: string; source: string }
 interface StartingEquipmentPackageRow { id: string; key: string; name: string; source: string }
+interface SpeciesRow { id: string; name: string; lineage_key?: string; variant_type?: string }
 
 const STAT_KEYS = ['str', 'dex', 'con', 'int', 'wis', 'cha'] as const
 const STAT_LABELS: Record<string, string> = {
@@ -72,7 +73,24 @@ function getDeleteParam(tab: string, itemKey: string) {
 
 function defaultForm(tab: string, classes: ClassRow[]): FormState {
   if (tab === 'backgrounds') return { name: '', skill_proficiencies: '', skill_choice_count: 0, skill_choice_from: '', tool_proficiencies: '', languages: '', feature: '', background_feat_id: '', starting_equipment_package_id: '', source: '' }
-  if (tab === 'species') return { name: '', size: 'medium', speed: 30, asb_str: 0, asb_dex: 0, asb_con: 0, asb_int: 0, asb_wis: 0, asb_cha: 0, darkvision_range: 0, languages: '', source: '' }
+  if (tab === 'species') return {
+    name: '',
+    parent_species_id: '',
+    lineage_key: '',
+    variant_type: 'base',
+    variant_order: 0,
+    size: 'medium',
+    speed: 30,
+    asb_str: 0,
+    asb_dex: 0,
+    asb_con: 0,
+    asb_int: 0,
+    asb_wis: 0,
+    asb_cha: 0,
+    darkvision_range: 0,
+    languages: '',
+    source: '',
+  }
   if (tab === 'classes') return {
     name: '', hit_die: 8, primary_ability: '',
     save_str: false, save_dex: false, save_con: false, save_int: false, save_wis: false, save_cha: false,
@@ -115,6 +133,10 @@ function itemToForm(tab: string, item: ContentItem): FormState {
     const asbMap = Object.fromEntries(asbs.map(a => [a.ability, a.bonus]))
     return {
       name: item.name as string,
+      parent_species_id: (item.parent_species_id as string | null) ?? '',
+      lineage_key: (item.lineage_key as string) ?? '',
+      variant_type: (item.variant_type as string) ?? 'base',
+      variant_order: (item.variant_order as number) ?? 0,
       size: item.size as string,
       speed: item.speed as number,
       asb_str: asbMap['str'] ?? 0, asb_dex: asbMap['dex'] ?? 0, asb_con: asbMap['con'] ?? 0,
@@ -278,6 +300,10 @@ function formToPayload(tab: string, form: FormState, classes: ClassRow[] = []): 
     }
     return {
       name: form.name,
+      parent_species_id: (form.parent_species_id as string) || null,
+      lineage_key: (form.lineage_key as string) || '',
+      variant_type: form.variant_type,
+      variant_order: Number(form.variant_order) || 0,
       size: form.size,
       speed: Number(form.speed),
       ability_score_bonuses: asbs,
@@ -411,7 +437,7 @@ function formToPayload(tab: string, form: FormState, classes: ClassRow[] = []): 
 
 function renderTableHead(tab: string) {
   if (tab === 'backgrounds') return <><TableHead>Name</TableHead><TableHead>Skills</TableHead><TableHead>Source</TableHead></>
-  if (tab === 'species') return <><TableHead>Name</TableHead><TableHead>Size</TableHead><TableHead>Speed</TableHead><TableHead>Source</TableHead></>
+  if (tab === 'species') return <><TableHead>Name</TableHead><TableHead>Variant</TableHead><TableHead>Lineage</TableHead><TableHead>Source</TableHead></>
   if (tab === 'classes') return <><TableHead>Name</TableHead><TableHead>Hit Die</TableHead><TableHead>Spellcaster</TableHead><TableHead>Source</TableHead></>
   if (tab === 'subclasses') return <><TableHead>Name</TableHead><TableHead>Class</TableHead><TableHead>Level</TableHead><TableHead>Source</TableHead></>
   if (tab === 'spells') return <><TableHead>Name</TableHead><TableHead>Level</TableHead><TableHead>School</TableHead><TableHead>Source</TableHead></>
@@ -427,7 +453,7 @@ function renderTableHead(tab: string) {
 
 function renderTableCells(tab: string, item: ContentItem, classes: ClassRow[]) {
   if (tab === 'backgrounds') return <><TableCell className="font-medium">{item.name as string}</TableCell><TableCell className="text-neutral-400 text-sm">{((item.skill_proficiencies as string[]) ?? []).join(', ') || '—'}</TableCell><TableCell className="text-neutral-400 text-sm">{item.source as string}</TableCell></>
-  if (tab === 'species') return <><TableCell className="font-medium">{item.name as string}</TableCell><TableCell className="text-neutral-400 text-sm capitalize">{item.size as string}</TableCell><TableCell className="text-neutral-400 text-sm">{item.speed as number} ft</TableCell><TableCell className="text-neutral-400 text-sm">{item.source as string}</TableCell></>
+  if (tab === 'species') return <><TableCell className="font-medium">{item.name as string}</TableCell><TableCell className="text-neutral-400 text-sm capitalize">{((item.variant_type as string) || 'base').replaceAll('_', ' ')}</TableCell><TableCell className="text-neutral-400 text-sm">{(item.lineage_key as string) || '—'}</TableCell><TableCell className="text-neutral-400 text-sm">{item.source as string}</TableCell></>
   if (tab === 'classes') { const st = item.spellcasting_type as string | null; return <><TableCell className="font-medium">{item.name as string}</TableCell><TableCell className="text-neutral-400 text-sm">d{item.hit_die as number}</TableCell><TableCell className="text-neutral-400 text-sm">{st && st !== 'none' ? st : '—'}</TableCell><TableCell className="text-neutral-400 text-sm">{item.source as string}</TableCell></> }
   if (tab === 'subclasses') {
     const cls = classes.find(c => c.id === item.class_id)
@@ -455,10 +481,11 @@ interface FormProps {
   feats: FeatRow[]
   equipmentItems: EquipmentItemRow[]
   startingPackages: StartingEquipmentPackageRow[]
+  speciesRows: SpeciesRow[]
   autoFocusFirst?: boolean
 }
 
-function ContentForm({ tab, form, setField, classes, sources, feats, equipmentItems, startingPackages, autoFocusFirst }: FormProps) {
+function ContentForm({ tab, form, setField, classes, sources, feats, equipmentItems, startingPackages, speciesRows, autoFocusFirst }: FormProps) {
   let firstFieldRendered = false
 
   const field = (label: string, key: string, type: 'text' | 'number' = 'text', placeholder?: string) => {
@@ -608,6 +635,46 @@ function ContentForm({ tab, form, setField, classes, sources, feats, equipmentIt
       <div className="grid grid-cols-2 gap-4">
         {field('Name', 'name')}
         {sourceSelect}
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        {field('Lineage Key', 'lineage_key', 'text', 'elf')}
+        <div>
+          <Label className="text-neutral-400 text-xs mb-1 block">Variant Type</Label>
+          <Select value={form.variant_type as string} onValueChange={value => setField('variant_type', value)}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {['base', 'subrace', 'variant'].map((type) => (
+                <SelectItem key={type} value={type} className="capitalize text-neutral-200">
+                  {type}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <Label className="text-neutral-400 text-xs mb-1 block">Parent Species</Label>
+          <Select
+            value={(form.parent_species_id as string) || 'none'}
+            onValueChange={value => setField('parent_species_id', value === 'none' ? '' : value)}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="None" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none" className="text-neutral-400">None</SelectItem>
+              {speciesRows.map((species) => (
+                <SelectItem key={species.id} value={species.id} className="text-neutral-200">
+                  {species.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        {field('Variant Order', 'variant_order', 'number')}
       </div>
       <div className="grid grid-cols-3 gap-4">
         <div>
@@ -1120,6 +1187,8 @@ export default function ContentAdmin() {
     tab === 'subclasses' ? '/api/content/subclasses' : `/api/content/${tab}`
   , [])
 
+  const speciesRows = (activeTab === 'species' ? items : []) as unknown as SpeciesRow[]
+
   const fetchItems = useCallback(async (tab: Tab) => {
     const res = await fetch(apiUrl(tab))
     const data = await res.json()
@@ -1279,6 +1348,7 @@ export default function ContentAdmin() {
                 feats={feats}
                 equipmentItems={equipmentItems}
                 startingPackages={startingPackages}
+                speciesRows={speciesRows}
                 autoFocusFirst={!editingId}
               />
               {error && <p className="text-sm text-red-400">{error}</p>}

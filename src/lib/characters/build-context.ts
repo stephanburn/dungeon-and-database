@@ -25,6 +25,16 @@ import {
   getMaverickPreparedBreakthroughLevels,
   isMaverickSubclass,
 } from '@/lib/characters/maverick'
+import {
+  getSelectedDragonbornAncestry,
+  getSpeciesDerivedDamageResistances,
+  HIGH_ELF_CANTRIP_SOURCE_KEY,
+} from '@/lib/characters/feature-grants'
+import {
+  createAsiFeatSlotDefinition,
+  getSpeciesFeatSlotDefinitions,
+  type FeatSlotDefinition,
+} from '@/lib/characters/feat-slots'
 import { normalizeSkillKey, SAVING_THROW_NAMES, SKILLS, type SkillKey } from '@/lib/skills'
 import type { CharacterFeatureOptionChoice } from '@/lib/types/database'
 
@@ -155,6 +165,7 @@ export interface CharacterProgressionSummary {
   totalLevel: number
   classCount: number
   totalAsiSlots: number
+  featSlots: FeatSlotDefinition[]
   featSlotLabels: string[]
   multiclassCasterLevel: number
   spellSlots: number[]
@@ -385,17 +396,113 @@ function buildSpellSelectionSummary(
   return null
 }
 
+function getDragonbornBreathWeaponDice(totalLevel: number) {
+  if (totalLevel >= 16) return '5d6'
+  if (totalLevel >= 11) return '4d6'
+  if (totalLevel >= 6) return '3d6'
+  return '2d6'
+}
+
+function getDynamicSpeciesTraits(args: {
+  context: CharacterBuildContext
+  totalLevel: number
+  proficiencyBonus: number
+  constitutionModifier: number
+}): DerivedSpeciesTraitSummary[] {
+  const { context, totalLevel, proficiencyBonus, constitutionModifier } = args
+
+  if (context.speciesSource === 'PHB' && context.speciesName === 'Dragonborn') {
+    const ancestry = getSelectedDragonbornAncestry(context.selectedFeatureOptions)
+    if (!ancestry) return []
+
+    const lineBreathKeys = new Set(['black', 'blue', 'brass', 'bronze', 'copper'])
+    const isLineBreath = lineBreathKeys.has(ancestry.key)
+    const breathShape = isLineBreath ? '5 by 30 ft. line' : '15 ft. cone'
+    const saveAbility = isLineBreath ? 'DEX' : 'CON'
+    const saveDc = 8 + proficiencyBonus + constitutionModifier
+    const damageDice = getDragonbornBreathWeaponDice(totalLevel)
+
+    return [
+      {
+        id: 'species:dragonborn:ancestry',
+        name: 'Draconic Ancestry',
+        description: `${ancestry.label} dragonborn. Your breath weapon deals ${ancestry.damageType} damage, and you have resistance to ${ancestry.damageType}.`,
+        source: 'PHB',
+      },
+      {
+        id: 'species:dragonborn:breath_weapon',
+        name: 'Breath Weapon',
+        description: `As an action, exhale destructive energy in a ${breathShape}. Creatures in the area make a ${saveAbility} save (DC ${saveDc}), taking ${damageDice} ${ancestry.damageType} damage on a failed save, or half as much on a success. You can use this trait once per short or long rest.`,
+        source: 'PHB',
+      },
+      {
+        id: 'species:dragonborn:damage_resistance',
+        name: 'Damage Resistance',
+        description: `You have resistance to ${ancestry.damageType} damage from your ${ancestry.label.toLowerCase()} draconic ancestry.`,
+        source: 'PHB',
+      },
+    ]
+  }
+
+  if (context.speciesSource === 'PHB' && context.speciesName === 'High Elf') {
+    const selectedCantrip = context.selectedSpells.find(
+      (spell) => spell.sourceFeatureKey === HIGH_ELF_CANTRIP_SOURCE_KEY
+    )
+
+    return [{
+      id: 'species:high_elf:cantrip',
+      name: 'Cantrip',
+      description: selectedCantrip
+        ? `You know the wizard cantrip ${selectedCantrip.name}. Intelligence is your spellcasting ability for it.`
+        : 'Choose one wizard cantrip. Intelligence is your spellcasting ability for it.',
+      source: 'PHB',
+    }]
+  }
+
+  if (context.speciesSource === 'PHB' && context.speciesName === 'Dark Elf (Drow)') {
+    const unlockedSpells = ['Dancing Lights cantrip']
+    if (totalLevel >= 3) unlockedSpells.push('Faerie Fire once per long rest')
+    if (totalLevel >= 5) unlockedSpells.push('Darkness once per long rest')
+
+    return [{
+      id: 'species:drow:magic',
+      name: 'Drow Magic',
+      description: `You know ${unlockedSpells.join(', ')}. Charisma is your spellcasting ability for these spells.`,
+      source: 'PHB',
+    }]
+  }
+
+  if (context.speciesSource === 'PHB' && context.speciesName === 'Tiefling') {
+    const unlockedSpells = ['Thaumaturgy cantrip']
+    if (totalLevel >= 3) unlockedSpells.push('Hellish Rebuke once per long rest')
+    if (totalLevel >= 5) unlockedSpells.push('Darkness once per long rest')
+
+    return [{
+      id: 'species:tiefling:infernal_legacy',
+      name: 'Infernal Legacy',
+      description: `You know ${unlockedSpells.join(', ')}. Charisma is your spellcasting ability for these spells.`,
+      source: 'PHB',
+    }]
+  }
+
+  return []
+}
+
 export function deriveCharacterProgression(context: CharacterBuildContext): CharacterProgressionSummary {
   const totalLevel = context.classes.reduce((sum, cls) => sum + cls.level, 0)
-  const totalAsiSlots = context.classes.reduce(
-    (sum, cls) => sum + cls.progression.filter((row) => row.asiAvailable).length,
-    0
-  )
-  const featSlotLabels = context.classes.flatMap((cls) =>
+  const classFeatSlots = context.classes.flatMap((cls) =>
     cls.progression
       .filter((row) => row.asiAvailable)
-      .map((row) => `${cls.name} ${row.level}`)
+      .map((row) => createAsiFeatSlotDefinition(`${cls.name} ${row.level}`))
   )
+  const speciesFeatSlots = getSpeciesFeatSlotDefinitions(
+    context.speciesName && context.speciesSource
+      ? { name: context.speciesName, source: context.speciesSource }
+      : null
+  )
+  const featSlots = [...speciesFeatSlots, ...classFeatSlots]
+  const totalAsiSlots = featSlots.length
+  const featSlotLabels = featSlots.map((slot) => slot.label)
   const multiclassCasterLevel = context.classes.reduce(
     (sum, cls) => sum + spellcastingContribution(cls.spellcastingType, cls.level),
     0
@@ -506,6 +613,7 @@ export function deriveCharacterProgression(context: CharacterBuildContext): Char
     totalLevel,
     classCount: context.classes.length,
     totalAsiSlots,
+    featSlots,
     featSlotLabels,
     multiclassCasterLevel,
     spellSlots,
@@ -520,7 +628,7 @@ export function deriveCharacterProgression(context: CharacterBuildContext): Char
     unlockedFeatures,
     subclassRequirements,
     choiceCaps: {
-      featSlots: totalAsiSlots,
+      featSlots: featSlots.length,
       backgroundSkillChoices: context.background?.skillChoiceCount ?? 0,
       classSkillChoices: context.classes[0]?.skillChoices.count ?? 0,
     },
@@ -687,6 +795,33 @@ export function deriveCharacter(context: CharacterBuildContext): DerivedCharacte
     }
   })()
 
+  const dynamicSpeciesTraits = getDynamicSpeciesTraits({
+    context,
+    totalLevel: progression.totalLevel,
+    proficiencyBonus,
+    constitutionModifier: conModifier,
+  })
+  const replacedStaticTraitNames = new Set(
+    dynamicSpeciesTraits.flatMap((trait) => {
+      switch (trait.name) {
+        case 'Draconic Ancestry':
+          return ['Draconic Ancestry', 'Breath Weapon', 'Damage Resistance']
+        case 'Cantrip':
+          return ['Cantrip']
+        case 'Drow Magic':
+          return ['Drow Magic']
+        case 'Infernal Legacy':
+          return ['Infernal Legacy']
+        default:
+          return [trait.name]
+      }
+    })
+  )
+  const speciesTraits = [
+    ...context.speciesTraits.filter((trait) => !replacedStaticTraitNames.has(trait.name)),
+    ...dynamicSpeciesTraits,
+  ]
+
   const selectedSpellEntries = context.selectedSpells
     .filter((spell) =>
       spell.level === 0 ||
@@ -792,9 +927,16 @@ export function deriveCharacter(context: CharacterBuildContext): DerivedCharacte
       ...(context.background?.fixedLanguages ?? []),
       ...context.selectedLanguages,
     ])),
-    speciesTraits: context.speciesTraits,
+    speciesTraits,
     senses: context.speciesSenses,
-    damageResistances: context.speciesDamageResistances,
+    damageResistances: Array.from(new Set([
+      ...context.speciesDamageResistances,
+      ...getSpeciesDerivedDamageResistances({
+        speciesName: context.speciesName,
+        speciesSource: context.speciesSource,
+        selectedOptions: context.selectedFeatureOptions,
+      }),
+    ])),
     conditionImmunities: context.speciesConditionImmunities,
     armorClass,
     subclassStates,

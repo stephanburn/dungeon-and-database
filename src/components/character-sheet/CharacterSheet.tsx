@@ -41,11 +41,15 @@ import {
 } from '@/lib/characters/wizard-helpers'
 import { deriveCharacterCore, type DerivedCharacterCore } from '@/lib/characters/derived'
 import {
+  buildFeatureOptionChoicesFromDefinitionMap,
   buildMaverickFeatureOptionChoices,
   buildTypedFeatureSpellChoices,
+  getFeatureOptionChoiceValue,
   getFightingStyleFeatureOptionDefinition,
   getMaverickArcaneBreakthroughOptionDefinitions,
   getMaverickFeatureSpellChoiceDefinitions,
+  getSpeciesFeatureOptionDefinitions,
+  getSpeciesFeatureSpellChoiceDefinitions,
   getSelectedMaverickBreakthroughClassIds,
   isInteractiveFeatureSpellSourceFeatureKey,
   MAVERICK_ARCANE_BREAKTHROUGH_GROUP_KEY,
@@ -375,9 +379,24 @@ export function CharacterSheet({
     try {
       const canonicalFeatureOptionChoices = [
         ...featureOptionChoices.filter((choice) => (
-          choice.option_group_key !== MAVERICK_ARCANE_BREAKTHROUGH_GROUP_KEY
+          !choice.option_group_key.startsWith('species:')
+          && choice.option_group_key !== MAVERICK_ARCANE_BREAKTHROUGH_GROUP_KEY
           && !choice.option_group_key.startsWith('maverick:breakthrough:')
         )),
+        ...buildFeatureOptionChoicesFromDefinitionMap({
+          definitions: speciesOptionDefinitions,
+          selectedValues: Object.fromEntries(
+            speciesOptionDefinitions.map((definition) => [
+              definition.optionKey,
+              getFeatureOptionChoiceValue(
+                featureOptionChoices,
+                definition.optionGroupKey,
+                definition.optionKey,
+                definition.valueKey ?? 'class_id'
+              ) ?? '',
+            ])
+          ),
+        }),
         ...buildMaverickFeatureOptionChoices({
           selectedClassIds: maverickBreakthroughClassIds,
           definitions: maverickOptionDefinitions,
@@ -410,7 +429,7 @@ export function CharacterSheet({
           ),
           asi_choices: buildTypedAsiChoices(
             asiChoices,
-            derivedProgression?.featSlotLabels,
+            derivedProgression?.featSlots,
             featChoices
           ),
           language_choices: buildTypedLanguageChoices({
@@ -438,10 +457,10 @@ export function CharacterSheet({
             }),
             ...buildTypedFeatureSpellChoices({
               selectedChoices: featureSpellChoices,
-              definitions: maverickFeatureSpellDefinitions,
+              definitions: featureSpellDefinitions,
             }),
           ],
-          feat_choices: buildTypedFeatChoices(featChoices, derivedProgression?.featSlotLabels),
+          feat_choices: buildTypedFeatChoices(featChoices, derivedProgression?.featSlots),
           ...(isDm ? { dm_notes: dmNotes } : {}),
         }),
       })
@@ -564,6 +583,18 @@ export function CharacterSheet({
     }),
     [classList, firstClassId, firstClassLevel, maverickBreakthroughClassIds]
   )
+  const speciesOptionDefinitions = useMemo(
+    () => getSpeciesFeatureOptionDefinitions({ species: selectedSpecies }),
+    [selectedSpecies]
+  )
+  const speciesFeatureSpellDefinitions = useMemo(
+    () => getSpeciesFeatureSpellChoiceDefinitions({ species: selectedSpecies }),
+    [selectedSpecies]
+  )
+  const featureSpellDefinitions = useMemo(
+    () => [...speciesFeatureSpellDefinitions, ...maverickFeatureSpellDefinitions],
+    [maverickFeatureSpellDefinitions, speciesFeatureSpellDefinitions]
+  )
 
   useEffect(() => {
     const activeKeys = new Set(
@@ -575,6 +606,16 @@ export function CharacterSheet({
       || activeKeys.has(`${choice.option_group_key}:${choice.option_key}`)
     )))
   }, [fightingStyleDefinitions, initialFightingStyleKeys])
+
+  useEffect(() => {
+    const activeKeys = new Set(
+      speciesOptionDefinitions.map((definition) => `${definition.optionGroupKey}:${definition.optionKey}`)
+    )
+    setFeatureOptionChoices((prev) => prev.filter((choice) => (
+      !choice.option_group_key.startsWith('species:')
+      || activeKeys.has(`${choice.option_group_key}:${choice.option_key}`)
+    )))
+  }, [speciesOptionDefinitions])
 
   useEffect(() => {
     const hasCanonicalMaverickChoices = featureOptionChoices.some(
@@ -596,6 +637,13 @@ export function CharacterSheet({
       }),
     ])
   }, [featureOptionChoices, maverickBreakthroughClassIds, maverickOptionDefinitions])
+
+  useEffect(() => {
+    const activeKeys = new Set(featureSpellDefinitions.map((definition) => definition.sourceFeatureKey))
+    setFeatureSpellChoices((prev) => Object.fromEntries(
+      Object.entries(prev).filter(([sourceFeatureKey]) => activeKeys.has(sourceFeatureKey))
+    ))
+  }, [featureSpellDefinitions])
 
   const failedChecks = legalityResult?.checks.filter((c) => !c.passed) ?? []
   const derivedCharacter = legalityResult?.derived ?? null
@@ -1169,6 +1217,14 @@ export function CharacterSheet({
         />
 
         <FeatureOptionChoicesCard
+          title="Species Options"
+          definitions={speciesOptionDefinitions}
+          choices={featureOptionChoices}
+          canEdit={canEdit}
+          onChange={setFeatureOptionChoices}
+        />
+
+        <FeatureOptionChoicesCard
           title="Feature Option Choices"
           definitions={maverickOptionDefinitions}
           choices={featureOptionChoices}
@@ -1178,7 +1234,7 @@ export function CharacterSheet({
 
         <FeatureSpellChoicesCard
           title="Feature Spell Choices"
-          definitions={maverickFeatureSpellDefinitions}
+          definitions={featureSpellDefinitions}
           campaignId={campaignId}
           classList={classList}
           selectedChoices={featureSpellChoices}
@@ -1204,7 +1260,7 @@ export function CharacterSheet({
           featChoices={featChoices}
           asiChoices={asiChoices}
           totalLevel={derivedCore.totalLevel}
-          featSlotLabels={derivedProgression?.featSlotLabels}
+          featSlots={derivedProgression?.featSlots}
           canEdit={canEdit}
           onChange={setFeatChoices}
           onAsiChange={setAsiChoices}

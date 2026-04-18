@@ -38,6 +38,7 @@ import { SpellsCard } from '@/components/character-sheet/SpellsCard'
 import { FeatsCard } from '@/components/character-sheet/FeatsCard'
 import { FeatSpellChoicesCard } from '@/components/character-sheet/FeatSpellChoicesCard'
 import { FeatureOptionChoicesCard } from '@/components/character-sheet/FeatureOptionChoicesCard'
+import { FeatureSpellChoicesCard } from '@/components/character-sheet/FeatureSpellChoicesCard'
 import { LegalityBadge, LegalitySummaryBadge } from '@/components/character-sheet/LegalityBadge'
 import {
   buildCombinedSpellSelections,
@@ -67,9 +68,12 @@ import { getFeatSpellChoiceDefinitions } from '@/lib/characters/feat-spell-optio
 import {
   buildFeatureOptionChoicesFromDefinitionMap,
   buildMaverickFeatureOptionChoices,
+  buildTypedFeatureSpellChoices,
   getFeatureOptionChoiceValue,
   getFightingStyleFeatureOptionDefinition,
   getMaverickArcaneBreakthroughOptionDefinitions,
+  getSpeciesFeatureOptionDefinitions,
+  getSpeciesFeatureSpellChoiceDefinitions,
 } from '@/lib/characters/feature-grants'
 import { isMaverickSubclass } from '@/lib/characters/maverick'
 
@@ -124,6 +128,7 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
   const [subclassMap, setSubclassMap] = useState<Record<string, Subclass[]>>({})
   const [classDetailMap, setClassDetailMap] = useState<Record<string, ClassDetail>>({})
   const [spellOptions, setSpellOptions] = useState<SpellOption[]>([])
+  const [speciesSpellOptions, setSpeciesSpellOptions] = useState<SpellOption[]>([])
 
   const [speciesId, setSpeciesId] = useState('')
   const [backgroundId, setBackgroundId] = useState('')
@@ -138,6 +143,8 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
   const [featChoices, setFeatChoices] = useState<string[]>([])
   const [featSpellChoices, setFeatSpellChoices] = useState<Record<string, string>>({})
   const [featSpellOptions, setFeatSpellOptions] = useState<SpellOption[]>([])
+  const [featureSpellChoices, setFeatureSpellChoices] = useState<Record<string, string>>({})
+  const [featureSpellOptions, setFeatureSpellOptions] = useState<SpellOption[]>([])
   const [maverickBreakthroughClassIds, setMaverickBreakthroughClassIds] = useState<string[]>([])
   const [featureOptionChoices, setFeatureOptionChoices] = useState<FeatureOptionChoiceInput[]>([])
 
@@ -245,6 +252,24 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
       .then((data: SpellOption[]) => setSpellOptions(Array.isArray(data) ? data : []))
   }, [campaignId, levels, classDetailMap, maverickBreakthroughClassIds, speciesId])
 
+  useEffect(() => {
+    if (!campaignId || !speciesId) {
+      setSpeciesSpellOptions([])
+      return
+    }
+
+    const totalLevel = levels.reduce((sum, level) => sum + level.level, 0)
+    const params = new URLSearchParams({
+      campaign_id: campaignId,
+      species_id: speciesId,
+      class_level: String(totalLevel),
+    })
+
+    fetch(`/api/content/spells?${params.toString()}`)
+      .then((response) => response.json())
+      .then((data: SpellOption[]) => setSpeciesSpellOptions(Array.isArray(data) ? data : []))
+  }, [campaignId, levels, speciesId])
+
   const currentStep = STEPS[stepIndex]
   const selectedSpecies = speciesList.find((species) => species.id === speciesId) ?? null
   const selectedBackground = backgroundList.find((background) => background.id === backgroundId) ?? null
@@ -285,6 +310,18 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
     [firstClassLevel, maverickOptionRows, selectedSubclass?.id]
   )
   const breakthroughClassOptions = maverickOptionDefinitions[0]?.choices ?? []
+  const speciesOptionDefinitions = useMemo(
+    () => getSpeciesFeatureOptionDefinitions({ species: selectedSpecies }),
+    [selectedSpecies]
+  )
+  const speciesFeatureSpellDefinitions = useMemo(
+    () => getSpeciesFeatureSpellChoiceDefinitions({ species: selectedSpecies }),
+    [selectedSpecies]
+  )
+  const featureSpellDefinitions = useMemo(
+    () => speciesFeatureSpellDefinitions,
+    [speciesFeatureSpellDefinitions]
+  )
 
   useEffect(() => {
     const activeKeys = new Set(
@@ -295,6 +332,23 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
       || activeKeys.has(`${choice.option_group_key}:${choice.option_key}`)
     )))
   }, [fightingStyleDefinitions])
+
+  useEffect(() => {
+    const activeSpeciesKeys = new Set(
+      speciesOptionDefinitions.map((definition) => `${definition.optionGroupKey}:${definition.optionKey}`)
+    )
+    setFeatureOptionChoices((prev) => prev.filter((choice) => (
+      !choice.option_group_key.startsWith('species:')
+      || activeSpeciesKeys.has(`${choice.option_group_key}:${choice.option_key}`)
+    )))
+  }, [speciesOptionDefinitions])
+
+  useEffect(() => {
+    const activeKeys = new Set(featureSpellDefinitions.map((definition) => definition.sourceFeatureKey))
+    setFeatureSpellChoices((prev) => Object.fromEntries(
+      Object.entries(prev).filter(([sourceFeatureKey]) => activeKeys.has(sourceFeatureKey))
+    ))
+  }, [featureSpellDefinitions])
   const backgroundFeat = selectedBackground?.background_feat_id
     ? featList.find((feat) => feat.id === selectedBackground.background_feat_id) ?? null
     : null
@@ -314,21 +368,28 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
   const combinedSpellSelections = useMemo(
     () => buildCombinedSpellSelections({
       classSpellChoices: spellChoices,
-      spellOptions: [...spellOptions, ...featSpellOptions],
+      spellOptions: [...spellOptions, ...speciesSpellOptions, ...featSpellOptions, ...featureSpellOptions],
       owningClassId: firstClassId || null,
       activeSubclassIds: firstClassSubclassIds,
       derived: null,
       featSpellChoices,
       featList: activeFeatSpellFeats,
-    }),
+    }).concat(buildTypedFeatureSpellChoices({
+      selectedChoices: featureSpellChoices,
+      definitions: featureSpellDefinitions,
+    })),
     [
       activeFeatSpellFeats,
+      featureSpellChoices,
+      featureSpellDefinitions,
+      featureSpellOptions,
       featSpellChoices,
       featSpellOptions,
       firstClassId,
       firstClassSubclassIds,
       spellChoices,
       spellOptions,
+      speciesSpellOptions,
     ]
   )
 
@@ -347,7 +408,7 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
     levels,
     classDetailMap,
     subclassMap,
-    spellOptions: [...spellOptions, ...featSpellOptions],
+    spellOptions: [...spellOptions, ...speciesSpellOptions, ...featSpellOptions, ...featureSpellOptions],
     spellChoices,
     spellSelections: combinedSpellSelections,
     featList,
@@ -392,13 +453,16 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
   const derived = deriveLocalCharacter(localContext)
   const persistedSpellSelections = buildCombinedSpellSelections({
     classSpellChoices: spellChoices,
-    spellOptions: [...spellOptions, ...featSpellOptions],
+    spellOptions: [...spellOptions, ...speciesSpellOptions, ...featSpellOptions, ...featureSpellOptions],
     owningClassId: firstClassId || null,
     activeSubclassIds: firstClassSubclassIds,
     derived,
     featSpellChoices,
     featList: activeFeatSpellFeats,
-  })
+  }).concat(buildTypedFeatureSpellChoices({
+    selectedChoices: featureSpellChoices,
+    definitions: featureSpellDefinitions,
+  }))
   const wizardLegalitySummary = summarizeWizardLegality(legalityResult)
   const derivedBlockingIssues = legalityResult?.derived?.blockingIssues ?? []
   const derivedWarnings = legalityResult?.derived?.warnings ?? []
@@ -436,7 +500,19 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
         if (!name.trim()) return 'Enter a character name.'
         return null
       case 'species':
-        return speciesId ? null : 'Choose a species to continue.'
+        if (!speciesId) return 'Choose a species to continue.'
+        for (const definition of speciesOptionDefinitions) {
+          const selectedValue = getFeatureOptionChoiceValue(
+            featureOptionChoices,
+            definition.optionGroupKey,
+            definition.optionKey,
+            definition.valueKey ?? 'class_id'
+          )
+          if (!selectedValue) {
+            return `Choose ${definition.label.toLowerCase()} for ${selectedSpecies?.name ?? 'this species'}.`
+          }
+        }
+        return null
       case 'background':
         return backgroundId ? null : 'Choose a background to continue.'
       case 'classes':
@@ -478,11 +554,22 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
         return null
       }
       case 'spells-feats': {
-        const requiredSlots = derived?.featSlotLabels?.length ?? 0
-        const incompleteAsiSlot = Array.from({ length: requiredSlots }, (_, index) => index)
-          .find((index) => !featChoices[index] && (asiChoices[index]?.length ?? 0) !== 2)
-        if (incompleteAsiSlot !== undefined) {
-          return `Choose a feat or finish both ASI picks for slot ${incompleteAsiSlot + 1}.`
+        const requiredSlots = derived?.featSlots ?? []
+        const incompleteSlot = requiredSlots.find((slot, index) => (
+          slot.choiceKind === 'feat_only'
+            ? !featChoices[index]
+            : !featChoices[index] && (asiChoices[index]?.length ?? 0) !== 2
+        ))
+        if (incompleteSlot) {
+          return incompleteSlot.choiceKind === 'feat_only'
+            ? `Choose a feat for ${incompleteSlot.label}.`
+            : `Choose a feat or finish both ASI picks for slot ${requiredSlots.indexOf(incompleteSlot) + 1}.`
+        }
+        const missingFeatureSpell = featureSpellDefinitions.find(
+          (definition) => !featureSpellChoices[definition.sourceFeatureKey]
+        )
+        if (missingFeatureSpell) {
+          return `Choose a spell for ${missingFeatureSpell.label}.`
         }
         return null
       }
@@ -549,7 +636,7 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
         ),
         asi_choices: buildTypedAsiChoices(
           asiChoices,
-          derived?.featSlotLabels,
+          derived?.featSlots,
           featChoices
         ),
         language_choices: buildTypedLanguageChoices({
@@ -563,6 +650,20 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
           species: selectedSpecies,
         }),
         feature_option_choices: [
+          ...buildFeatureOptionChoicesFromDefinitionMap({
+            definitions: speciesOptionDefinitions,
+            selectedValues: Object.fromEntries(
+              speciesOptionDefinitions.map((definition) => [
+                definition.optionKey,
+                getFeatureOptionChoiceValue(
+                  featureOptionChoices,
+                  definition.optionGroupKey,
+                  definition.optionKey,
+                  definition.valueKey ?? 'class_id'
+                ) ?? '',
+              ])
+            ),
+          }),
           ...buildFeatureOptionChoicesFromDefinitionMap({
             definitions: fightingStyleDefinitions,
             selectedValues: Object.fromEntries(
@@ -583,7 +684,7 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
           }),
         ],
         spell_choices: persistedSpellSelections,
-        feat_choices: buildTypedFeatChoices(featChoices, derived?.featSlotLabels),
+        feat_choices: buildTypedFeatChoices(featChoices, derived?.featSlots),
       }),
     })
     const json = await response.json()
@@ -990,10 +1091,21 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
                   featChoices={featChoices}
                   asiChoices={asiChoices}
                   totalLevel={derived?.totalLevel ?? 0}
-                  featSlotLabels={derived?.featSlotLabels}
+                  featSlots={derived?.featSlots}
                   canEdit
                   onChange={setFeatChoices}
                   onAsiChange={setAsiChoices}
+                />
+
+                <FeatureSpellChoicesCard
+                  title="Species Spell Choices"
+                  definitions={featureSpellDefinitions}
+                  campaignId={campaignId}
+                  classList={classList}
+                  selectedChoices={featureSpellChoices}
+                  canEdit
+                  onChange={setFeatureSpellChoices}
+                  onOptionsLoaded={setFeatureSpellOptions}
                 />
 
                 <FeatSpellChoicesCard

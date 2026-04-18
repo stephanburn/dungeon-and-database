@@ -46,6 +46,7 @@ import {
   type DerivedCharacter,
 } from '@/lib/characters/build-context'
 import { getStaticSpeciesGrantedSpells } from '@/lib/characters/feature-grants'
+import type { FeatSlotDefinition } from '@/lib/characters/feat-slots'
 import { hitPointGainFromRoll } from '@/lib/characters/derived'
 
 export interface ClassDetail extends Class {
@@ -446,7 +447,7 @@ export function buildCombinedSpellSelections(args: {
 
 export function buildTypedFeatChoices(
   featChoices: string[],
-  featSlotLabels: string[] | undefined
+  featSlots: FeatSlotDefinition[] | undefined
 ): FeatChoiceInput[] {
   return featChoices.map((featId, index) => {
     if (!featId) return ''
@@ -455,7 +456,7 @@ export function buildTypedFeatChoices(
       feat_id: featId,
       character_level_id: null,
       choice_kind: 'feat',
-      source_feature_key: featSlotLabels?.[index] ? `asi_slot:${featSlotLabels[index]}` : null,
+      source_feature_key: featSlots?.[index]?.sourceFeatureKey ?? null,
     }
   })
 }

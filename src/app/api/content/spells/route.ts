@@ -54,7 +54,7 @@ export async function GET(request: NextRequest) {
   }
 
   const filtered = (allSpells ?? []).filter((spell) => {
-    const baseAllowed = !classId || spell.classes.includes(classId)
+    const baseAllowed = !!classId && spell.classes.includes(classId)
     const bonusAllowed = grantedSpellIds.has(spell.id)
     const speciesAllowed = speciesExpandedSpellIds.has(spell.id)
     const breakthroughAllowed = expandedClassIds.some((expandedClassId) => spell.classes.includes(expandedClassId))

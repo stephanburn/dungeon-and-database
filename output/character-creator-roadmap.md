@@ -330,6 +330,41 @@ Each slice should fit in one Codex session and land schema + types + loader/save
 - keep this slice admin-only; no builder or sheet consumption changes
 - acceptance: a DM/admin can add a new equipment item and, where relevant, its weapon / armor / shield detail row through the admin UI, then attach it to a starting-equipment package without SQL
 
+**Slice 3h — Remaining PHB species behavior**
+
+- finish the PHB species systems that are now modeled in data but still only partially automated
+- add end-to-end behavior for Dragonborn breath weapon and tighten any remaining High Elf / Drow / Tiefling species-spell handling where the current implementation still stops at availability rather than full rules behavior
+- keep the persistence path on the existing typed choice tables instead of introducing one-off species tables
+- acceptance: PHB species with active combat or spell-use choices no longer rely on placeholder amendment notes for their core builder-facing behavior
+
+**Slice 3i — PHB class option systems**
+
+- move the next choice-heavy PHB class and subclass systems onto `feature_option_groups` / `feature_options`
+- prioritize `Battle Master` maneuvers, `Hunter` choice trees, `Circle of the Land` terrain choice, and `Way of the Four Elements` disciplines
+- add enough prerequisite and effect metadata for legality and sheet rendering, not just picker labels
+- acceptance: those PHB option families can be selected, persisted, reviewed, and validated through the shared feature-option infrastructure
+
+**Slice 3j — PHB subclass spellcasting restrictions**
+
+- model the rule constraints that make PHB half-casters and third-casters more than generic spell pickers
+- start with `Eldritch Knight` and `Arcane Trickster` spell-school restrictions and off-school exception levels
+- keep the spell route and legality engine aligned so builders only see legal options and saved rows remain re-checkable
+- acceptance: those subclasses no longer rely on broad class spell access that overstates what they may legally choose
+
+**Slice 3k — Starting equipment choice resolution UX**
+
+- bridge the gap between seeded starting-equipment packages and actual builder consumption
+- add support for package alternatives, bundle choices, and instantiating selected package contents into `character_equipment_items`
+- stop short of full inventory simulation; this is about legal starting gear selection and durable persistence
+- acceptance: class and background starting equipment can be chosen through guided flows without SQL or manual sheet edits
+
+**Slice 3l — PHB completeness audit and migration verification**
+
+- do a structured pass over the seeded PHB 2014 content after the earlier slices land
+- verify migration coverage against the intended PHB scope, check for missing rows or unresolved amendment notes, and reconcile any content that exists locally but has not yet been pushed/applied
+- treat this as the Batch 3 closeout gate before Batch 4 begins
+- acceptance: Batch 3 ends with a concrete PHB completeness checklist and no major unresolved “content exists but behavior is missing” gaps that would surprise Batch 4
+
 ### Risks
 
 - Designing `feature_option_groups` / `feature_options` too generically will push validation burden back into per-option code. Prerequisite and effect fields should be concrete enough to drive legality and sheet text for Maverick and fighting styles before being pushed further.

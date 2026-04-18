@@ -3,6 +3,8 @@ import assert from 'node:assert/strict'
 import type { Class, Campaign, FeatureOption, Species } from '@/lib/types/database'
 import { deriveLocalCharacter, buildLocalCharacterContext, type ClassDetail } from '@/lib/characters/wizard-helpers'
 import {
+  getSpeciesFeatureOptionDefinitions,
+  getSpeciesFeatureSpellChoiceDefinitions,
   getMaverickArcaneBreakthroughOptionDefinitions,
   getMaverickFeatureSpellChoiceDefinitions,
   getSelectedMaverickBreakthroughClassIds,
@@ -236,6 +238,319 @@ test('mergeFeatureOptionChoiceInputs preserves unrelated feature options while r
       selected_value: { feature_option_key: 'dueling' },
     },
   ])
+})
+
+test('PHB High Elf and Dragonborn expose species-driven spell and option definitions', () => {
+  assert.deepEqual(
+    getSpeciesFeatureSpellChoiceDefinitions({
+      species: { id: 'high-elf', name: 'High Elf', source: 'PHB' },
+    }).map((definition) => ({
+      label: definition.label,
+      spellLevel: definition.spellLevel,
+      spellLists: definition.spellListClassNames,
+      countsAgainstSelectionLimit: definition.countsAgainstSelectionLimit,
+    })),
+    [{
+      label: 'High Elf cantrip',
+      spellLevel: 0,
+      spellLists: ['Wizard'],
+      countsAgainstSelectionLimit: false,
+    }]
+  )
+
+  const dragonbornDefinitions = getSpeciesFeatureOptionDefinitions({
+    species: { id: 'dragonborn', name: 'Dragonborn', source: 'PHB' },
+  })
+  assert.equal(dragonbornDefinitions.length, 1)
+  assert.equal(dragonbornDefinitions[0]?.optionKey, 'ancestry')
+  assert.equal(dragonbornDefinitions[0]?.choices.length, 10)
+  assert.equal(dragonbornDefinitions[0]?.choices[0]?.value, 'black')
+  assert.equal(dragonbornDefinitions[0]?.choices.at(-1)?.value, 'white')
+})
+
+test('PHB Dragonborn ancestry choice contributes derived damage resistance', () => {
+  const fighterDetail: ClassDetail = {
+    id: 'fighter',
+    name: 'Fighter',
+    hit_die: 10,
+    primary_ability: ['STR'],
+    saving_throw_proficiencies: ['str', 'con'],
+    armor_proficiencies: ['all'],
+    weapon_proficiencies: ['simple', 'martial'],
+    tool_proficiencies: {},
+    skill_choices: { count: 2, from: ['athletics', 'history'] },
+    multiclass_prereqs: [],
+    multiclass_proficiencies: {},
+    spellcasting_type: 'none',
+    spellcasting_progression: null,
+    subclass_choice_level: 3,
+    source: 'PHB',
+    amended: false,
+    amendment_note: null,
+    progression: [
+      { id: 'fighter-1', class_id: 'fighter', level: 1, features: [], asi_available: false, proficiency_bonus: 2 },
+    ],
+    spell_slots: [],
+  }
+
+  const dragonborn: Species = {
+    id: 'dragonborn',
+    name: 'Dragonborn',
+    size: 'medium',
+    speed: 30,
+    ability_score_bonuses: [{ ability: 'str', bonus: 2 }, { ability: 'cha', bonus: 1 }],
+    languages: ['Common', 'Draconic'],
+    traits: [],
+    senses: [],
+    damage_resistances: [],
+    condition_immunities: [],
+    source: 'PHB',
+    amended: false,
+    amendment_note: null,
+  }
+
+  const context = buildLocalCharacterContext({
+    campaign,
+    allowedSources: ['PHB'],
+    allSourceRuleSets: { PHB: '2014' },
+    statMethod: 'point_buy',
+    persistedHpMax: 12,
+    stats: { str: 15, dex: 10, con: 14, int: 8, wis: 10, cha: 12 },
+    selectedSpecies: dragonborn,
+    selectedBackground: null,
+    levels: [{ class_id: 'fighter', level: 1, subclass_id: null }],
+    classDetailMap: { fighter: fighterDetail },
+    subclassMap: {},
+    spellOptions: [],
+    spellChoices: [],
+    featList: [],
+    featChoices: [],
+    asiChoices: [],
+    skillProficiencies: [],
+    abilityBonusChoices: [],
+    languageChoices: [],
+    toolChoices: [],
+    featureOptionChoices: [{
+      id: 'dragonborn-ancestry',
+      character_id: 'local',
+      character_level_id: null,
+      option_group_key: 'species:dragonborn:ancestry',
+      option_key: 'ancestry',
+      selected_value: { feature_option_key: 'blue' },
+      choice_order: 0,
+      source_category: 'species_choice',
+      source_entity_id: 'dragonborn',
+      source_feature_key: 'species_trait:dragonborn_ancestry',
+      created_at: '',
+    }],
+  })
+
+  assert.ok(context)
+  const derived = deriveLocalCharacter(context)
+  assert.ok(derived)
+  assert.deepEqual(derived.damageResistances, ['lightning'])
+  assert.deepEqual(
+    derived.speciesTraits.map((trait) => trait.name),
+    ['Draconic Ancestry', 'Breath Weapon', 'Damage Resistance']
+  )
+  assert.match(
+    derived.speciesTraits.find((trait) => trait.name === 'Breath Weapon')?.description ?? '',
+    /DC 12/
+  )
+  assert.match(
+    derived.speciesTraits.find((trait) => trait.name === 'Breath Weapon')?.description ?? '',
+    /2d6 lightning damage/
+  )
+})
+
+test('PHB High Elf, Drow, and Tiefling derive dynamic spell-trait summaries', () => {
+  const wizardDetail: ClassDetail = {
+    id: 'wizard',
+    name: 'Wizard',
+    hit_die: 6,
+    primary_ability: ['INT'],
+    saving_throw_proficiencies: ['int', 'wis'],
+    armor_proficiencies: [],
+    weapon_proficiencies: [],
+    tool_proficiencies: {},
+    skill_choices: { count: 2, from: ['arcana', 'history'] },
+    multiclass_prereqs: [],
+    multiclass_proficiencies: {},
+    spellcasting_type: 'full',
+    spellcasting_progression: {
+      mode: 'spellbook',
+      spellcasting_ability: 'int',
+      cantrips_known_by_level: [3, 3, 3, 4, 4],
+      prepared_formula: 'class_level',
+      prepared_add_ability_mod: true,
+      prepared_min: 1,
+    },
+    subclass_choice_level: 2,
+    source: 'PHB',
+    amended: false,
+    amendment_note: null,
+    progression: [
+      { id: 'wizard-1', class_id: 'wizard', level: 1, features: [], asi_available: false, proficiency_bonus: 2 },
+      { id: 'wizard-2', class_id: 'wizard', level: 2, features: [], asi_available: false, proficiency_bonus: 2 },
+      { id: 'wizard-3', class_id: 'wizard', level: 3, features: [], asi_available: false, proficiency_bonus: 2 },
+      { id: 'wizard-4', class_id: 'wizard', level: 4, features: [], asi_available: true, proficiency_bonus: 2 },
+      { id: 'wizard-5', class_id: 'wizard', level: 5, features: [], asi_available: false, proficiency_bonus: 3 },
+    ],
+    spell_slots: [
+      { id: 'wizard-slots-5', class_id: 'wizard', level: 5, slots_by_spell_level: [4, 3, 2] },
+    ],
+  }
+
+  const highElf: Species = {
+    id: 'high-elf',
+    name: 'High Elf',
+    size: 'medium',
+    speed: 30,
+    ability_score_bonuses: [{ ability: 'dex', bonus: 2 }, { ability: 'int', bonus: 1 }],
+    languages: ['Common', 'Elvish'],
+    traits: [],
+    senses: [{ type: 'darkvision', range_ft: 60 }],
+    damage_resistances: [],
+    condition_immunities: [],
+    source: 'PHB',
+    amended: false,
+    amendment_note: null,
+  }
+
+  const highElfContext = buildLocalCharacterContext({
+    campaign,
+    allowedSources: ['PHB'],
+    allSourceRuleSets: { PHB: '2014' },
+    statMethod: 'point_buy',
+    persistedHpMax: 18,
+    stats: { str: 8, dex: 14, con: 12, int: 16, wis: 10, cha: 10 },
+    selectedSpecies: highElf,
+    selectedBackground: null,
+    levels: [{ class_id: 'wizard', level: 5, subclass_id: null }],
+    classDetailMap: { wizard: wizardDetail },
+    subclassMap: {},
+    spellOptions: [{
+      id: 'ray-of-frost',
+      name: 'Ray of Frost',
+      level: 0,
+      school: 'evocation',
+      casting_time: '1 action',
+      range: '60 feet',
+      components: { verbal: true, somatic: true, material: false },
+      duration: 'Instantaneous',
+      concentration: false,
+      ritual: false,
+      description: '',
+      classes: ['wizard'],
+      source: 'PHB',
+      amended: false,
+      amendment_note: null,
+      source_feature_key: 'feature_spell:species:high_elf:cantrip',
+      counts_against_selection_limit: false,
+    }],
+    spellChoices: [],
+    spellSelections: [{
+      spell_id: 'ray-of-frost',
+      character_level_id: null,
+      owning_class_id: null,
+      granting_subclass_id: null,
+      acquisition_mode: 'granted',
+      counts_against_selection_limit: false,
+      source_feature_key: 'feature_spell:species:high_elf:cantrip',
+    }],
+    featList: [],
+    featChoices: [],
+    asiChoices: [],
+    skillProficiencies: [],
+    abilityBonusChoices: [],
+    languageChoices: [],
+    toolChoices: [],
+    featureOptionChoices: [],
+  })
+
+  assert.ok(highElfContext)
+  const highElfDerived = deriveLocalCharacter(highElfContext)
+  assert.ok(highElfDerived)
+  assert.match(
+    highElfDerived.speciesTraits.find((trait) => trait.name === 'Cantrip')?.description ?? '',
+    /Ray of Frost/
+  )
+
+  const drowContext = buildLocalCharacterContext({
+    campaign,
+    allowedSources: ['PHB'],
+    allSourceRuleSets: { PHB: '2014' },
+    statMethod: 'point_buy',
+    persistedHpMax: 18,
+    stats: { str: 8, dex: 14, con: 12, int: 14, wis: 10, cha: 14 },
+    selectedSpecies: { ...highElf, id: 'drow', name: 'Dark Elf (Drow)' },
+    selectedBackground: null,
+    levels: [{ class_id: 'wizard', level: 5, subclass_id: null }],
+    classDetailMap: { wizard: wizardDetail },
+    subclassMap: {},
+    spellOptions: [],
+    spellChoices: [],
+    featList: [],
+    featChoices: [],
+    asiChoices: [],
+    skillProficiencies: [],
+    abilityBonusChoices: [],
+    languageChoices: [],
+    toolChoices: [],
+    featureOptionChoices: [],
+  })
+  assert.ok(drowContext)
+  const drowDerived = deriveLocalCharacter(drowContext)
+  assert.ok(drowDerived)
+  assert.match(
+    drowDerived.speciesTraits.find((trait) => trait.name === 'Drow Magic')?.description ?? '',
+    /Dancing Lights cantrip, Faerie Fire once per long rest, Darkness once per long rest/
+  )
+
+  const tieflingContext = buildLocalCharacterContext({
+    campaign,
+    allowedSources: ['PHB'],
+    allSourceRuleSets: { PHB: '2014' },
+    statMethod: 'point_buy',
+    persistedHpMax: 18,
+    stats: { str: 8, dex: 14, con: 12, int: 13, wis: 10, cha: 16 },
+    selectedSpecies: {
+      id: 'tiefling',
+      name: 'Tiefling',
+      size: 'medium',
+      speed: 30,
+      ability_score_bonuses: [{ ability: 'int', bonus: 1 }, { ability: 'cha', bonus: 2 }],
+      languages: ['Common', 'Infernal'],
+      traits: [],
+      senses: [{ type: 'darkvision', range_ft: 60 }],
+      damage_resistances: ['fire'],
+      condition_immunities: [],
+      source: 'PHB',
+      amended: false,
+      amendment_note: null,
+    },
+    selectedBackground: null,
+    levels: [{ class_id: 'wizard', level: 5, subclass_id: null }],
+    classDetailMap: { wizard: wizardDetail },
+    subclassMap: {},
+    spellOptions: [],
+    spellChoices: [],
+    featList: [],
+    featChoices: [],
+    asiChoices: [],
+    skillProficiencies: [],
+    abilityBonusChoices: [],
+    languageChoices: [],
+    toolChoices: [],
+    featureOptionChoices: [],
+  })
+  assert.ok(tieflingContext)
+  const tieflingDerived = deriveLocalCharacter(tieflingContext)
+  assert.ok(tieflingDerived)
+  assert.match(
+    tieflingDerived.speciesTraits.find((trait) => trait.name === 'Infernal Legacy')?.description ?? '',
+    /Thaumaturgy cantrip, Hellish Rebuke once per long rest, Darkness once per long rest/
+  )
 })
 
 test('static dragonmark trait grants become free derived spells when the spell exists locally', () => {

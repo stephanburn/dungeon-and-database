@@ -1,16 +1,19 @@
 import type { CharacterAsiChoice } from '@/lib/types/database'
 import type { AsiChoiceInput } from '@/lib/characters/choice-persistence'
 import type { AbilityKey } from '@/lib/characters/build-context'
+import type { FeatSlotDefinition } from '@/lib/characters/feat-slots'
 
 export type AsiSelection = AbilityKey[]
 
 export function buildTypedAsiChoices(
   asiChoices: AsiSelection[],
-  featSlotLabels: string[] | undefined,
+  featSlots: FeatSlotDefinition[] | undefined,
   featChoices?: string[]
 ): AsiChoiceInput[] {
   return asiChoices.flatMap((selection, slotIndex) => {
+    const slotDefinition = featSlots?.[slotIndex]
     if ((featChoices?.[slotIndex] ?? '').length > 0) return []
+    if (slotDefinition?.choiceKind === 'feat_only') return []
 
     const bonusByAbility = selection.reduce<Partial<Record<AbilityKey, number>>>((acc, ability) => {
       acc[ability] = (acc[ability] ?? 0) + 1
@@ -22,7 +25,7 @@ export function buildTypedAsiChoices(
       ability,
       bonus,
       character_level_id: null,
-      source_feature_key: featSlotLabels?.[slotIndex] ? `asi_slot:${featSlotLabels[slotIndex]}` : null,
+      source_feature_key: slotDefinition?.sourceFeatureKey ?? null,
     }))
   })
 }

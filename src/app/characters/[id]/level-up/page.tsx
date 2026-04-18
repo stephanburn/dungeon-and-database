@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { hasDmAccess } from '@/lib/auth/roles'
 import { LevelUpWizard } from '../LevelUpWizard'
 import { buildAsiSelectionsFromRows } from '@/lib/characters/asi-provenance'
+import type { SpellOption } from '@/lib/characters/wizard-helpers'
 import type {
   Background,
   Campaign,
@@ -96,6 +97,18 @@ export default async function CharacterLevelUpPage({ params }: { params: { id: s
   const spellSelectionRows = initialSpellChoiceIds.length > 0
     ? await supabase.from('spells').select('*').in('id', initialSpellChoiceIds)
     : { data: [] as Spell[] }
+  const selectedSpellRowsById = new Map(
+    (((typedSpellSelectionsResult.data ?? []) as CharacterSpellSelection[]).map((row) => [row.spell_id, row]))
+  )
+  const initialSelectedSpells = ((spellSelectionRows.data ?? []) as Spell[]).map((spell) => {
+    const selection = selectedSpellRowsById.get(spell.id)
+    return {
+      ...spell,
+      granted_by_subclasses: selection?.granting_subclass_id ? [selection.granting_subclass_id] : [],
+      counts_against_selection_limit: selection?.counts_against_selection_limit ?? true,
+      source_feature_key: selection?.source_feature_key ?? null,
+    } satisfies SpellOption
+  })
 
   const characterWithRelations: CharacterWithRelations = {
     ...character,
@@ -126,7 +139,8 @@ export default async function CharacterLevelUpPage({ params }: { params: { id: s
           initialToolChoices={initialToolChoices}
           initialFeatureOptionChoices={initialFeatureOptionChoices}
           initialSpellChoices={initialSpellChoiceIds}
-          initialSpellSelections={(spellSelectionRows.data ?? []) as Spell[]}
+          initialSpellSelections={(typedSpellSelectionsResult.data ?? []) as CharacterSpellSelection[]}
+          initialSelectedSpells={initialSelectedSpells}
           initialFeatChoices={initialFeatChoices}
           isDm={hasDmAccess(profile?.role)}
         />

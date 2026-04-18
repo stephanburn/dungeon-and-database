@@ -104,7 +104,31 @@ export const STANDARD_TOOL_OPTIONS = [
 
 const ARTISANS_TOOL_OPTIONS = STANDARD_TOOL_OPTIONS.filter((tool) => tool.includes("Tools") || tool.includes("Supplies") || tool.includes('Utensils'))
 
-const DRAGONMARK_LANGUAGE_CHOICE_RULES: SpeciesChoiceRule[] = [
+const SPECIES_LANGUAGE_CHOICE_RULES: SpeciesChoiceRule[] = [
+  {
+    names: ['Half-Elf'],
+    sources: ['PHB'],
+    count: 1,
+    sourceFeatureKey: 'species_languages:half_elf',
+  },
+  {
+    names: ['Human'],
+    sources: ['PHB'],
+    count: 1,
+    sourceFeatureKey: 'species_languages:human',
+  },
+  {
+    names: ['Variant Human'],
+    sources: ['PHB'],
+    count: 1,
+    sourceFeatureKey: 'species_languages:variant_human',
+  },
+  {
+    names: ['High Elf'],
+    sources: ['PHB'],
+    count: 1,
+    sourceFeatureKey: 'species_languages:high_elf',
+  },
   {
     names: ['Half-Elf (Mark of Detection)', 'Mark of Detection Half-Elf'],
     sources: ['ERftLW', 'EE'],
@@ -210,17 +234,17 @@ function getSpeciesLanguageChoiceConfig(species: Species | null, availableLangua
     }
   }
 
-  const dragonmarkRule = DRAGONMARK_LANGUAGE_CHOICE_RULES.find((rule) => (
+  const speciesRule = SPECIES_LANGUAGE_CHOICE_RULES.find((rule) => (
     rule.names.includes(species.name) &&
     (!rule.sources || rule.sources.includes(species.source))
   ))
-  if (dragonmarkRule) {
+  if (speciesRule) {
     return {
-      count: dragonmarkRule.count,
+      count: speciesRule.count,
       options: availableLanguages.filter((language) => !species.languages.includes(language)),
       sourceCategory: 'species_choice',
       sourceEntityId: species.id,
-      sourceFeatureKey: dragonmarkRule.sourceFeatureKey,
+      sourceFeatureKey: speciesRule.sourceFeatureKey,
     }
   }
 

@@ -3,6 +3,7 @@ import type {
   CharacterSpellSelection,
   Class,
   FeatureOption,
+  Species,
   Spell,
 } from '@/lib/types/database'
 import type {
@@ -43,7 +44,11 @@ export const MAVERICK_SUBCLASS_SOURCE = 'EE'
 export const MAVERICK_ARCANE_BREAKTHROUGH_GROUP_KEY = 'maverick:arcane_breakthrough_classes'
 export const MAVERICK_ARCANE_BREAKTHROUGH_SOURCE_KEY = 'subclass_feature:maverick:arcane_breakthroughs'
 export const MAVERICK_CANTRIP_SPECIALIST_SOURCE_KEY = 'feature_spell:maverick:cantrip_specialist'
-export const FIGHTING_STYLE_VALUE_KEY = 'feature_option_key'
+export const FEATURE_OPTION_VALUE_KEY = 'feature_option_key'
+export const FIGHTING_STYLE_VALUE_KEY = FEATURE_OPTION_VALUE_KEY
+export const DRAGONBORN_ANCESTRY_GROUP_KEY = 'species:dragonborn:ancestry'
+export const DRAGONBORN_ANCESTRY_SOURCE_KEY = 'species_trait:dragonborn_ancestry'
+export const HIGH_ELF_CANTRIP_SOURCE_KEY = 'feature_spell:species:high_elf:cantrip'
 
 const FIGHTING_STYLE_GROUP_KEYS: Record<string, string> = {
   Fighter: 'fighting_style:fighter:2014',
@@ -65,6 +70,13 @@ type StaticGrantedSpellRule = {
   spellSources?: string[]
   minLevel?: number
   sourceFeatureKey: string
+}
+
+type DragonbornAncestryDefinition = {
+  key: string
+  label: string
+  damageType: string
+  description: string
 }
 
 const MARK_OF_DETECTION_RULES: StaticGrantedSpellRule[] = [
@@ -117,6 +129,29 @@ const MARK_OF_SCRIBING_RULES: StaticGrantedSpellRule[] = [
   { spellName: 'Comprehend Languages', spellSource: 'ERftLW', sourceFeatureKey: 'species_trait:scribes_insight:comprehend_languages' },
   { spellName: 'Magic Mouth', spellSource: 'ERftLW', sourceFeatureKey: 'species_trait:scribes_insight:magic_mouth' },
 ]
+const DROW_MAGIC_RULES: StaticGrantedSpellRule[] = [
+  { spellName: 'Dancing Lights', spellSources: ['PHB', 'SRD', 'ERftLW'], sourceFeatureKey: 'species_trait:drow_magic:dancing_lights' },
+  { spellName: 'Faerie Fire', spellSources: ['PHB', 'SRD', 'ERftLW'], minLevel: 3, sourceFeatureKey: 'species_trait:drow_magic:faerie_fire' },
+  { spellName: 'Darkness', spellSources: ['PHB', 'SRD', 'ERftLW'], minLevel: 5, sourceFeatureKey: 'species_trait:drow_magic:darkness' },
+]
+const INFERNAL_LEGACY_RULES: StaticGrantedSpellRule[] = [
+  { spellName: 'Thaumaturgy', spellSources: ['PHB', 'SRD'], sourceFeatureKey: 'species_trait:infernal_legacy:thaumaturgy' },
+  { spellName: 'Hellish Rebuke', spellSources: ['PHB', 'SRD'], minLevel: 3, sourceFeatureKey: 'species_trait:infernal_legacy:hellish_rebuke' },
+  { spellName: 'Darkness', spellSources: ['PHB', 'SRD', 'ERftLW'], minLevel: 5, sourceFeatureKey: 'species_trait:infernal_legacy:darkness' },
+]
+
+const DRAGONBORN_ANCESTRIES: DragonbornAncestryDefinition[] = [
+  { key: 'black', label: 'Black', damageType: 'acid', description: 'Acid breath weapon in a line, with acid resistance.' },
+  { key: 'blue', label: 'Blue', damageType: 'lightning', description: 'Lightning breath weapon in a line, with lightning resistance.' },
+  { key: 'brass', label: 'Brass', damageType: 'fire', description: 'Fire breath weapon in a line, with fire resistance.' },
+  { key: 'bronze', label: 'Bronze', damageType: 'lightning', description: 'Lightning breath weapon in a line, with lightning resistance.' },
+  { key: 'copper', label: 'Copper', damageType: 'acid', description: 'Acid breath weapon in a line, with acid resistance.' },
+  { key: 'gold', label: 'Gold', damageType: 'fire', description: 'Fire breath weapon in a cone, with fire resistance.' },
+  { key: 'green', label: 'Green', damageType: 'poison', description: 'Poison breath weapon in a cone, with poison resistance.' },
+  { key: 'red', label: 'Red', damageType: 'fire', description: 'Fire breath weapon in a cone, with fire resistance.' },
+  { key: 'silver', label: 'Silver', damageType: 'cold', description: 'Cold breath weapon in a cone, with cold resistance.' },
+  { key: 'white', label: 'White', damageType: 'cold', description: 'Cold breath weapon in a cone, with cold resistance.' },
+]
 
 const STATIC_SPECIES_GRANTED_SPELL_RULES: Record<string, StaticGrantedSpellRule[]> = {
   'ERftLW:Half-Elf (Mark of Detection)': MARK_OF_DETECTION_RULES,
@@ -145,6 +180,8 @@ const STATIC_SPECIES_GRANTED_SPELL_RULES: Record<string, StaticGrantedSpellRule[
   'ERftLW:Mark of Shadow Elf': MARK_OF_SHADOW_RULES,
   'ERftLW:Gnome (Mark of Scribing)': MARK_OF_SCRIBING_RULES,
   'ERftLW:Mark of Scribing Gnome': MARK_OF_SCRIBING_RULES,
+  'PHB:Dark Elf (Drow)': DROW_MAGIC_RULES,
+  'PHB:Tiefling': INFERNAL_LEGACY_RULES,
 }
 
 export function isInteractiveFeatureSpellSourceFeatureKey(sourceFeatureKey: string | null | undefined) {
@@ -389,6 +426,80 @@ export function getFightingStyleFeatureOptionDefinition(args: {
     sourceEntityId: args.classId,
     sourceFeatureKey: `class_feature:fighting_style:${className.toLowerCase()}`,
   }]
+}
+
+function isPhbHighElf(species: Pick<Species, 'name' | 'source'> | null) {
+  return species?.name === 'High Elf' && species.source === 'PHB'
+}
+
+function isPhbDragonborn(species: Pick<Species, 'name' | 'source'> | null) {
+  return species?.name === 'Dragonborn' && species.source === 'PHB'
+}
+
+export function getSpeciesFeatureSpellChoiceDefinitions(args: {
+  species: Pick<Species, 'id' | 'name' | 'source'> | null
+}): FeatureSpellChoiceDefinition[] {
+  if (!isPhbHighElf(args.species)) return []
+
+  return [{
+    ownerLabel: 'High Elf',
+    label: 'High Elf cantrip',
+    spellLevel: 0,
+    spellListClassNames: ['Wizard'],
+    acquisitionMode: 'granted',
+    countsAgainstSelectionLimit: false,
+    sourceFeatureKey: HIGH_ELF_CANTRIP_SOURCE_KEY,
+    owningClassId: null,
+  }]
+}
+
+export function getSpeciesFeatureOptionDefinitions(args: {
+  species: Pick<Species, 'id' | 'name' | 'source'> | null
+}): FeatureOptionChoiceDefinition[] {
+  if (!isPhbDragonborn(args.species)) return []
+
+  return [{
+    optionGroupKey: DRAGONBORN_ANCESTRY_GROUP_KEY,
+    optionKey: 'ancestry',
+    label: 'Draconic Ancestry',
+    description: 'Choose the dragon ancestry that sets your breath weapon and damage resistance.',
+    valueKey: FEATURE_OPTION_VALUE_KEY,
+    choiceOrder: 0,
+    choices: DRAGONBORN_ANCESTRIES.map((ancestry) => ({
+      value: ancestry.key,
+      label: ancestry.label,
+      description: ancestry.description,
+    })),
+    sourceCategory: 'species_choice',
+    sourceEntityId: args.species?.id ?? null,
+    sourceFeatureKey: DRAGONBORN_ANCESTRY_SOURCE_KEY,
+  }]
+}
+
+export function getSelectedDragonbornAncestry(
+  rows: Array<Pick<CharacterFeatureOptionChoice, 'option_group_key' | 'option_key' | 'selected_value'>>
+) {
+  const selectedKey = getFeatureOptionChoiceValue(
+    rows,
+    DRAGONBORN_ANCESTRY_GROUP_KEY,
+    'ancestry',
+    FEATURE_OPTION_VALUE_KEY
+  )
+  if (!selectedKey) return null
+
+  return DRAGONBORN_ANCESTRIES.find((ancestry) => ancestry.key === selectedKey) ?? null
+}
+
+export function getSpeciesDerivedDamageResistances(args: {
+  speciesName: string | null
+  speciesSource: string | null
+  selectedOptions: Array<Pick<CharacterFeatureOptionChoice, 'option_group_key' | 'option_key' | 'selected_value'>>
+}) {
+  if (!args.speciesName || !args.speciesSource) return []
+  if (!(args.speciesName === 'Dragonborn' && args.speciesSource === 'PHB')) return []
+
+  const ancestry = getSelectedDragonbornAncestry(args.selectedOptions)
+  return ancestry ? [ancestry.damageType] : []
 }
 
 export function getMaverickFeatureSpellChoiceDefinitions(args: {

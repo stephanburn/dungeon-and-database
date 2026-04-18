@@ -8,6 +8,7 @@ export type CharacterStatus = 'draft' | 'submitted' | 'approved' | 'changes_requ
 export type StatMethod = 'point_buy' | 'standard_array' | 'rolled'
 export type Alignment = 'LG' | 'NG' | 'CG' | 'LN' | 'N' | 'CN' | 'LE' | 'NE' | 'CE'
 export type SizeCategory = 'tiny' | 'small' | 'medium' | 'large'
+export type SpeciesVariantType = 'base' | 'subrace' | 'variant'
 export type SpellcastingType = 'full' | 'half' | 'third' | 'pact' | 'none'
 export type ChoiceType = 'asi' | 'feat' | 'spell_known' | 'skill' | 'fighting_style' | 'other'
 export type CheckSeverity = 'error' | 'warning'
@@ -130,6 +131,10 @@ export type SpeciesTrait = {
 export type Species = {
   id: string
   name: string
+  parent_species_id?: string | null
+  lineage_key?: string
+  variant_type?: SpeciesVariantType
+  variant_order?: number
   size: SizeCategory
   speed: number
   ability_score_bonuses: AbilityScoreBonus[]

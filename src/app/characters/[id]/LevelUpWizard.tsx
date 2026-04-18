@@ -30,13 +30,13 @@ import type {
   Character,
   CharacterFeatureOptionChoice,
   CharacterLevel,
+  CharacterSpellSelection,
   Class,
   Feat,
   FeatureOption,
   MulticlassPrereq,
   RuleSet,
   Species,
-  Spell,
   StatMethod,
   Subclass,
 } from '@/lib/types/database'
@@ -62,6 +62,7 @@ import { getFeatSpellChoiceDefinitions } from '@/lib/characters/feat-spell-optio
 import {
   buildFeatureOptionChoicesFromDefinitionMap,
   buildMaverickFeatureOptionChoices,
+  isInteractiveFeatureSpellSourceFeatureKey,
   getFeatureOptionChoiceValue,
   getFightingStyleFeatureOptionDefinition,
   getMaverickArcaneBreakthroughOptionDefinitions,
@@ -93,7 +94,8 @@ type LevelUpWizardProps = {
   initialFeatureOptionChoices: CharacterFeatureOptionChoice[]
   initialSpellChoices: string[]
   initialFeatSpellChoices?: Record<string, string>
-  initialSpellSelections: Spell[]
+  initialSpellSelections: CharacterSpellSelection[]
+  initialSelectedSpells: SpellOption[]
   initialFeatChoices: string[]
   isDm: boolean
 }
@@ -160,6 +162,7 @@ export function LevelUpWizard({
   initialSpellChoices,
   initialFeatSpellChoices = {},
   initialSpellSelections,
+  initialSelectedSpells,
   initialFeatChoices,
   isDm,
 }: LevelUpWizardProps) {
@@ -209,7 +212,11 @@ export function LevelUpWizard({
   const [maverickBreakthroughClassIds, setMaverickBreakthroughClassIds] = useState<string[]>(
     getSelectedMaverickBreakthroughClassIds(initialFeatureOptionChoices)
   )
-  const [spellChoices, setSpellChoices] = useState<string[]>(initialSpellChoices)
+  const [spellChoices, setSpellChoices] = useState<string[]>(
+    initialSpellSelections
+      .filter((selection) => !isInteractiveFeatureSpellSourceFeatureKey(selection.source_feature_key))
+      .map((selection) => selection.spell_id)
+  )
   const [featChoices] = useState<string[]>(initialFeatChoices)
   const [featSpellChoices, setFeatSpellChoices] = useState<Record<string, string>>(initialFeatSpellChoices)
   const [featSpellOptions, setFeatSpellOptions] = useState<SpellOption[]>([])
@@ -330,7 +337,7 @@ export function LevelUpWizard({
 
   const mergedSpellOptions = useMemo<SpellOption[]>(() => {
     const byId = new Map<string, SpellOption>()
-    for (const spell of initialSpellSelections) {
+    for (const spell of initialSelectedSpells) {
       byId.set(spell.id, spell)
     }
     for (const spell of spellOptions) {
@@ -340,7 +347,7 @@ export function LevelUpWizard({
       byId.set(spell.id, spell)
     }
     return Array.from(byId.values())
-  }, [featSpellOptions, initialSpellSelections, spellOptions])
+  }, [featSpellOptions, initialSelectedSpells, spellOptions])
   const selectedSubclass = selectedClassId
     ? (subclassMap[selectedClassId] ?? []).find((entry) => entry.id === selectedSubclassId) ?? null
     : null
@@ -449,16 +456,6 @@ export function LevelUpWizard({
       : null,
     [character.background, featList]
   )
-  const currentActiveFeatSpellFeats = useMemo(
-    () => [
-      ...initialFeatChoices
-        .map((featId) => featList.find((feat) => feat.id === featId))
-        .filter((feat): feat is Feat => Boolean(feat)),
-      ...(backgroundFeat ? [backgroundFeat] : []),
-    ],
-    [backgroundFeat, featList, initialFeatChoices]
-  )
-
   const currentContext = buildLocalCharacterContext({
     campaign,
     allowedSources,
@@ -480,17 +477,7 @@ export function LevelUpWizard({
     subclassMap,
     spellOptions: mergedSpellOptions,
     spellChoices: initialSpellChoices,
-    spellSelections: buildCombinedSpellSelections({
-      classSpellChoices: initialSpellChoices,
-      spellOptions: mergedSpellOptions,
-      owningClassId: baseLevels[0]?.class_id ?? null,
-      activeSubclassIds: baseLevels
-        .filter((level) => level.class_id === (baseLevels[0]?.class_id ?? '') && level.subclass_id)
-        .map((level) => level.subclass_id as string),
-      derived: null,
-      featSpellChoices: initialFeatSpellChoices,
-      featList: currentActiveFeatSpellFeats,
-    }),
+    spellSelections: initialSpellSelections,
     featList,
     featChoices: initialFeatChoices,
     asiChoices: initialAsiChoices,
@@ -500,6 +487,21 @@ export function LevelUpWizard({
     toolChoices: initialToolChoices,
     featureOptionChoices: initialFeatureOptionChoices,
   })
+
+  const preservedFeatureSpellSelections = useMemo(
+    () => initialSpellSelections
+      .filter((selection) => selection.source_feature_key?.startsWith('feature_spell:'))
+      .map((selection) => ({
+        spell_id: selection.spell_id,
+        character_level_id: selection.character_level_id,
+        owning_class_id: selection.owning_class_id,
+        granting_subclass_id: selection.granting_subclass_id,
+        acquisition_mode: selection.acquisition_mode,
+        counts_against_selection_limit: selection.counts_against_selection_limit,
+        source_feature_key: selection.source_feature_key,
+      })),
+    [initialSpellSelections]
+  )
 
   const nextFeatChoices = useMemo(() => {
     const next = [...featChoices]
@@ -625,7 +627,7 @@ export function LevelUpWizard({
     derived: null,
     featSpellChoices,
     featList: nextActiveFeatSpellFeats,
-  })
+  }).concat(preservedFeatureSpellSelections)
 
   const nextContext = buildLocalCharacterContext({
     campaign,
@@ -683,7 +685,7 @@ export function LevelUpWizard({
     derived: nextDerived,
     featSpellChoices,
     featList: nextActiveFeatSpellFeats,
-  })
+  }).concat(preservedFeatureSpellSelections)
   const localLegality = nextContext ? runLegalityChecks(nextContext) : null
   const canonicalIssues = (savedLegality ?? localLegality)?.derived
   const canonicalBlockingIssues = canonicalIssues?.blockingIssues ?? []
@@ -697,10 +699,11 @@ export function LevelUpWizard({
     !targetLevelRow.subclass_id
   )
 
-  const featSlotLabels = nextDerived?.featSlotLabels ?? []
+  const featSlots = nextDerived?.featSlots ?? []
   const currentFeatSlotCount = currentDerived?.totalAsiSlots ?? 0
-  const newFeatSlotLabel = featSlotLabels[currentFeatSlotCount] ?? null
-  const needsFeatStep = Boolean(newFeatSlotLabel)
+  const newFeatSlot = featSlots[currentFeatSlotCount] ?? null
+  const newFeatSlotLabel = newFeatSlot?.label ?? null
+  const needsFeatStep = Boolean(newFeatSlot)
 
   const multiclassSkillConfig = enteringNewClass ? getMulticlassSkillChoiceConfig(selectedClassDetail) : null
   const knownSkills = useMemo(() => new Set(initialSkillProficiencies), [initialSkillProficiencies])
@@ -795,7 +798,15 @@ export function LevelUpWizard({
         }
         return null
       case 'feat':
-        if (!newFeatChoice) return 'Choose whether this level grants an ASI or a feat.'
+        if (!newFeatSlot) return null
+        if (!newFeatChoice) {
+          return newFeatSlot.choiceKind === 'feat_only'
+            ? `Choose the feat granted by ${newFeatSlot.label}.`
+            : 'Choose whether this level grants an ASI or a feat.'
+        }
+        if (newFeatSlot.choiceKind === 'feat_only' && newFeatChoice === 'asi') {
+          return `${newFeatSlot.label} grants a feat, not an ASI.`
+        }
         if (newFeatChoice === 'asi') {
           const selection = asiChoices[currentFeatSlotCount] ?? []
           if (selection.length !== 2) {
@@ -863,7 +874,7 @@ export function LevelUpWizard({
           ),
           asi_choices: buildTypedAsiChoices(
             asiChoices,
-            nextDerived?.featSlotLabels,
+            nextDerived?.featSlots,
             nextFeatChoices
           ),
           language_choices: buildTypedLanguageChoices({
@@ -878,7 +889,7 @@ export function LevelUpWizard({
           }),
           feature_option_choices: canonicalFeatureOptionChoices,
           spell_choices: persistedNextSpellSelections,
-          feat_choices: buildTypedFeatChoices(nextFeatChoices, nextDerived?.featSlotLabels),
+          feat_choices: buildTypedFeatChoices(nextFeatChoices, nextDerived?.featSlots),
         }),
       })
 
@@ -1122,7 +1133,9 @@ export function LevelUpWizard({
             <div className="space-y-4">
               <Alert className="border-white/10 bg-white/[0.03]">
                 <AlertDescription className="text-neutral-300">
-                  {newFeatSlotLabel} unlocks a new ASI / feat decision. Choose the feat now, or mark this slot as an ASI and adjust the ability scores on the full sheet afterwards.
+                  {newFeatSlot?.choiceKind === 'feat_only'
+                    ? `${newFeatSlotLabel} grants a bonus feat. Choose that feat now.`
+                    : `${newFeatSlotLabel} unlocks a new ASI / feat decision. Choose the feat now, or mark this slot as an ASI and adjust the ability scores on the full sheet afterwards.`}
                 </AlertDescription>
               </Alert>
               <FeatsCard
@@ -1132,11 +1145,13 @@ export function LevelUpWizard({
                 featChoices={nextFeatChoices}
                 asiChoices={asiChoices}
                 totalLevel={nextDerived?.totalLevel ?? totalLevelAfter}
-                featSlotLabels={nextDerived?.featSlotLabels}
+                featSlots={nextDerived?.featSlots}
                 canEdit
                 onChange={(choices) => {
                   const nextChoice = choices[currentFeatSlotCount] ?? ''
-                  setNewFeatChoice(nextChoice === '' ? 'asi' : nextChoice)
+                  setNewFeatChoice(nextChoice === ''
+                    ? (newFeatSlot?.choiceKind === 'feat_only' ? '' : 'asi')
+                    : nextChoice)
                   if (nextChoice) {
                     setAsiChoices((prev) => {
                       const next = [...prev]
