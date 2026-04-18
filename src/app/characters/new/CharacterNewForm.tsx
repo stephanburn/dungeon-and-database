@@ -16,17 +16,18 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { useToast } from '@/hooks/use-toast'
 import type {
+  Background,
   Campaign,
   CharacterType,
   Class,
+  EquipmentItem,
   Feat,
   FeatureOption,
   Language,
-  Tool,
   Species,
-  Background,
   StatMethod,
   Subclass,
+  Tool,
 } from '@/lib/types/database'
 import type { LegalityResult } from '@/lib/legality/engine'
 import { StatBlock } from '@/components/character-sheet/StatBlock'
@@ -39,6 +40,7 @@ import { FeatsCard } from '@/components/character-sheet/FeatsCard'
 import { FeatSpellChoicesCard } from '@/components/character-sheet/FeatSpellChoicesCard'
 import { FeatureOptionChoicesCard } from '@/components/character-sheet/FeatureOptionChoicesCard'
 import { FeatureSpellChoicesCard } from '@/components/character-sheet/FeatureSpellChoicesCard'
+import { StartingEquipmentCard } from '@/components/character-sheet/StartingEquipmentCard'
 import { LegalityBadge, LegalitySummaryBadge } from '@/components/character-sheet/LegalityBadge'
 import {
   buildCombinedSpellSelections,
@@ -60,6 +62,10 @@ import {
 } from '@/lib/characters/wizard-helpers'
 import type { FeatureOptionChoiceInput } from '@/lib/characters/choice-persistence'
 import {
+  resolveStartingEquipment,
+  type StartingEquipmentSelections,
+} from '@/lib/characters/starting-equipment'
+import {
   buildSpeciesAbilityBonusMap,
   getSpeciesAbilityChoiceLimit,
   type AbilityKey as SpeciesChoiceAbilityKey,
@@ -72,10 +78,15 @@ import {
   getFeatureOptionChoiceValue,
   getFightingStyleFeatureOptionDefinition,
   getMaverickArcaneBreakthroughOptionDefinitions,
+  getSubclassFeatureOptionDefinitions,
   getSpeciesFeatureOptionDefinitions,
   getSpeciesFeatureSpellChoiceDefinitions,
 } from '@/lib/characters/feature-grants'
 import { isMaverickSubclass } from '@/lib/characters/maverick'
+import type {
+  StartingEquipmentPackageEntry,
+  WeaponCatalogEntry,
+} from '@/lib/content/equipment-content'
 
 interface CharacterNewFormProps {
   isDm: boolean
@@ -89,6 +100,7 @@ type StepId =
   | 'subclasses'
   | 'stats'
   | 'skills'
+  | 'equipment'
   | 'spells-feats'
   | 'review'
 
@@ -100,6 +112,7 @@ const STEPS: Array<{ id: StepId; label: string }> = [
   { id: 'subclasses', label: 'Subclasses' },
   { id: 'stats', label: 'Ability Scores' },
   { id: 'skills', label: 'Skills' },
+  { id: 'equipment', label: 'Equipment' },
   { id: 'spells-feats', label: 'Spells + Feats' },
   { id: 'review', label: 'Review' },
 ]
@@ -124,7 +137,10 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
   const [featList, setFeatList] = useState<Feat[]>([])
   const [languageList, setLanguageList] = useState<Language[]>([])
   const [toolList, setToolList] = useState<Tool[]>([])
-  const [maverickOptionRows, setMaverickOptionRows] = useState<FeatureOption[]>([])
+  const [featureOptionRows, setFeatureOptionRows] = useState<FeatureOption[]>([])
+  const [startingEquipmentPackages, setStartingEquipmentPackages] = useState<StartingEquipmentPackageEntry[]>([])
+  const [equipmentItems, setEquipmentItems] = useState<EquipmentItem[]>([])
+  const [weaponCatalog, setWeaponCatalog] = useState<WeaponCatalogEntry[]>([])
   const [subclassMap, setSubclassMap] = useState<Record<string, Subclass[]>>({})
   const [classDetailMap, setClassDetailMap] = useState<Record<string, ClassDetail>>({})
   const [spellOptions, setSpellOptions] = useState<SpellOption[]>([])
@@ -147,6 +163,7 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
   const [featureSpellOptions, setFeatureSpellOptions] = useState<SpellOption[]>([])
   const [maverickBreakthroughClassIds, setMaverickBreakthroughClassIds] = useState<string[]>([])
   const [featureOptionChoices, setFeatureOptionChoices] = useState<FeatureOptionChoiceInput[]>([])
+  const [startingEquipmentSelections, setStartingEquipmentSelections] = useState<StartingEquipmentSelections>({})
 
   useEffect(() => {
     fetch('/api/campaigns')
@@ -167,19 +184,21 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
       fetch(`/api/content/feats${qs}`).then((response) => response.json()),
       fetch(`/api/content/languages${qs}`).then((response) => response.json()),
       fetch(`/api/content/tools${qs}`).then((response) => response.json()),
-      fetch(`/api/content/feature-options${qs}&group_key=maverick%3Aarcane_breakthrough_classes`).then((response) => response.json()),
-      fetch(`/api/content/feature-options${qs}&option_family=fighting_style`).then((response) => response.json()),
-    ]).then(([species, backgrounds, classes, feats, languages, tools, featureOptions, fightingStyleOptions]) => {
+      fetch(`/api/content/feature-options${qs}`).then((response) => response.json()),
+      fetch(`/api/content/starting-equipment-packages${qs}`).then((response) => response.json()),
+      fetch(`/api/content/equipment-items${qs}`).then((response) => response.json()),
+      fetch(`/api/content/weapons${qs}`).then((response) => response.json()),
+    ]).then(([species, backgrounds, classes, feats, languages, tools, featureOptions, packages, items, weapons]) => {
       setSpeciesList(species)
       setBackgroundList(backgrounds)
       setClassList(classes)
       setFeatList(feats)
       setLanguageList(Array.isArray(languages) ? languages : [])
       setToolList(Array.isArray(tools) ? tools : [])
-      setMaverickOptionRows([
-        ...(Array.isArray(featureOptions) ? featureOptions : []),
-        ...(Array.isArray(fightingStyleOptions) ? fightingStyleOptions : []),
-      ])
+      setFeatureOptionRows(Array.isArray(featureOptions) ? featureOptions : [])
+      setStartingEquipmentPackages(Array.isArray(packages) ? packages : [])
+      setEquipmentItems(Array.isArray(items) ? items : [])
+      setWeaponCatalog(Array.isArray(weapons) ? weapons : [])
       if (levels.length === 0 && Array.isArray(classes) && classes.length > 0) {
         setLevels([{ class_id: classes[0].id, level: 1, subclass_id: null }])
       }
@@ -279,6 +298,17 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
     .filter((level) => level.class_id === firstClassId && level.subclass_id)
     .map((level) => level.subclass_id as string)
   const selectedClass = classList.find((cls) => cls.id === firstClassId) ?? null
+  const activeStartingEquipmentPackages = useMemo(
+    () => startingEquipmentPackages.filter((pkg) => (
+      pkg.id === selectedBackground?.starting_equipment_package_id
+      || pkg.id === selectedClass?.starting_equipment_package_id
+    )),
+    [
+      selectedBackground?.starting_equipment_package_id,
+      selectedClass?.starting_equipment_package_id,
+      startingEquipmentPackages,
+    ]
+  )
   const selectedSubclass = selectedClass
     ? (subclassMap[selectedClass.id] ?? []).find((entry) => entry.id === firstClassSubclassIds[0]) ?? null
     : null
@@ -294,22 +324,38 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
         classId,
         className: classDetail?.name ?? null,
         classLevel,
-        optionRows: maverickOptionRows,
+        optionRows: featureOptionRows,
       }).map((definition) => ({
         ...definition,
         optionKey: `${classId}:style`,
       }))
     })
-  }, [classDetailMap, levels, maverickOptionRows])
+  }, [classDetailMap, featureOptionRows, levels])
   const maverickOptionDefinitions = useMemo(
     () => getMaverickArcaneBreakthroughOptionDefinitions({
       classLevel: firstClassLevel,
       subclassId: selectedSubclass?.id ?? null,
-      optionRows: maverickOptionRows,
+      optionRows: featureOptionRows,
     }),
-    [firstClassLevel, maverickOptionRows, selectedSubclass?.id]
+    [featureOptionRows, firstClassLevel, selectedSubclass?.id]
   )
   const breakthroughClassOptions = maverickOptionDefinitions[0]?.choices ?? []
+  const subclassFeatureOptionDefinitions = useMemo(
+    () => levels.flatMap((level) => {
+      const subclass = level.subclass_id
+        ? (subclassMap[level.class_id] ?? []).find((entry) => entry.id === level.subclass_id) ?? null
+        : null
+      return getSubclassFeatureOptionDefinitions({
+        classId: level.class_id,
+        classLevel: level.level,
+        subclassId: subclass?.id ?? null,
+        subclassName: subclass?.name ?? null,
+        subclassSource: subclass?.source ?? null,
+        optionRows: featureOptionRows,
+      })
+    }),
+    [featureOptionRows, levels, subclassMap]
+  )
   const speciesOptionDefinitions = useMemo(
     () => getSpeciesFeatureOptionDefinitions({ species: selectedSpecies }),
     [selectedSpecies]
@@ -342,6 +388,21 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
       || activeSpeciesKeys.has(`${choice.option_group_key}:${choice.option_key}`)
     )))
   }, [speciesOptionDefinitions])
+
+  useEffect(() => {
+    const activeSubclassKeys = new Set(
+      subclassFeatureOptionDefinitions.map((definition) => `${definition.optionGroupKey}:${definition.optionKey}`)
+    )
+    setFeatureOptionChoices((prev) => prev.filter((choice) => (
+      !(
+        choice.option_group_key === 'maneuver:battle_master:2014'
+        || choice.option_group_key.startsWith('hunter:')
+        || choice.option_group_key === 'circle_of_land:terrain:2014'
+        || choice.option_group_key === 'elemental_discipline:four_elements:2014'
+      )
+      || activeSubclassKeys.has(`${choice.option_group_key}:${choice.option_key}`)
+    )))
+  }, [subclassFeatureOptionDefinitions])
 
   useEffect(() => {
     const activeKeys = new Set(featureSpellDefinitions.map((definition) => definition.sourceFeatureKey))
@@ -418,6 +479,7 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
     abilityBonusChoices,
     languageChoices,
     toolChoices,
+    featureOptionRows,
     featureOptionChoices: [
       ...featureOptionChoices.map((choice) => ({
         id: `${choice.option_group_key}:${choice.option_key}`,
@@ -466,6 +528,15 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
   const wizardLegalitySummary = summarizeWizardLegality(legalityResult)
   const derivedBlockingIssues = legalityResult?.derived?.blockingIssues ?? []
   const derivedWarnings = legalityResult?.derived?.warnings ?? []
+  const resolvedStartingEquipment = useMemo(
+    () => resolveStartingEquipment(
+      activeStartingEquipmentPackages,
+      startingEquipmentSelections,
+      equipmentItems,
+      weaponCatalog
+    ),
+    [activeStartingEquipmentPackages, startingEquipmentSelections, equipmentItems, weaponCatalog]
+  )
 
   useEffect(() => {
     const allowedKeys = new Set(featSpellDefinitions.map((definition) => definition.sourceFeatureKey))
@@ -553,6 +624,8 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
         }
         return null
       }
+      case 'equipment':
+        return resolvedStartingEquipment.issues[0] ?? null
       case 'spells-feats': {
         const requiredSlots = derived?.featSlots ?? []
         const incompleteSlot = requiredSlots.find((slot, index) => (
@@ -683,6 +756,7 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
             definitions: maverickOptionDefinitions,
           }),
         ],
+        equipment_items: resolvedStartingEquipment.items,
         spell_choices: persistedSpellSelections,
         feat_choices: buildTypedFeatChoices(featChoices, derived?.featSlots),
       }),
@@ -769,7 +843,7 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
               </p>
             </div>
 
-            <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-9">
+            <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-10">
               {STEPS.map((step, index) => (
                 <div
                   key={step.id}
@@ -996,6 +1070,13 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
                     onChange={setMaverickBreakthroughClassIds}
                   />
                 )}
+                <FeatureOptionChoicesCard
+                  title="Subclass Options"
+                  definitions={subclassFeatureOptionDefinitions}
+                  choices={featureOptionChoices}
+                  canEdit
+                  onChange={setFeatureOptionChoices}
+                />
               </div>
             )}
 
@@ -1060,6 +1141,17 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
                   onToolChange={setToolChoices}
                 />
               </div>
+            )}
+
+            {currentStep.id === 'equipment' && (
+              <StartingEquipmentCard
+                packages={activeStartingEquipmentPackages}
+                equipmentItems={equipmentItems}
+                weapons={weaponCatalog}
+                selections={startingEquipmentSelections}
+                canEdit
+                onChange={setStartingEquipmentSelections}
+              />
             )}
 
             {currentStep.id === 'spells-feats' && (
@@ -1151,6 +1243,22 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
                     <p className="text-neutral-100">{selectedBackground?.name ?? '—'}</p>
                   </div>
                 </div>
+
+                {resolvedStartingEquipment.lines.length > 0 && (
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                    <p className="text-sm font-medium text-neutral-100">Starting Equipment</p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {resolvedStartingEquipment.lines.map((line, index) => (
+                        <span
+                          key={`${line.packageId}:${line.itemId}:${index}`}
+                          className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs text-neutral-300"
+                        >
+                          {line.quantity}x {line.itemName}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {derived && (
                   <>

@@ -7,6 +7,7 @@ import {
   getSpeciesFeatureSpellChoiceDefinitions,
   getMaverickArcaneBreakthroughOptionDefinitions,
   getMaverickFeatureSpellChoiceDefinitions,
+  getSubclassFeatureOptionDefinitions,
   getSelectedMaverickBreakthroughClassIds,
   mergeFeatureOptionChoiceInputs,
 } from '@/lib/characters/feature-grants'
@@ -360,6 +361,364 @@ test('PHB Dragonborn ancestry choice contributes derived damage resistance', () 
   assert.match(
     derived.speciesTraits.find((trait) => trait.name === 'Breath Weapon')?.description ?? '',
     /2d6 lightning damage/
+  )
+})
+
+test('PHB subclass option systems expose the expected feature option slots', () => {
+  const optionRows: FeatureOption[] = [
+    {
+      id: 'maneuver-1',
+      group_key: 'maneuver:battle_master:2014',
+      key: 'trip_attack',
+      name: 'Trip Attack',
+      description: 'Knock a target prone.',
+      option_order: 10,
+      prerequisites: {},
+      effects: {},
+      source: 'PHB',
+      amended: false,
+      amendment_note: null,
+    },
+    {
+      id: 'maneuver-2',
+      group_key: 'maneuver:battle_master:2014',
+      key: 'riposte',
+      name: 'Riposte',
+      description: 'Punish a missed attack.',
+      option_order: 20,
+      prerequisites: {},
+      effects: {},
+      source: 'PHB',
+      amended: false,
+      amendment_note: null,
+    },
+    {
+      id: 'hunter-1',
+      group_key: 'hunter:hunters_prey:2014',
+      key: 'colossus_slayer',
+      name: 'Colossus Slayer',
+      description: 'Deal bonus damage once per turn.',
+      option_order: 10,
+      prerequisites: {},
+      effects: {},
+      source: 'PHB',
+      amended: false,
+      amendment_note: null,
+    },
+    {
+      id: 'hunter-2',
+      group_key: 'hunter:defensive_tactics:2014',
+      key: 'steel_will',
+      name: 'Steel Will',
+      description: 'Resist fear.',
+      option_order: 20,
+      prerequisites: {},
+      effects: {},
+      source: 'PHB',
+      amended: false,
+      amendment_note: null,
+    },
+    {
+      id: 'hunter-3',
+      group_key: 'hunter:multiattack:2014',
+      key: 'volley',
+      name: 'Volley',
+      description: 'Attack many foes at range.',
+      option_order: 30,
+      prerequisites: {},
+      effects: {},
+      source: 'PHB',
+      amended: false,
+      amendment_note: null,
+    },
+    {
+      id: 'hunter-4',
+      group_key: 'hunter:superior_defense:2014',
+      key: 'evasion',
+      name: 'Evasion',
+      description: 'Avoid blast damage.',
+      option_order: 40,
+      prerequisites: {},
+      effects: {},
+      source: 'PHB',
+      amended: false,
+      amendment_note: null,
+    },
+    {
+      id: 'land-1',
+      group_key: 'circle_of_land:terrain:2014',
+      key: 'forest',
+      name: 'Forest',
+      description: 'Woodland circle spells.',
+      option_order: 10,
+      prerequisites: {},
+      effects: {},
+      source: 'PHB',
+      amended: false,
+      amendment_note: null,
+    },
+    {
+      id: 'discipline-1',
+      group_key: 'elemental_discipline:four_elements:2014',
+      key: 'water_whip',
+      name: 'Water Whip',
+      description: 'Crack a lash of water.',
+      option_order: 10,
+      prerequisites: { minimum_class_level: 3 },
+      effects: {},
+      source: 'PHB',
+      amended: false,
+      amendment_note: null,
+    },
+    {
+      id: 'discipline-2',
+      group_key: 'elemental_discipline:four_elements:2014',
+      key: 'mist_stance',
+      name: 'Mist Stance',
+      description: 'Turn into mist.',
+      option_order: 20,
+      prerequisites: { minimum_class_level: 11 },
+      effects: {},
+      source: 'PHB',
+      amended: false,
+      amendment_note: null,
+    },
+  ]
+
+  assert.equal(
+    getSubclassFeatureOptionDefinitions({
+      classId: 'fighter',
+      classLevel: 10,
+      subclassId: 'battle-master',
+      subclassName: 'Battle Master',
+      subclassSource: 'PHB',
+      optionRows,
+    }).length,
+    7
+  )
+
+  assert.deepEqual(
+    getSubclassFeatureOptionDefinitions({
+      classId: 'ranger',
+      classLevel: 15,
+      subclassId: 'hunter',
+      subclassName: 'Hunter',
+      subclassSource: 'PHB',
+      optionRows,
+    }).map((definition) => definition.label),
+    ["Hunter's Prey", 'Defensive Tactics', 'Multiattack', "Superior Hunter's Defense"]
+  )
+
+  assert.equal(
+    getSubclassFeatureOptionDefinitions({
+      classId: 'druid',
+      classLevel: 3,
+      subclassId: 'land',
+      subclassName: 'Circle of the Land',
+      subclassSource: 'PHB',
+      optionRows,
+    })[0]?.label,
+    'Circle of the Land Terrain'
+  )
+
+  const fourElements = getSubclassFeatureOptionDefinitions({
+    classId: 'monk',
+    classLevel: 11,
+    subclassId: 'four-elements',
+    subclassName: 'Way of the Four Elements',
+    subclassSource: 'PHB',
+    optionRows,
+  })
+  assert.equal(fourElements.length, 3)
+  assert.equal(fourElements[0]?.choices.some((choice) => choice.value === 'mist_stance'), true)
+})
+
+test('Circle of the Land terrain choices grant free derived spells in local context', () => {
+  const druidDetail: ClassDetail = {
+    id: 'druid',
+    name: 'Druid',
+    hit_die: 8,
+    primary_ability: ['WIS'],
+    saving_throw_proficiencies: ['int', 'wis'],
+    armor_proficiencies: ['light', 'medium', 'shields'],
+    weapon_proficiencies: ['club'],
+    tool_proficiencies: {},
+    skill_choices: { count: 2, from: ['animal_handling', 'nature'] },
+    multiclass_prereqs: [],
+    multiclass_proficiencies: {},
+    spellcasting_type: 'full',
+    spellcasting_progression: {
+      mode: 'prepared',
+      spellcasting_ability: 'wis',
+      cantrips_known_by_level: [2, 2, 2, 3, 3],
+      prepared_formula: 'class_level',
+      prepared_add_ability_mod: true,
+      prepared_min: 1,
+    },
+    subclass_choice_level: 2,
+    source: 'PHB',
+    amended: false,
+    amendment_note: null,
+    progression: [
+      { id: 'druid-1', class_id: 'druid', level: 1, features: [], asi_available: false, proficiency_bonus: 2 },
+      { id: 'druid-2', class_id: 'druid', level: 2, features: [], asi_available: false, proficiency_bonus: 2 },
+      { id: 'druid-3', class_id: 'druid', level: 3, features: [], asi_available: false, proficiency_bonus: 2 },
+      { id: 'druid-4', class_id: 'druid', level: 4, features: [], asi_available: true, proficiency_bonus: 2 },
+      { id: 'druid-5', class_id: 'druid', level: 5, features: [], asi_available: false, proficiency_bonus: 3 },
+    ],
+    spell_slots: [
+      { id: 'slot-1', class_id: 'druid', level: 1, slots_by_spell_level: [2] },
+      { id: 'slot-2', class_id: 'druid', level: 2, slots_by_spell_level: [3] },
+      { id: 'slot-3', class_id: 'druid', level: 3, slots_by_spell_level: [4, 2] },
+      { id: 'slot-4', class_id: 'druid', level: 4, slots_by_spell_level: [4, 3] },
+      { id: 'slot-5', class_id: 'druid', level: 5, slots_by_spell_level: [4, 3, 2] },
+    ],
+  }
+
+  const context = buildLocalCharacterContext({
+    campaign,
+    allowedSources: ['PHB'],
+    allSourceRuleSets: { PHB: '2014' },
+    statMethod: 'point_buy',
+    persistedHpMax: 24,
+    stats: { str: 8, dex: 12, con: 14, int: 10, wis: 16, cha: 10 },
+    selectedSpecies: null,
+    selectedBackground: null,
+    levels: [{ class_id: 'druid', level: 5, subclass_id: 'land' }],
+    classDetailMap: { druid: druidDetail },
+    subclassMap: {
+      druid: [{
+        id: 'land',
+        name: 'Circle of the Land',
+        class_id: 'druid',
+        choice_level: 2,
+        source: 'PHB',
+        amended: true,
+        amendment_note: null,
+      }],
+    },
+    spellOptions: [
+      {
+        id: 'barkskin',
+        name: 'Barkskin',
+        level: 2,
+        school: 'Transmutation',
+        casting_time: '1 action',
+        range: 'Touch',
+        components: { verbal: true, somatic: true, material: true },
+        duration: 'Up to 1 hour',
+        concentration: true,
+        ritual: false,
+        description: '',
+        classes: ['druid'],
+        source: 'PHB',
+        amended: false,
+        amendment_note: null,
+      },
+      {
+        id: 'spider-climb',
+        name: 'Spider Climb',
+        level: 2,
+        school: 'Transmutation',
+        casting_time: '1 action',
+        range: 'Touch',
+        components: { verbal: true, somatic: true, material: true },
+        duration: 'Up to 1 hour',
+        concentration: true,
+        ritual: false,
+        description: '',
+        classes: ['druid'],
+        source: 'PHB',
+        amended: false,
+        amendment_note: null,
+      },
+      {
+        id: 'call-lightning',
+        name: 'Call Lightning',
+        level: 3,
+        school: 'Conjuration',
+        casting_time: '1 action',
+        range: '120 feet',
+        components: { verbal: true, somatic: true, material: true },
+        duration: 'Up to 10 minutes',
+        concentration: true,
+        ritual: false,
+        description: '',
+        classes: ['druid'],
+        source: 'PHB',
+        amended: false,
+        amendment_note: null,
+      },
+      {
+        id: 'plant-growth',
+        name: 'Plant Growth',
+        level: 3,
+        school: 'Transmutation',
+        casting_time: '1 action',
+        range: '150 feet',
+        components: { verbal: true, somatic: true, material: false },
+        duration: 'Instantaneous',
+        concentration: false,
+        ritual: false,
+        description: '',
+        classes: ['druid'],
+        source: 'PHB',
+        amended: false,
+        amendment_note: null,
+      },
+    ],
+    spellChoices: [],
+    featList: [],
+    featChoices: [],
+    asiChoices: [],
+    skillProficiencies: [],
+    abilityBonusChoices: [],
+    languageChoices: [],
+    toolChoices: [],
+    featureOptionRows: [{
+      id: 'forest-land',
+      group_key: 'circle_of_land:terrain:2014',
+      key: 'forest',
+      name: 'Forest',
+      description: 'Forest circle spells.',
+      option_order: 10,
+      prerequisites: {},
+      effects: {
+        spell_grants: [
+          { spell_name: 'Barkskin', min_class_level: 3, source_feature_key: 'forest:barkskin' },
+          { spell_name: 'Spider Climb', min_class_level: 3, source_feature_key: 'forest:spider_climb' },
+          { spell_name: 'Call Lightning', min_class_level: 5, source_feature_key: 'forest:call_lightning' },
+          { spell_name: 'Plant Growth', min_class_level: 5, source_feature_key: 'forest:plant_growth' },
+        ],
+      },
+      source: 'PHB',
+      amended: false,
+      amendment_note: null,
+    }],
+    featureOptionChoices: [{
+      id: 'forest-choice',
+      character_id: 'local',
+      character_level_id: null,
+      option_group_key: 'circle_of_land:terrain:2014',
+      option_key: 'druid:terrain',
+      selected_value: { feature_option_key: 'forest' },
+      choice_order: 0,
+      source_category: 'subclass_feature',
+      source_entity_id: 'land',
+      source_feature_key: 'subclass_feature:circle_of_the_land:terrain',
+      created_at: '',
+    }],
+  })
+
+  assert.ok(context)
+  const derived = deriveLocalCharacter(context)
+  assert.ok(derived)
+  assert.deepEqual(
+    derived.spellcasting.selectedSpells
+      .filter((spell) => !spell.countsAgainstSelectionLimit)
+      .map((spell) => spell.name)
+      .sort(),
+    ['Barkskin', 'Call Lightning', 'Plant Growth', 'Spider Climb']
   )
 })
 

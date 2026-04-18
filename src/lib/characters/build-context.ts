@@ -98,6 +98,7 @@ export interface BuildSpellSummary {
   id: string
   name: string
   level: number
+  school?: string | null
   classes: string[]
   source: string
   grantedBySubclassIds: string[]

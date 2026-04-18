@@ -71,11 +71,12 @@ export function SpellsCard({
     if (speciesId) params.set('species_id', speciesId)
     for (const subclassId of subclassIds) params.append('subclass_id', subclassId)
     for (const expandedClassId of expandedClassIds) params.append('expanded_class_id', expandedClassId)
+    for (const spellId of spellChoices) params.append('selected_spell_id', spellId)
 
     fetch(`/api/content/spells?${params.toString()}`)
       .then(r => r.json())
       .then(data => setSpells(Array.isArray(data) ? data : []))
-  }, [classId, campaignId, classLevel, speciesId, subclassIds, expandedClassIds])
+  }, [classId, campaignId, classLevel, speciesId, subclassIds, expandedClassIds, spellChoices])
 
   const visibleSpells = spells.filter((spell) => spell.level === 0 || maxSpellLevel === undefined || spell.level <= maxSpellLevel)
   const filtered = search.trim()

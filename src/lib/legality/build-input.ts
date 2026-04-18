@@ -333,6 +333,7 @@ export async function buildCharacterBuildContext(
       id: spell.id,
       name: spell.name,
       level: spell.level,
+      school: spell.school,
       classes: typedSpellSelections.length > 0
         ? Array.from(new Set([
             ...spell.classes,

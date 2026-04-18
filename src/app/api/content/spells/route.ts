@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { requireAuth, requireAdmin, jsonError, readJsonBody } from '@/lib/api-helpers'
 import { getAllowedSources } from '@/lib/content-helpers'
 import { MAVERICK_ARCANE_BREAKTHROUGH_SOURCE_KEY } from '@/lib/characters/feature-grants'
+import { filterRestrictedSubclassSpellOptions, getRestrictedSubclassRuleForSubclassRow } from '@/lib/characters/subclass-spell-restrictions'
 import { writeAuditLog } from '@/lib/server/audit'
 import type { SpellComponents } from '@/lib/types/database'
 
@@ -16,6 +17,7 @@ export async function GET(request: NextRequest) {
   const speciesId = searchParams.get('species_id')
   const subclassIds = searchParams.getAll('subclass_id').filter(Boolean)
   const expandedClassIds = searchParams.getAll('expanded_class_id').filter(Boolean)
+  const selectedSpellIds = searchParams.getAll('selected_spell_id').filter(Boolean)
   const classLevel = parseInt(searchParams.get('class_level') ?? '0', 10)
   const levelParam = searchParams.get('level')
 
@@ -40,6 +42,19 @@ export async function GET(request: NextRequest) {
 
   if (activeSpeciesBonusRows.error) return jsonError(activeSpeciesBonusRows.error.message, 500)
 
+  const activeSubclasses = subclassIds.length > 0
+    ? await supabase
+        .from('subclasses')
+        .select('*')
+        .in('id', subclassIds)
+    : { data: [], error: null }
+  if (activeSubclasses.error) return jsonError(activeSubclasses.error.message, 500)
+
+  const restrictedSubclassRule = getRestrictedSubclassRuleForSubclassRow(
+    (activeSubclasses.data ?? [])[0] ?? null,
+    Number.isNaN(classLevel) ? 0 : classLevel
+  )
+
   const grantedSpellIds = new Set((activeBonusRows.data ?? []).map((row) => row.spell_id))
   const speciesExpandedSpellIds = new Set((activeSpeciesBonusRows.data ?? []).map((row) => row.spell_id))
   const baseQuery = supabase.from('spells').select('*').order('level').order('name')
@@ -53,6 +68,15 @@ export async function GET(request: NextRequest) {
     bonusRowsBySpellId.set(row.spell_id, existing)
   }
 
+  const filteredClassSpells = restrictedSubclassRule
+    ? filterRestrictedSubclassSpellOptions({
+        spells: (allSpells ?? []).filter((spell) => !!classId && spell.classes.includes(classId)),
+        selectedSpellIds,
+        rule: restrictedSubclassRule,
+      })
+    : (allSpells ?? []).filter((spell) => !!classId && spell.classes.includes(classId))
+  const filteredClassSpellIds = new Set(filteredClassSpells.map((spell) => spell.id))
+
   const filtered = (allSpells ?? []).filter((spell) => {
     const baseAllowed = !!classId && spell.classes.includes(classId)
     const bonusAllowed = grantedSpellIds.has(spell.id)
@@ -60,7 +84,8 @@ export async function GET(request: NextRequest) {
     const breakthroughAllowed = expandedClassIds.some((expandedClassId) => spell.classes.includes(expandedClassId))
     const sourceAllowed = !allowedSources || allowedSources.has(spell.source) || bonusAllowed
     const levelAllowed = levelParam === null || spell.level === parseInt(levelParam, 10)
-    return sourceAllowed && levelAllowed && (baseAllowed || bonusAllowed || speciesAllowed || breakthroughAllowed)
+    const restrictedBaseAllowed = !baseAllowed || filteredClassSpellIds.has(spell.id)
+    return sourceAllowed && levelAllowed && restrictedBaseAllowed && (baseAllowed || bonusAllowed || speciesAllowed || breakthroughAllowed)
   }).map((spell) => {
     const baseAllowed = !classId || spell.classes.includes(classId)
     const breakthroughAllowed = expandedClassIds.some((expandedClassId) => spell.classes.includes(expandedClassId))

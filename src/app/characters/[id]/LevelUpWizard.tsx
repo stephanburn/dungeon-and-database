@@ -67,6 +67,7 @@ import {
   getFightingStyleFeatureOptionDefinition,
   getMaverickArcaneBreakthroughOptionDefinitions,
   getSelectedMaverickBreakthroughClassIds,
+  getSubclassFeatureOptionDefinitions,
   mergeFeatureOptionChoiceInputs,
 } from '@/lib/characters/feature-grants'
 import type { FeatureOptionChoiceInput } from '@/lib/characters/choice-persistence'
@@ -181,7 +182,7 @@ export function LevelUpWizard({
 
   const [classList, setClassList] = useState<Class[]>([])
   const [featList, setFeatList] = useState<Feat[]>([])
-  const [maverickOptionRows, setMaverickOptionRows] = useState<FeatureOption[]>([])
+  const [featureOptionRows, setFeatureOptionRows] = useState<FeatureOption[]>([])
   const [classDetailMap, setClassDetailMap] = useState<Record<string, ClassDetail>>({})
   const [subclassMap, setSubclassMap] = useState<Record<string, Subclass[]>>({})
   const [spellOptions, setSpellOptions] = useState<SpellOption[]>([])
@@ -234,6 +235,19 @@ export function LevelUpWizard({
     ),
     [initialFeatureOptionChoices]
   )
+  const initialSubclassFeatureOptionKeys = useMemo(
+    () => new Set(
+      initialFeatureOptionChoices
+        .filter((choice) => (
+          choice.option_group_key === 'maneuver:battle_master:2014'
+          || choice.option_group_key.startsWith('hunter:')
+          || choice.option_group_key === 'circle_of_land:terrain:2014'
+          || choice.option_group_key === 'elemental_discipline:four_elements:2014'
+        ))
+        .map((choice) => `${choice.option_group_key}:${choice.option_key}`)
+    ),
+    [initialFeatureOptionChoices]
+  )
 
   const currentClassIds = useMemo(
     () => Array.from(new Set(baseLevels.map((level) => level.class_id))),
@@ -245,15 +259,11 @@ export function LevelUpWizard({
     Promise.all([
       fetch(`/api/content/classes${qs}`).then((response) => response.json()),
       fetch(`/api/content/feats${qs}`).then((response) => response.json()),
-      fetch(`/api/content/feature-options${qs}&group_key=maverick%3Aarcane_breakthrough_classes`).then((response) => response.json()),
-      fetch(`/api/content/feature-options${qs}&option_family=fighting_style`).then((response) => response.json()),
-    ]).then(([classes, feats, featureOptions, fightingStyleOptions]) => {
+      fetch(`/api/content/feature-options${qs}`).then((response) => response.json()),
+    ]).then(([classes, feats, featureOptions]) => {
       setClassList(Array.isArray(classes) ? classes : [])
       setFeatList(Array.isArray(feats) ? feats : [])
-      setMaverickOptionRows([
-        ...(Array.isArray(featureOptions) ? featureOptions : []),
-        ...(Array.isArray(fightingStyleOptions) ? fightingStyleOptions : []),
-      ])
+      setFeatureOptionRows(Array.isArray(featureOptions) ? featureOptions : [])
       if (!selectedClassId && Array.isArray(classes) && classes.length > 0) {
         setSelectedClassId(classes[0].id)
       }
@@ -356,22 +366,33 @@ export function LevelUpWizard({
       classId: selectedClassId || null,
       className: selectedClassDetail?.name ?? null,
       classLevel: nextTargetLevel,
-      optionRows: maverickOptionRows,
+      optionRows: featureOptionRows,
     }).map((definition) => ({
       ...definition,
       optionKey: `${selectedClassId}:style`,
     })),
-    [maverickOptionRows, nextTargetLevel, selectedClassDetail?.name, selectedClassId]
+    [featureOptionRows, nextTargetLevel, selectedClassDetail?.name, selectedClassId]
   )
   const maverickOptionDefinitions = useMemo(
     () => getMaverickArcaneBreakthroughOptionDefinitions({
       classLevel: nextTargetLevel,
       subclassId: selectedSubclassId,
-      optionRows: maverickOptionRows,
+      optionRows: featureOptionRows,
     }),
-    [maverickOptionRows, nextTargetLevel, selectedSubclassId]
+    [featureOptionRows, nextTargetLevel, selectedSubclassId]
   )
   const breakthroughClassOptions = maverickOptionDefinitions[0]?.choices ?? []
+  const subclassFeatureOptionDefinitions = useMemo(
+    () => getSubclassFeatureOptionDefinitions({
+      classId: selectedClassId || null,
+      classLevel: nextTargetLevel,
+      subclassId: selectedSubclassId,
+      subclassName: selectedSubclass?.name ?? null,
+      subclassSource: selectedSubclass?.source ?? null,
+      optionRows: featureOptionRows,
+    }),
+    [featureOptionRows, nextTargetLevel, selectedClassId, selectedSubclass?.name, selectedSubclass?.source, selectedSubclassId]
+  )
 
   useEffect(() => {
     const activeKeys = new Set(
@@ -383,6 +404,22 @@ export function LevelUpWizard({
       || activeKeys.has(`${choice.option_group_key}:${choice.option_key}`)
     )))
   }, [fightingStyleDefinitions, initialFightingStyleKeys])
+
+  useEffect(() => {
+    const activeKeys = new Set(
+      subclassFeatureOptionDefinitions.map((definition) => `${definition.optionGroupKey}:${definition.optionKey}`)
+    )
+    setFeatureOptionChoices((prev) => prev.filter((choice) => (
+      !(
+        choice.option_group_key === 'maneuver:battle_master:2014'
+        || choice.option_group_key.startsWith('hunter:')
+        || choice.option_group_key === 'circle_of_land:terrain:2014'
+        || choice.option_group_key === 'elemental_discipline:four_elements:2014'
+      )
+      || initialSubclassFeatureOptionKeys.has(`${choice.option_group_key}:${choice.option_key}`)
+      || activeKeys.has(`${choice.option_group_key}:${choice.option_key}`)
+    )))
+  }, [initialSubclassFeatureOptionKeys, subclassFeatureOptionDefinitions])
 
   const canonicalFeatureOptionChoices = useMemo(
     () => mergeFeatureOptionChoiceInputs({
@@ -403,13 +440,27 @@ export function LevelUpWizard({
             ])
           ),
         }),
+        ...buildFeatureOptionChoicesFromDefinitionMap({
+          definitions: subclassFeatureOptionDefinitions,
+          selectedValues: Object.fromEntries(
+            subclassFeatureOptionDefinitions.map((definition) => [
+              definition.optionKey,
+              getFeatureOptionChoiceValue(
+                featureOptionChoices,
+                definition.optionGroupKey,
+                definition.optionKey,
+                definition.valueKey ?? 'class_id'
+              ) ?? '',
+            ])
+          ),
+        }),
         ...buildMaverickFeatureOptionChoices({
           selectedClassIds: maverickBreakthroughClassIds,
           definitions: maverickOptionDefinitions,
         }),
       ],
     }),
-    [featureOptionChoices, fightingStyleDefinitions, maverickBreakthroughClassIds, maverickOptionDefinitions]
+    [featureOptionChoices, fightingStyleDefinitions, maverickBreakthroughClassIds, maverickOptionDefinitions, subclassFeatureOptionDefinitions]
   )
 
   const targetLevels = useMemo<WizardLevel[]>(() => {
@@ -485,6 +536,7 @@ export function LevelUpWizard({
     abilityBonusChoices: initialAbilityBonusChoices,
     languageChoices: initialLanguageChoices,
     toolChoices: initialToolChoices,
+    featureOptionRows,
     featureOptionChoices: initialFeatureOptionChoices,
   })
 
@@ -534,6 +586,7 @@ export function LevelUpWizard({
       abilityBonusChoices: initialAbilityBonusChoices,
       languageChoices,
       toolChoices,
+      featureOptionRows,
       featureOptionChoices: [
         ...canonicalFeatureOptionChoices.map((choice) => ({
           id: `${choice.option_group_key}:${choice.option_key}`,
@@ -572,6 +625,7 @@ export function LevelUpWizard({
     classDetailMap,
     featChoices,
     featList,
+    featureOptionRows,
     canonicalFeatureOptionChoices,
     mergedSpellOptions,
     newFeatChoice,
@@ -658,6 +712,7 @@ export function LevelUpWizard({
     abilityBonusChoices: initialAbilityBonusChoices,
     languageChoices,
     toolChoices,
+    featureOptionRows,
     featureOptionChoices: [
       ...canonicalFeatureOptionChoices.map((choice) => ({
         id: `${choice.option_group_key}:${choice.option_key}`,
@@ -1064,6 +1119,13 @@ export function LevelUpWizard({
                   onChange={setMaverickBreakthroughClassIds}
                 />
               )}
+              <FeatureOptionChoicesCard
+                title="Subclass Options"
+                definitions={subclassFeatureOptionDefinitions}
+                choices={featureOptionChoices}
+                canEdit
+                onChange={setFeatureOptionChoices}
+              />
             </div>
           )}
 

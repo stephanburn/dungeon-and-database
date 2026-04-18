@@ -48,6 +48,7 @@ import {
   getFightingStyleFeatureOptionDefinition,
   getMaverickArcaneBreakthroughOptionDefinitions,
   getMaverickFeatureSpellChoiceDefinitions,
+  getSubclassFeatureOptionDefinitions,
   getSpeciesFeatureOptionDefinitions,
   getSpeciesFeatureSpellChoiceDefinitions,
   getSelectedMaverickBreakthroughClassIds,
@@ -202,7 +203,7 @@ export function CharacterSheet({
   const [featList, setFeatList] = useState<Feat[]>([])
   const [languageList, setLanguageList] = useState<Language[]>([])
   const [toolList, setToolList] = useState<Tool[]>([])
-  const [maverickOptionRows, setMaverickOptionRows] = useState<FeatureOption[]>([])
+  const [featureOptionRows, setFeatureOptionRows] = useState<FeatureOption[]>([])
   const [spellOptions, setSpellOptions] = useState<SpellOption[]>(initialSelectedSpells)
 
   const [skillProficiencies, setSkillProficiencies] = useState<string[]>(initialSkillProficiencies)
@@ -261,6 +262,19 @@ export function CharacterSheet({
     ),
     [initialFeatureOptionChoices]
   )
+  const initialSubclassFeatureOptionKeys = useMemo(
+    () => new Set(
+      initialFeatureOptionChoices
+        .filter((choice) => (
+          choice.option_group_key === 'maneuver:battle_master:2014'
+          || choice.option_group_key.startsWith('hunter:')
+          || choice.option_group_key === 'circle_of_land:terrain:2014'
+          || choice.option_group_key === 'elemental_discipline:four_elements:2014'
+        ))
+        .map((choice) => `${choice.option_group_key}:${choice.option_key}`)
+    ),
+    [initialFeatureOptionChoices]
+  )
 
   // Load content options filtered by campaign allowlist
   useEffect(() => {
@@ -272,19 +286,15 @@ export function CharacterSheet({
       fetch(`/api/content/feats${qs}`).then((r) => r.json()),
       fetch(`/api/content/languages${qs}`).then((r) => r.json()),
       fetch(`/api/content/tools${qs}`).then((r) => r.json()),
-      fetch(`/api/content/feature-options${qs}&group_key=maverick%3Aarcane_breakthrough_classes`).then((r) => r.json()),
-      fetch(`/api/content/feature-options${qs}&option_family=fighting_style`).then((r) => r.json()),
-    ]).then(([s, b, c, f, languages, tools, featureOptions, fightingStyleOptions]) => {
+      fetch(`/api/content/feature-options${qs}`).then((r) => r.json()),
+    ]).then(([s, b, c, f, languages, tools, featureOptions]) => {
       setSpeciesList(s)
       setBackgroundList(b)
       setClassList(c)
       setFeatList(Array.isArray(f) ? f : [])
       setLanguageList(Array.isArray(languages) ? languages : [])
       setToolList(Array.isArray(tools) ? tools : [])
-      setMaverickOptionRows([
-        ...(Array.isArray(featureOptions) ? featureOptions : []),
-        ...(Array.isArray(fightingStyleOptions) ? fightingStyleOptions : []),
-      ])
+      setFeatureOptionRows(Array.isArray(featureOptions) ? featureOptions : [])
     })
   }, [campaignId])
 
@@ -380,6 +390,10 @@ export function CharacterSheet({
       const canonicalFeatureOptionChoices = [
         ...featureOptionChoices.filter((choice) => (
           !choice.option_group_key.startsWith('species:')
+          && choice.option_group_key !== 'maneuver:battle_master:2014'
+          && !choice.option_group_key.startsWith('hunter:')
+          && choice.option_group_key !== 'circle_of_land:terrain:2014'
+          && choice.option_group_key !== 'elemental_discipline:four_elements:2014'
           && choice.option_group_key !== MAVERICK_ARCANE_BREAKTHROUGH_GROUP_KEY
           && !choice.option_group_key.startsWith('maverick:breakthrough:')
         )),
@@ -387,6 +401,20 @@ export function CharacterSheet({
           definitions: speciesOptionDefinitions,
           selectedValues: Object.fromEntries(
             speciesOptionDefinitions.map((definition) => [
+              definition.optionKey,
+              getFeatureOptionChoiceValue(
+                featureOptionChoices,
+                definition.optionGroupKey,
+                definition.optionKey,
+                definition.valueKey ?? 'class_id'
+              ) ?? '',
+            ])
+          ),
+        }),
+        ...buildFeatureOptionChoicesFromDefinitionMap({
+          definitions: subclassFeatureOptionDefinitions,
+          selectedValues: Object.fromEntries(
+            subclassFeatureOptionDefinitions.map((definition) => [
               definition.optionKey,
               getFeatureOptionChoiceValue(
                 featureOptionChoices,
@@ -559,20 +587,36 @@ export function CharacterSheet({
         classId,
         className: classDetail?.name ?? null,
         classLevel,
-        optionRows: maverickOptionRows,
+        optionRows: featureOptionRows,
       }).map((definition) => ({
         ...definition,
         optionKey: `${classId}:style`,
       }))
     })
-  }, [classList, levels, maverickOptionRows])
+  }, [classList, featureOptionRows, levels])
   const maverickOptionDefinitions = useMemo(
     () => getMaverickArcaneBreakthroughOptionDefinitions({
       classLevel: firstClassLevel,
       subclassId: firstClassSubclassIds[0] ?? null,
-      optionRows: maverickOptionRows,
+      optionRows: featureOptionRows,
     }),
-    [firstClassLevel, firstClassSubclassIds, maverickOptionRows]
+    [featureOptionRows, firstClassLevel, firstClassSubclassIds]
+  )
+  const subclassFeatureOptionDefinitions = useMemo(
+    () => levels.flatMap((level) => {
+      const subclass = level.subclass_id
+        ? (subclassMap[level.class_id] ?? []).find((entry) => entry.id === level.subclass_id) ?? null
+        : null
+      return getSubclassFeatureOptionDefinitions({
+        classId: level.class_id,
+        classLevel: level.level,
+        subclassId: subclass?.id ?? null,
+        subclassName: subclass?.name ?? null,
+        subclassSource: subclass?.source ?? null,
+        optionRows: featureOptionRows,
+      })
+    }),
+    [featureOptionRows, levels, subclassMap]
   )
   const maverickFeatureSpellDefinitions = useMemo(
     () => getMaverickFeatureSpellChoiceDefinitions({
@@ -616,6 +660,22 @@ export function CharacterSheet({
       || activeKeys.has(`${choice.option_group_key}:${choice.option_key}`)
     )))
   }, [speciesOptionDefinitions])
+
+  useEffect(() => {
+    const activeKeys = new Set(
+      subclassFeatureOptionDefinitions.map((definition) => `${definition.optionGroupKey}:${definition.optionKey}`)
+    )
+    setFeatureOptionChoices((prev) => prev.filter((choice) => (
+      !(
+        choice.option_group_key === 'maneuver:battle_master:2014'
+        || choice.option_group_key.startsWith('hunter:')
+        || choice.option_group_key === 'circle_of_land:terrain:2014'
+        || choice.option_group_key === 'elemental_discipline:four_elements:2014'
+      )
+      || initialSubclassFeatureOptionKeys.has(`${choice.option_group_key}:${choice.option_key}`)
+      || activeKeys.has(`${choice.option_group_key}:${choice.option_key}`)
+    )))
+  }, [initialSubclassFeatureOptionKeys, subclassFeatureOptionDefinitions])
 
   useEffect(() => {
     const hasCanonicalMaverickChoices = featureOptionChoices.some(
@@ -688,6 +748,7 @@ export function CharacterSheet({
     feat_prerequisites: 'spells-feats',
     feat_slots: 'spells-feats',
     spell_legality: 'spells-feats',
+    subclass_feature_option_selections: 'spells-feats',
     spell_selection_count: 'spells-feats',
   }
 
@@ -1219,6 +1280,14 @@ export function CharacterSheet({
         <FeatureOptionChoicesCard
           title="Species Options"
           definitions={speciesOptionDefinitions}
+          choices={featureOptionChoices}
+          canEdit={canEdit}
+          onChange={setFeatureOptionChoices}
+        />
+
+        <FeatureOptionChoicesCard
+          title="Subclass Options"
+          definitions={subclassFeatureOptionDefinitions}
           choices={featureOptionChoices}
           canEdit={canEdit}
           onChange={setFeatureOptionChoices}

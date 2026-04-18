@@ -49,6 +49,13 @@ export const FIGHTING_STYLE_VALUE_KEY = FEATURE_OPTION_VALUE_KEY
 export const DRAGONBORN_ANCESTRY_GROUP_KEY = 'species:dragonborn:ancestry'
 export const DRAGONBORN_ANCESTRY_SOURCE_KEY = 'species_trait:dragonborn_ancestry'
 export const HIGH_ELF_CANTRIP_SOURCE_KEY = 'feature_spell:species:high_elf:cantrip'
+export const BATTLE_MASTER_MANEUVER_GROUP_KEY = 'maneuver:battle_master:2014'
+export const HUNTER_PREY_GROUP_KEY = 'hunter:hunters_prey:2014'
+export const HUNTER_DEFENSIVE_TACTICS_GROUP_KEY = 'hunter:defensive_tactics:2014'
+export const HUNTER_MULTIATTACK_GROUP_KEY = 'hunter:multiattack:2014'
+export const HUNTER_SUPERIOR_DEFENSE_GROUP_KEY = 'hunter:superior_defense:2014'
+export const CIRCLE_OF_LAND_TERRAIN_GROUP_KEY = 'circle_of_land:terrain:2014'
+export const FOUR_ELEMENTS_DISCIPLINE_GROUP_KEY = 'elemental_discipline:four_elements:2014'
 
 const FIGHTING_STYLE_GROUP_KEYS: Record<string, string> = {
   Fighter: 'fighting_style:fighter:2014',
@@ -77,6 +84,10 @@ type DragonbornAncestryDefinition = {
   label: string
   damageType: string
   description: string
+}
+
+type StaticFeatureGrantedSpellRule = StaticGrantedSpellRule & {
+  owningClassId: string | null
 }
 
 const MARK_OF_DETECTION_RULES: StaticGrantedSpellRule[] = [
@@ -436,6 +447,194 @@ function isPhbDragonborn(species: Pick<Species, 'name' | 'source'> | null) {
   return species?.name === 'Dragonborn' && species.source === 'PHB'
 }
 
+function getMinimumClassLevel(option: Pick<FeatureOption, 'prerequisites'>) {
+  const raw = option.prerequisites?.minimum_class_level
+  return typeof raw === 'number' ? raw : 1
+}
+
+function getFeatureOptionChoicesForGroup(args: {
+  optionRows: FeatureOption[]
+  groupKey: string
+  classLevel: number
+}) {
+  return args.optionRows
+    .filter((option) => (
+      option.group_key === args.groupKey
+      && getMinimumClassLevel(option) <= args.classLevel
+    ))
+    .sort((left, right) => {
+      if (left.option_order !== right.option_order) return left.option_order - right.option_order
+      return left.name.localeCompare(right.name)
+    })
+    .map((option) => ({
+      value: option.key,
+      label: option.name,
+      description: option.description,
+    }))
+}
+
+function buildRepeatedFeatureOptionDefinitions(args: {
+  count: number
+  optionGroupKey: string
+  optionKeyPrefix: string
+  labelPrefix: string
+  description: string
+  choices: FeatureOptionChoiceDefinition['choices']
+  sourceEntityId: string | null
+  sourceFeatureKey: string
+}) {
+  if (args.count <= 0 || args.choices.length === 0) return []
+
+  return Array.from({ length: args.count }, (_, index) => ({
+    optionGroupKey: args.optionGroupKey,
+    optionKey: `${args.optionKeyPrefix}_${index + 1}`,
+    label: `${args.labelPrefix} ${index + 1}`,
+    description: args.description,
+    valueKey: FEATURE_OPTION_VALUE_KEY,
+    choiceOrder: index,
+    choices: args.choices,
+    sourceCategory: 'subclass_feature',
+    sourceEntityId: args.sourceEntityId,
+    sourceFeatureKey: args.sourceFeatureKey,
+  }))
+}
+
+export function getSubclassFeatureOptionDefinitions(args: {
+  classId: string | null
+  classLevel: number
+  subclassId: string | null
+  subclassName: string | null
+  subclassSource: string | null
+  optionRows: FeatureOption[]
+}): FeatureOptionChoiceDefinition[] {
+  if (!args.classId || !args.subclassId || !args.subclassName || args.subclassSource !== 'PHB') return []
+
+  if (args.subclassName === 'Battle Master') {
+    const maneuverChoices = getFeatureOptionChoicesForGroup({
+      optionRows: args.optionRows,
+      groupKey: BATTLE_MASTER_MANEUVER_GROUP_KEY,
+      classLevel: args.classLevel,
+    })
+    const maneuverCount = args.classLevel >= 15 ? 9 : args.classLevel >= 10 ? 7 : args.classLevel >= 7 ? 5 : args.classLevel >= 3 ? 3 : 0
+    return buildRepeatedFeatureOptionDefinitions({
+      count: maneuverCount,
+      optionGroupKey: BATTLE_MASTER_MANEUVER_GROUP_KEY,
+      optionKeyPrefix: `${args.classId}:maneuver`,
+      labelPrefix: 'Combat Superiority Maneuver',
+      description: 'Choose a Battle Master maneuver for this fighter.',
+      choices: maneuverChoices,
+      sourceEntityId: args.subclassId,
+      sourceFeatureKey: 'subclass_feature:battle_master:combat_superiority',
+    })
+  }
+
+  if (args.subclassName === 'Hunter') {
+    const definitions: FeatureOptionChoiceDefinition[] = []
+    const optionConfigs = [
+      {
+        minimumClassLevel: 3,
+        optionGroupKey: HUNTER_PREY_GROUP_KEY,
+        optionKey: `${args.classId}:hunters_prey`,
+        label: "Hunter's Prey",
+        description: 'Choose your preferred offensive hunting tactic.',
+        sourceFeatureKey: 'subclass_feature:hunter:hunters_prey',
+      },
+      {
+        minimumClassLevel: 7,
+        optionGroupKey: HUNTER_DEFENSIVE_TACTICS_GROUP_KEY,
+        optionKey: `${args.classId}:defensive_tactics`,
+        label: 'Defensive Tactics',
+        description: 'Choose a practiced defense for your Hunter.',
+        sourceFeatureKey: 'subclass_feature:hunter:defensive_tactics',
+      },
+      {
+        minimumClassLevel: 11,
+        optionGroupKey: HUNTER_MULTIATTACK_GROUP_KEY,
+        optionKey: `${args.classId}:multiattack`,
+        label: 'Multiattack',
+        description: 'Choose your Hunter multiattack option.',
+        sourceFeatureKey: 'subclass_feature:hunter:multiattack',
+      },
+      {
+        minimumClassLevel: 15,
+        optionGroupKey: HUNTER_SUPERIOR_DEFENSE_GROUP_KEY,
+        optionKey: `${args.classId}:superior_defense`,
+        label: "Superior Hunter's Defense",
+        description: 'Choose your advanced Hunter defense.',
+        sourceFeatureKey: 'subclass_feature:hunter:superior_defense',
+      },
+    ] as const
+
+    for (const config of optionConfigs) {
+      if (args.classLevel < config.minimumClassLevel) continue
+      const choices = getFeatureOptionChoicesForGroup({
+        optionRows: args.optionRows,
+        groupKey: config.optionGroupKey,
+        classLevel: args.classLevel,
+      })
+      if (choices.length === 0) continue
+
+      definitions.push({
+        optionGroupKey: config.optionGroupKey,
+        optionKey: config.optionKey,
+        label: config.label,
+        description: config.description,
+        valueKey: FEATURE_OPTION_VALUE_KEY,
+        choiceOrder: definitions.length,
+        choices,
+        sourceCategory: 'subclass_feature',
+        sourceEntityId: args.subclassId,
+        sourceFeatureKey: config.sourceFeatureKey,
+      })
+    }
+
+    return definitions
+  }
+
+  if (args.subclassName === 'Circle of the Land' && args.classLevel >= 2) {
+    const choices = getFeatureOptionChoicesForGroup({
+      optionRows: args.optionRows,
+      groupKey: CIRCLE_OF_LAND_TERRAIN_GROUP_KEY,
+      classLevel: args.classLevel,
+    })
+    if (choices.length === 0) return []
+
+    return [{
+      optionGroupKey: CIRCLE_OF_LAND_TERRAIN_GROUP_KEY,
+      optionKey: `${args.classId}:terrain`,
+      label: 'Circle of the Land Terrain',
+      description: 'Choose the natural terrain that shapes your circle spells.',
+      valueKey: FEATURE_OPTION_VALUE_KEY,
+      choiceOrder: 0,
+      choices,
+      sourceCategory: 'subclass_feature',
+      sourceEntityId: args.subclassId,
+      sourceFeatureKey: 'subclass_feature:circle_of_the_land:terrain',
+    }]
+  }
+
+  if (args.subclassName === 'Way of the Four Elements') {
+    const disciplineChoices = getFeatureOptionChoicesForGroup({
+      optionRows: args.optionRows,
+      groupKey: FOUR_ELEMENTS_DISCIPLINE_GROUP_KEY,
+      classLevel: args.classLevel,
+    })
+    const disciplineCount = args.classLevel >= 17 ? 4 : args.classLevel >= 11 ? 3 : args.classLevel >= 6 ? 2 : args.classLevel >= 3 ? 1 : 0
+    return buildRepeatedFeatureOptionDefinitions({
+      count: disciplineCount,
+      optionGroupKey: FOUR_ELEMENTS_DISCIPLINE_GROUP_KEY,
+      optionKeyPrefix: `${args.classId}:discipline`,
+      labelPrefix: 'Elemental Discipline',
+      description: 'Choose an elemental discipline available to your monk.',
+      choices: disciplineChoices,
+      sourceEntityId: args.subclassId,
+      sourceFeatureKey: 'subclass_feature:four_elements:discipline',
+    })
+  }
+
+  return []
+}
+
 export function getSpeciesFeatureSpellChoiceDefinitions(args: {
   species: Pick<Species, 'id' | 'name' | 'source'> | null
 }): FeatureSpellChoiceDefinition[] {
@@ -555,7 +754,7 @@ export function getStaticSpeciesGrantedSpells(args: {
   speciesName: string | null
   speciesSource: string | null
   totalLevel: number
-  spells: Array<Pick<Spell, 'id' | 'name' | 'level' | 'classes' | 'source'>>
+  spells: Array<Pick<Spell, 'id' | 'name' | 'level' | 'school' | 'classes' | 'source'>>
 }) {
   const key = args.speciesName && args.speciesSource
     ? `${args.speciesSource}:${args.speciesName}`
@@ -582,6 +781,86 @@ export function getStaticSpeciesGrantedSpells(args: {
       countsAgainstSelectionLimit: false,
       sourceFeatureKey: rule.sourceFeatureKey,
       owningClassId: null,
+      grantedBySubclassIds: [] as string[],
+    }]
+  })
+}
+
+export function getStaticSubclassFeatureGrantedSpells(args: {
+  classes: Array<{
+    classId: string
+    level: number
+    subclass: { id: string | null; name: string | null; source: string | null } | null
+  }>
+  selectedFeatureOptions: Array<Pick<CharacterFeatureOptionChoice, 'option_group_key' | 'option_key' | 'selected_value'>>
+  optionRows: Array<Pick<FeatureOption, 'group_key' | 'key' | 'effects'>>
+  spells: Array<Pick<Spell, 'id' | 'name' | 'level' | 'school' | 'classes' | 'source'>>
+}) {
+  const rules: StaticFeatureGrantedSpellRule[] = []
+
+  for (const cls of args.classes) {
+    if (cls.subclass?.name !== 'Circle of the Land' || cls.subclass.source !== 'PHB') continue
+
+    const terrainKey = getFeatureOptionChoiceValue(
+      args.selectedFeatureOptions,
+      CIRCLE_OF_LAND_TERRAIN_GROUP_KEY,
+      `${cls.classId}:terrain`,
+      FEATURE_OPTION_VALUE_KEY
+    )
+    if (!terrainKey) continue
+
+    const terrainOption = args.optionRows.find((option) => (
+      option.group_key === CIRCLE_OF_LAND_TERRAIN_GROUP_KEY
+      && option.key === terrainKey
+    ))
+    const spellGrants = Array.isArray(terrainOption?.effects?.spell_grants)
+      ? terrainOption.effects.spell_grants
+      : []
+
+    for (const grant of spellGrants) {
+      if (!grant || typeof grant !== 'object') continue
+
+      const spellName = typeof (grant as { spell_name?: unknown }).spell_name === 'string'
+        ? (grant as { spell_name: string }).spell_name
+        : null
+      const minLevel = typeof (grant as { min_class_level?: unknown }).min_class_level === 'number'
+        ? (grant as { min_class_level: number }).min_class_level
+        : 1
+      const sourceFeatureKey = typeof (grant as { source_feature_key?: unknown }).source_feature_key === 'string'
+        ? (grant as { source_feature_key: string }).source_feature_key
+        : null
+      const spellSources = Array.isArray((grant as { spell_sources?: unknown }).spell_sources)
+        ? (grant as { spell_sources: unknown[] }).spell_sources.filter((value): value is string => typeof value === 'string')
+        : ['PHB', 'SRD', 'srd']
+
+      if (!spellName || !sourceFeatureKey || cls.level < minLevel) continue
+
+      rules.push({
+        spellName,
+        spellSources,
+        minLevel,
+        sourceFeatureKey,
+        owningClassId: cls.classId,
+      })
+    }
+  }
+
+  return rules.flatMap((rule) => {
+    const matchingSpells = args.spells.filter((entry) => entry.name === rule.spellName)
+    const spell = rule.spellSources && rule.spellSources.length > 0
+      ? rule.spellSources
+          .map((source) => matchingSpells.find((entry) => entry.source === source))
+          .find((entry): entry is typeof matchingSpells[number] => Boolean(entry))
+        ?? matchingSpells[0]
+      : matchingSpells[0]
+    if (!spell) return []
+
+    return [{
+      ...spell,
+      acquisitionMode: 'granted',
+      countsAgainstSelectionLimit: false,
+      sourceFeatureKey: rule.sourceFeatureKey,
+      owningClassId: rule.owningClassId,
       grantedBySubclassIds: [] as string[],
     }]
   })

@@ -6,11 +6,23 @@ import {
   type CharacterBuildContext,
 } from '@/lib/characters/build-context'
 import {
+  BATTLE_MASTER_MANEUVER_GROUP_KEY,
+  CIRCLE_OF_LAND_TERRAIN_GROUP_KEY,
+  FEATURE_OPTION_VALUE_KEY,
   FIGHTING_STYLE_VALUE_KEY,
+  FOUR_ELEMENTS_DISCIPLINE_GROUP_KEY,
   getFightingStyleGroupKey,
   getFightingStyleUnlockLevel,
+  HUNTER_DEFENSIVE_TACTICS_GROUP_KEY,
+  HUNTER_MULTIATTACK_GROUP_KEY,
+  HUNTER_PREY_GROUP_KEY,
+  HUNTER_SUPERIOR_DEFENSE_GROUP_KEY,
   MAVERICK_ARCANE_BREAKTHROUGH_SOURCE_KEY,
 } from '@/lib/characters/feature-grants'
+import {
+  getRestrictedSubclassRuleForSubclassRow,
+  isRestrictedSubclassSpellSelectionValid,
+} from '@/lib/characters/subclass-spell-restrictions'
 import {
   getMaverickPreparedBreakthroughLevels,
   isMaverickSubclass,
@@ -520,12 +532,34 @@ function checkSpellLegality(input: LegalityInput, derived: DerivedCharacter): Le
     return !matchesClass || !inRange
   })
 
+  const restrictedSubclassViolations = input.classes.flatMap((cls) => {
+    const rule = getRestrictedSubclassRuleForSubclassRow(cls.subclass, cls.level)
+    if (!rule) return []
+
+    const classSelectedSpells = input.selectedSpells.filter((spell) => (
+      spell.level > 0
+      && spell.countsAgainstSelectionLimit
+      && spell.classes.includes(cls.classId)
+      && !spell.grantedBySubclassIds.includes(cls.subclass?.id ?? '')
+    ))
+    const validity = isRestrictedSubclassSpellSelectionValid({
+      selectedSpells: classSelectedSpells,
+      rule,
+    })
+    if (validity.passed) return []
+
+    return [`${cls.name} ${cls.subclass?.name} has ${validity.offSchoolCount} off-school spells but only ${validity.unrestrictedAllowance} are allowed.`]
+  })
+
   return {
     key: 'spell_legality',
-    passed: invalid.length === 0,
-    message: invalid.length === 0
+    passed: invalid.length === 0 && restrictedSubclassViolations.length === 0,
+    message: invalid.length === 0 && restrictedSubclassViolations.length === 0
       ? 'Selected spells are valid for this build.'
-      : `Invalid spell selections: ${invalid.map((spell) => spell.name).join(', ')}.`,
+      : [
+          invalid.length > 0 ? `Invalid spell selections: ${invalid.map((spell) => spell.name).join(', ')}.` : null,
+          ...restrictedSubclassViolations,
+        ].filter(Boolean).join(' '),
     severity: 'error',
   }
 }
@@ -655,6 +689,76 @@ function checkFightingStyleSelections(input: LegalityInput): LegalityCheck {
   }
 }
 
+function countSelectedFeatureOptions(
+  input: LegalityInput,
+  optionGroupKey: string,
+  expectedValueKey = FEATURE_OPTION_VALUE_KEY
+) {
+  return input.selectedFeatureOptions.filter((choice) => {
+    if (choice.option_group_key !== optionGroupKey) return false
+    const selectedValue = choice.selected_value?.[expectedValueKey]
+    return typeof selectedValue === 'string' && selectedValue.length > 0
+  }).length
+}
+
+function hasSelectedFeatureOption(
+  input: LegalityInput,
+  optionGroupKey: string,
+  expectedValueKey = FEATURE_OPTION_VALUE_KEY
+) {
+  return countSelectedFeatureOptions(input, optionGroupKey, expectedValueKey) > 0
+}
+
+function checkSubclassFeatureOptionSelections(input: LegalityInput): LegalityCheck {
+  const missing: string[] = []
+
+  for (const cls of input.classes) {
+    const subclass = cls.subclass
+    if (!subclass || subclass.source !== 'PHB') continue
+
+    if (subclass.name === 'Battle Master') {
+      const required = cls.level >= 15 ? 9 : cls.level >= 10 ? 7 : cls.level >= 7 ? 5 : cls.level >= 3 ? 3 : 0
+      const selected = countSelectedFeatureOptions(input, BATTLE_MASTER_MANEUVER_GROUP_KEY)
+      if (selected < required) missing.push(`Battle Master maneuvers (${selected}/${required})`)
+    }
+
+    if (subclass.name === 'Hunter') {
+      const hunterGroups = [
+        { minimumLevel: 3, groupKey: HUNTER_PREY_GROUP_KEY, label: "Hunter's Prey" },
+        { minimumLevel: 7, groupKey: HUNTER_DEFENSIVE_TACTICS_GROUP_KEY, label: 'Defensive Tactics' },
+        { minimumLevel: 11, groupKey: HUNTER_MULTIATTACK_GROUP_KEY, label: 'Multiattack' },
+        { minimumLevel: 15, groupKey: HUNTER_SUPERIOR_DEFENSE_GROUP_KEY, label: "Superior Hunter's Defense" },
+      ] as const
+
+      for (const group of hunterGroups) {
+        if (cls.level < group.minimumLevel) continue
+        if (!hasSelectedFeatureOption(input, group.groupKey)) {
+          missing.push(`Hunter ${group.label}`)
+        }
+      }
+    }
+
+    if (subclass.name === 'Circle of the Land' && cls.level >= 2 && !hasSelectedFeatureOption(input, CIRCLE_OF_LAND_TERRAIN_GROUP_KEY)) {
+      missing.push('Circle of the Land terrain')
+    }
+
+    if (subclass.name === 'Way of the Four Elements') {
+      const required = cls.level >= 17 ? 4 : cls.level >= 11 ? 3 : cls.level >= 6 ? 2 : cls.level >= 3 ? 1 : 0
+      const selected = countSelectedFeatureOptions(input, FOUR_ELEMENTS_DISCIPLINE_GROUP_KEY)
+      if (selected < required) missing.push(`Way of the Four Elements disciplines (${selected}/${required})`)
+    }
+  }
+
+  return {
+    key: 'subclass_feature_option_selections',
+    passed: missing.length === 0,
+    message: missing.length === 0
+      ? 'Required subclass feature option selections are present.'
+      : `Missing subclass feature option selections: ${missing.join(', ')}.`,
+    severity: 'error',
+  }
+}
+
 export function runLegalityChecks(input: LegalityInput): LegalityResult {
   const baseDerived = deriveCharacter(input)
   const checks: LegalityCheck[] = [
@@ -673,6 +777,7 @@ export function runLegalityChecks(input: LegalityInput): LegalityResult {
     checkSpellLegality(input, baseDerived),
     checkMaverickBreakthroughSelections(input),
     checkFightingStyleSelections(input),
+    checkSubclassFeatureOptionSelections(input),
     checkSpellSelectionCount(input, baseDerived),
   ]
 

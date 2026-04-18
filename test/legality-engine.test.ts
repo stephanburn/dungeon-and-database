@@ -1261,6 +1261,149 @@ test('legality requires fighting style selections when a class unlocks one', () 
   assert.equal(withStyle.checks.find((check) => check.key === 'fighting_style_selections')?.passed, true)
 })
 
+test('legality requires PHB subclass feature option selections when a subclass unlocks them', () => {
+  const missing = runLegalityChecks(createContext({
+    skillProficiencies: ['athletics', 'survival'],
+    classes: [{
+      classId: 'fighter',
+      name: 'Fighter',
+      level: 3,
+      hitDie: 10,
+      hpRoll: 10,
+      source: 'PHB',
+      spellcastingType: null,
+      spellcastingProgression: null,
+      subclassChoiceLevel: 3,
+      multiclassPrereqs: [{ ability: 'str', min: 13 }],
+      skillChoices: { count: 2, from: ['athletics', 'history'] },
+      savingThrowProficiencies: ['str', 'con'],
+      armorProficiencies: ['All armor', 'Shields'],
+      weaponProficiencies: ['Simple', 'Martial'],
+      toolProficiencies: [],
+      subclass: { id: 'battle-master', name: 'Battle Master', source: 'PHB', choiceLevel: 3 },
+      progression: [
+        { level: 1, asiAvailable: false, proficiencyBonus: 2, featureNames: ['Fighting Style'] },
+        { level: 2, asiAvailable: false, proficiencyBonus: 2, featureNames: ['Action Surge'] },
+        { level: 3, asiAvailable: false, proficiencyBonus: 2, featureNames: ['Combat Superiority'] },
+      ],
+      spellSlots: [],
+    }],
+    selectedSpells: [],
+    selectedFeatureOptions: [{
+      id: 'fighter-style',
+      character_id: 'character',
+      character_level_id: null,
+      option_group_key: 'fighting_style:fighter:2014',
+      option_key: 'fighter:style',
+      selected_value: { feature_option_key: 'defense' },
+      choice_order: 0,
+      source_category: 'class_feature',
+      source_entity_id: 'fighter',
+      source_feature_key: 'class_feature:fighting_style:fighter',
+      created_at: '',
+    }],
+    sourceCollections: {
+      classSources: ['PHB'],
+      subclassSources: ['PHB'],
+      spellSources: [],
+      featSources: [],
+    },
+  }))
+
+  assert.equal(missing.checks.find((check) => check.key === 'subclass_feature_option_selections')?.passed, false)
+
+  const withSelections = runLegalityChecks(createContext({
+    skillProficiencies: ['athletics', 'survival'],
+    classes: [{
+      classId: 'fighter',
+      name: 'Fighter',
+      level: 3,
+      hitDie: 10,
+      hpRoll: 10,
+      source: 'PHB',
+      spellcastingType: null,
+      spellcastingProgression: null,
+      subclassChoiceLevel: 3,
+      multiclassPrereqs: [{ ability: 'str', min: 13 }],
+      skillChoices: { count: 2, from: ['athletics', 'history'] },
+      savingThrowProficiencies: ['str', 'con'],
+      armorProficiencies: ['All armor', 'Shields'],
+      weaponProficiencies: ['Simple', 'Martial'],
+      toolProficiencies: [],
+      subclass: { id: 'battle-master', name: 'Battle Master', source: 'PHB', choiceLevel: 3 },
+      progression: [
+        { level: 1, asiAvailable: false, proficiencyBonus: 2, featureNames: ['Fighting Style'] },
+        { level: 2, asiAvailable: false, proficiencyBonus: 2, featureNames: ['Action Surge'] },
+        { level: 3, asiAvailable: false, proficiencyBonus: 2, featureNames: ['Combat Superiority'] },
+      ],
+      spellSlots: [],
+    }],
+    selectedSpells: [],
+    selectedFeatureOptions: [
+      {
+        id: 'fighter-style',
+        character_id: 'character',
+        character_level_id: null,
+        option_group_key: 'fighting_style:fighter:2014',
+        option_key: 'fighter:style',
+        selected_value: { feature_option_key: 'defense' },
+        choice_order: 0,
+        source_category: 'class_feature',
+        source_entity_id: 'fighter',
+        source_feature_key: 'class_feature:fighting_style:fighter',
+        created_at: '',
+      },
+      {
+        id: 'maneuver-1',
+        character_id: 'character',
+        character_level_id: null,
+        option_group_key: 'maneuver:battle_master:2014',
+        option_key: 'fighter:maneuver_1',
+        selected_value: { feature_option_key: 'trip_attack' },
+        choice_order: 0,
+        source_category: 'subclass_feature',
+        source_entity_id: 'battle-master',
+        source_feature_key: 'subclass_feature:battle_master:combat_superiority',
+        created_at: '',
+      },
+      {
+        id: 'maneuver-2',
+        character_id: 'character',
+        character_level_id: null,
+        option_group_key: 'maneuver:battle_master:2014',
+        option_key: 'fighter:maneuver_2',
+        selected_value: { feature_option_key: 'riposte' },
+        choice_order: 1,
+        source_category: 'subclass_feature',
+        source_entity_id: 'battle-master',
+        source_feature_key: 'subclass_feature:battle_master:combat_superiority',
+        created_at: '',
+      },
+      {
+        id: 'maneuver-3',
+        character_id: 'character',
+        character_level_id: null,
+        option_group_key: 'maneuver:battle_master:2014',
+        option_key: 'fighter:maneuver_3',
+        selected_value: { feature_option_key: 'parry' },
+        choice_order: 2,
+        source_category: 'subclass_feature',
+        source_entity_id: 'battle-master',
+        source_feature_key: 'subclass_feature:battle_master:combat_superiority',
+        created_at: '',
+      },
+    ],
+    sourceCollections: {
+      classSources: ['PHB'],
+      subclassSources: ['PHB'],
+      spellSources: [],
+      featSources: [],
+    },
+  }))
+
+  assert.equal(withSelections.checks.find((check) => check.key === 'subclass_feature_option_selections')?.passed, true)
+})
+
 test('legality blocks spell selections above class spell-preparation caps', () => {
   const result = runLegalityChecks(createContext({
     selectedSpells: [
@@ -1284,6 +1427,80 @@ test('legality blocks spell selections above class spell-preparation caps', () =
   assert.equal(result.derived?.spellLevelCaps[1], 4)
   assert.equal(result.derived?.leveledSpellSelectionCap, 5)
   assert.equal(result.checks.find((check) => check.key === 'spell_selection_count')?.passed, false)
+})
+
+test('legality blocks too many off-school spells for Eldritch Knight and Arcane Trickster', () => {
+  const ek = runLegalityChecks(createContext({
+    classes: [{
+      classId: 'fighter',
+      name: 'Fighter',
+      level: 7,
+      hitDie: 10,
+      hpRoll: 10,
+      source: 'PHB',
+      spellcastingType: 'third',
+      spellcastingProgression: null,
+      subclassChoiceLevel: 3,
+      multiclassPrereqs: [],
+      skillChoices: { count: 2, from: ['athletics', 'history'] },
+      savingThrowProficiencies: ['str', 'con'],
+      armorProficiencies: ['All armor', 'Shields'],
+      weaponProficiencies: ['Simple', 'Martial'],
+      toolProficiencies: [],
+      subclass: { id: 'eldritch-knight', name: 'Eldritch Knight', source: 'PHB', choiceLevel: 3 },
+      progression: [],
+      spellSlots: [4, 2],
+    }],
+    selectedSpells: [
+      { id: 'shield', name: 'Shield', level: 1, classes: ['fighter'], source: 'PHB', grantedBySubclassIds: [], countsAgainstSelectionLimit: true, sourceFeatureKey: null },
+      { id: 'find-familiar', name: 'Find Familiar', level: 1, classes: ['fighter'], source: 'PHB', grantedBySubclassIds: [], countsAgainstSelectionLimit: true, sourceFeatureKey: null, school: 'Conjuration' } as never,
+      { id: 'grease', name: 'Grease', level: 1, classes: ['fighter'], source: 'PHB', grantedBySubclassIds: [], countsAgainstSelectionLimit: true, sourceFeatureKey: null, school: 'Conjuration' } as never,
+    ],
+    sourceCollections: {
+      classSources: ['PHB'],
+      subclassSources: ['PHB'],
+      spellSources: ['PHB'],
+      featSources: [],
+    },
+  }))
+  assert.equal(ek.checks.find((check) => check.key === 'spell_legality')?.passed, false)
+
+  const at = runLegalityChecks(createContext({
+    classes: [{
+      classId: 'rogue',
+      name: 'Rogue',
+      level: 8,
+      hitDie: 8,
+      hpRoll: 8,
+      source: 'PHB',
+      spellcastingType: 'third',
+      spellcastingProgression: null,
+      subclassChoiceLevel: 3,
+      multiclassPrereqs: [],
+      skillChoices: { count: 4, from: ['acrobatics', 'stealth'] },
+      savingThrowProficiencies: ['dex', 'int'],
+      armorProficiencies: ['Light armor'],
+      weaponProficiencies: ['Simple', 'Hand crossbows'],
+      toolProficiencies: ["Thieves' tools"],
+      subclass: { id: 'arcane-trickster', name: 'Arcane Trickster', source: 'PHB', choiceLevel: 3 },
+      progression: [],
+      spellSlots: [4, 2],
+    }],
+    selectedSpells: [
+      { id: 'disguise-self', name: 'Disguise Self', level: 1, classes: ['rogue'], source: 'PHB', grantedBySubclassIds: [], countsAgainstSelectionLimit: true, sourceFeatureKey: null, school: 'Illusion' } as never,
+      { id: 'silent-image', name: 'Silent Image', level: 1, classes: ['rogue'], source: 'PHB', grantedBySubclassIds: [], countsAgainstSelectionLimit: true, sourceFeatureKey: null, school: 'Illusion' } as never,
+      { id: 'find-familiar', name: 'Find Familiar', level: 1, classes: ['rogue'], source: 'PHB', grantedBySubclassIds: [], countsAgainstSelectionLimit: true, sourceFeatureKey: null, school: 'Conjuration' } as never,
+      { id: 'feather-fall', name: 'Feather Fall', level: 1, classes: ['rogue'], source: 'PHB', grantedBySubclassIds: [], countsAgainstSelectionLimit: true, sourceFeatureKey: null, school: 'Transmutation' } as never,
+      { id: 'sleep', name: 'Sleep', level: 1, classes: ['rogue'], source: 'PHB', grantedBySubclassIds: [], countsAgainstSelectionLimit: true, sourceFeatureKey: null, school: 'Enchantment' } as never,
+    ],
+    sourceCollections: {
+      classSources: ['PHB'],
+      subclassSources: ['PHB'],
+      spellSources: ['PHB'],
+      featSources: [],
+    },
+  }))
+  assert.equal(at.checks.find((check) => check.key === 'spell_legality')?.passed, true)
 })
 
 test('deriveCharacterProgression supports artificer-style prepared casting rules', () => {

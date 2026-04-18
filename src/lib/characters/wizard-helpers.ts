@@ -5,6 +5,7 @@ import type {
   Class,
   ClassFeatureProgression,
   Feat,
+  FeatureOption,
   RuleSet,
   Species,
   Spell,
@@ -45,7 +46,10 @@ import {
   type CharacterBuildContext,
   type DerivedCharacter,
 } from '@/lib/characters/build-context'
-import { getStaticSpeciesGrantedSpells } from '@/lib/characters/feature-grants'
+import {
+  getStaticSpeciesGrantedSpells,
+  getStaticSubclassFeatureGrantedSpells,
+} from '@/lib/characters/feature-grants'
 import type { FeatSlotDefinition } from '@/lib/characters/feat-slots'
 import { hitPointGainFromRoll } from '@/lib/characters/derived'
 
@@ -97,6 +101,7 @@ type LocalBuildContextArgs = {
   languageChoices?: string[]
   toolChoices?: string[]
   featureOptionChoices?: CharacterFeatureOptionChoice[]
+  featureOptionRows?: FeatureOption[]
 }
 
 export function buildLocalCharacterContext({
@@ -122,6 +127,7 @@ export function buildLocalCharacterContext({
   languageChoices = [],
   toolChoices = [],
   featureOptionChoices = [],
+  featureOptionRows = [],
 }: LocalBuildContextArgs): CharacterBuildContext | null {
   if (!campaign) return null
 
@@ -186,6 +192,22 @@ export function buildLocalCharacterContext({
     totalLevel,
     spells: spellOptions,
   })
+  const staticSubclassGrantedSpells = getStaticSubclassFeatureGrantedSpells({
+    classes: classes.map((cls) => ({
+      classId: cls.classId,
+      level: cls.level,
+      subclass: cls.subclass
+        ? {
+            id: cls.subclass.id,
+            name: cls.subclass.name,
+            source: cls.subclass.source,
+          }
+        : null,
+    })),
+    selectedFeatureOptions: featureOptionChoices,
+    optionRows: featureOptionRows,
+    spells: spellOptions,
+  })
   const selectedSpellSummaries = [
     ...typedSpellSelections
       .map((selection) => {
@@ -203,6 +225,7 @@ export function buildLocalCharacterContext({
         id: spell.id,
         name: spell.name,
         level: spell.level,
+        school: spell.school,
         classes: selection?.owning_class_id
           ? Array.from(new Set([
               selection.owning_class_id,
@@ -222,6 +245,18 @@ export function buildLocalCharacterContext({
       id: spell.id,
       name: spell.name,
       level: spell.level,
+      school: spell.school,
+      classes: spell.classes,
+      source: spell.source,
+      grantedBySubclassIds: spell.grantedBySubclassIds,
+      countsAgainstSelectionLimit: spell.countsAgainstSelectionLimit,
+      sourceFeatureKey: spell.sourceFeatureKey,
+    })),
+    ...staticSubclassGrantedSpells.map((spell) => ({
+      id: spell.id,
+      name: spell.name,
+      level: spell.level,
+      school: spell.school,
       classes: spell.classes,
       source: spell.source,
       grantedBySubclassIds: spell.grantedBySubclassIds,
@@ -241,6 +276,7 @@ export function buildLocalCharacterContext({
       .filter((selection) => selection.acquisition_mode === 'granted' || Boolean(selection.source_feature_key))
       .map((selection) => selection.spell_id),
     ...staticGrantedSpells.map((spell) => spell.id),
+    ...staticSubclassGrantedSpells.map((spell) => spell.id),
   ]))
   const freePreparedSpellIds = Array.from(new Set([
     ...typedSpellSelections
@@ -251,6 +287,7 @@ export function buildLocalCharacterContext({
       .filter((selection) => selection.counts_against_selection_limit === false)
       .map((selection) => selection.spell_id),
     ...staticGrantedSpells.map((spell) => spell.id),
+    ...staticSubclassGrantedSpells.map((spell) => spell.id),
   ]))
 
   return {
@@ -525,6 +562,8 @@ function humanizeLegalityCheck(check: LegalityResult['checks'][number]): string 
       return 'You have picked more feats than this build currently unlocks.'
     case 'spell_legality':
       return 'At least one selected spell is not available to this build yet.'
+    case 'subclass_feature_option_selections':
+      return 'A subclass with required option picks is still missing one or more selections.'
     case 'spell_selection_count':
       return 'You have chosen more spells or cantrips than this build allows.'
     default:
