@@ -42,25 +42,54 @@ export interface LoadedCharacterState {
   legality: LegalityResult | null
 }
 
+export interface CharacterLoadWarning {
+  scope: string
+  message: string
+}
+
+export interface CharacterLoadFailure {
+  message: string
+  issues: Array<{
+    scope: string
+    message: string
+  }>
+}
+
+export type LoadCharacterStateResult =
+  | { status: 'success'; state: LoadedCharacterState; warnings: CharacterLoadWarning[] }
+  | { status: 'not_found' }
+  | { status: 'error'; error: CharacterLoadFailure }
+
+type LoadCharacterDeps = {
+  buildLegalityInputImpl?: typeof buildLegalityInput
+}
+
 export async function loadCharacterState(
   supabase: SupabaseClient<Database>,
-  characterId: string
-): Promise<LoadedCharacterState | null> {
-  const { data: character } = await supabase
+  characterId: string,
+  deps: LoadCharacterDeps = {}
+): Promise<LoadCharacterStateResult> {
+  const { buildLegalityInputImpl = buildLegalityInput } = deps
+
+  const { data: character, error: characterError } = await supabase
     .from('characters')
     .select('*')
     .eq('id', characterId)
     .single()
 
-  if (!character) return null
+  if (characterError || !character) {
+    return {
+      status: 'not_found',
+    }
+  }
 
-  const [speciesResult, backgroundResult, levelsResult, skillsResult, abilityBonusChoicesResult, asiChoicesResult, languageChoicesResult, toolChoicesResult, featureOptionChoicesResult, equipmentItemsResult, typedSpellSelectionsResult, typedFeatChoicesResult, legalityInput] = await Promise.all([
+  const [speciesResult, backgroundResult, levelsResult, skillsResult, abilityBonusChoicesResult, asiChoicesResult, languageChoicesResult, toolChoicesResult, featureOptionChoicesResult, equipmentItemsResult, typedSpellSelectionsResult, typedFeatChoicesResult] = await Promise.all([
     character.species_id
       ? supabase.from('species').select('*').eq('id', character.species_id).single()
-      : Promise.resolve({ data: null }),
+      : Promise.resolve({ data: null, error: null }),
     character.background_id
       ? supabase.from('backgrounds').select('*').eq('id', character.background_id).single()
-      : Promise.resolve({ data: null }),
+      : Promise.resolve({ data: null, error: null }),
     supabase.from('character_levels').select('*').eq('character_id', character.id),
     supabase.from('character_skill_proficiencies').select('*').eq('character_id', character.id),
     supabase.from('character_ability_bonus_choices').select('*').eq('character_id', character.id),
@@ -71,8 +100,63 @@ export async function loadCharacterState(
     supabase.from('character_equipment_items').select('*').eq('character_id', character.id),
     supabase.from('character_spell_selections').select('*').eq('character_id', character.id),
     supabase.from('character_feat_choices').select('*').eq('character_id', character.id),
-    buildLegalityInput(supabase, character.id),
   ])
+
+  const issues = [
+    speciesResult,
+    backgroundResult,
+    levelsResult,
+    skillsResult,
+    abilityBonusChoicesResult,
+    asiChoicesResult,
+    languageChoicesResult,
+    toolChoicesResult,
+    featureOptionChoicesResult,
+    equipmentItemsResult,
+    typedSpellSelectionsResult,
+    typedFeatChoicesResult,
+  ]
+    .flatMap((result, index) => result.error ? [{
+      scope: [
+        'species',
+        'background',
+        'levels',
+        'skills',
+        'ability_bonus_choices',
+        'asi_choices',
+        'language_choices',
+        'tool_choices',
+        'feature_option_choices',
+        'equipment_items',
+        'spell_selections',
+        'feat_choices',
+      ][index] ?? 'unknown',
+      message: result.error.message,
+    }] : [])
+
+  if (issues.length > 0) {
+    return {
+      status: 'error',
+      error: {
+        message: 'Failed to load character relations',
+        issues,
+      },
+    }
+  }
+
+  const warnings: CharacterLoadWarning[] = []
+  if (character.species_id && !speciesResult.data) {
+    warnings.push({
+      scope: 'species',
+      message: `Character references missing species ${character.species_id}`,
+    })
+  }
+  if (character.background_id && !backgroundResult.data) {
+    warnings.push({
+      scope: 'background',
+      message: `Character references missing background ${character.background_id}`,
+    })
+  }
 
   const typedSpellSelections = (typedSpellSelectionsResult.data ?? []) as CharacterSpellSelection[]
   const selectedSpellIds = Array.from(
@@ -84,7 +168,20 @@ export async function loadCharacterState(
   )
   const selectedSpellResult = selectedSpellIds.length > 0
     ? await supabase.from('spells').select('*').in('id', selectedSpellIds)
-    : { data: [] as Spell[] }
+    : { data: [] as Spell[], error: null }
+
+  if (selectedSpellResult.error) {
+    return {
+      status: 'error',
+      error: {
+        message: 'Failed to load selected spell rows',
+        issues: [{
+          scope: 'selected_spells',
+          message: selectedSpellResult.error.message,
+        }],
+      },
+    }
+  }
 
   const typedSpellChoices = ((typedSpellSelectionsResult.data ?? []) as CharacterSpellSelection[])
     .map((row) => row.spell_id)
@@ -117,7 +214,46 @@ export async function loadCharacterState(
     } satisfies SpellOption
   })
 
-  return {
+  if (selectedSpellIds.length !== initialSelectedSpells.length) {
+    warnings.push({
+      scope: 'selected_spells',
+      message: `Character references ${selectedSpellIds.length - initialSelectedSpells.length} missing spell row(s)`,
+    })
+  }
+
+  let legalityInput = null
+  try {
+    legalityInput = await buildLegalityInputImpl(supabase, character.id)
+  } catch (error) {
+    return {
+      status: 'error',
+      error: {
+        message: 'Failed to build legality input for loaded character',
+        issues: [{
+          scope: 'legality_input',
+          message: error instanceof Error ? error.message : 'Unknown legality input error',
+        }],
+      },
+    }
+  }
+
+  let legality: LegalityResult | null = null
+  try {
+    legality = legalityInput ? runLegalityChecks(legalityInput) : null
+  } catch (error) {
+    return {
+      status: 'error',
+      error: {
+        message: 'Failed to derive legality for loaded character',
+        issues: [{
+          scope: 'legality',
+          message: error instanceof Error ? error.message : 'Unknown legality error',
+        }],
+      },
+    }
+  }
+
+  const state: LoadedCharacterState = {
     character: {
       ...character,
       species: speciesResult.data ?? null,
@@ -135,6 +271,12 @@ export async function loadCharacterState(
     initialFeatChoices: typedFeatChoices,
     initialFeatureOptionChoices: typedFeatureOptionChoices,
     initialEquipmentItems: typedEquipmentItems,
-    legality: legalityInput ? runLegalityChecks(legalityInput) : null,
+    legality,
+  }
+
+  return {
+    status: 'success',
+    state,
+    warnings,
   }
 }

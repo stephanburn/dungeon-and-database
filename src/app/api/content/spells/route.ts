@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { requireAuth, requireAdmin, jsonError, readJsonBody } from '@/lib/api-helpers'
+import { spellCreateSchema, spellUpdateSchema } from '@/lib/content/admin-schemas'
 import { getAllowedSources } from '@/lib/content-helpers'
 import { MAVERICK_ARCANE_BREAKTHROUGH_SOURCE_KEY } from '@/lib/characters/feature-grants'
 import { filterRestrictedSubclassSpellOptions, getRestrictedSubclassRuleForSubclassRow } from '@/lib/characters/subclass-spell-restrictions'
@@ -122,11 +123,9 @@ export async function POST(request: NextRequest) {
 
   const bodyResult = await readJsonBody<Record<string, unknown>>(request)
   if ('response' in bodyResult) return bodyResult.response
-  const body = bodyResult.data
-  if (!body.name || body.level === undefined || !body.school || !body.casting_time ||
-      !body.range || !body.duration || !body.source) {
-    return jsonError('name, level, school, casting_time, range, duration, and source are required', 400)
-  }
+  const parsed = spellCreateSchema.safeParse(bodyResult.data)
+  if (!parsed.success) return jsonError(parsed.error.message, 400)
+  const body = parsed.data
 
   const { data, error } = await supabase
     .from('spells')
@@ -171,11 +170,10 @@ export async function PUT(request: NextRequest) {
 
   const bodyResult = await readJsonBody<Record<string, unknown>>(request)
   if ('response' in bodyResult) return bodyResult.response
-  const body = bodyResult.data
-  if (!body.id) return jsonError('id is required', 400)
+  const parsed = spellUpdateSchema.safeParse(bodyResult.data)
+  if (!parsed.success) return jsonError(parsed.error.message, 400)
+  const { id, ...fields } = parsed.data
 
-  const id = body.id as string
-  const fields = Object.fromEntries(Object.entries(body).filter(([key]) => key !== 'id'))
   const { data, error } = await supabase
     .from('spells')
     .update(fields)

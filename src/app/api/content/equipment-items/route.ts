@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { requireAdmin, requireAuth, jsonError, readJsonBody } from '@/lib/api-helpers'
+import { equipmentItemCreateSchema, equipmentItemUpdateSchema } from '@/lib/content/admin-schemas'
 import { listEquipmentItems } from '@/lib/content/equipment-content'
 import { writeAuditLog } from '@/lib/server/audit'
 
@@ -22,10 +23,9 @@ export async function POST(request: NextRequest) {
 
   const bodyResult = await readJsonBody<Record<string, unknown>>(request)
   if ('response' in bodyResult) return bodyResult.response
-  const body = bodyResult.data
-  if (!body.key || !body.name || !body.item_category || !body.source) {
-    return jsonError('key, name, item_category, and source are required', 400)
-  }
+  const parsed = equipmentItemCreateSchema.safeParse(bodyResult.data)
+  if (!parsed.success) return jsonError(parsed.error.message, 400)
+  const body = parsed.data
 
   const { data, error } = await supabase
     .from('equipment_items')
@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
       item_category: body.item_category as string,
       cost_quantity: Number(body.cost_quantity ?? 0),
       cost_unit: (body.cost_unit as string | undefined) ?? 'gp',
-      weight_lb: body.weight_lb == null || body.weight_lb === '' ? null : Number(body.weight_lb),
+      weight_lb: body.weight_lb ?? null,
       source: body.source as string,
       amended: false,
       amendment_note: null,
@@ -61,15 +61,9 @@ export async function PUT(request: NextRequest) {
 
   const bodyResult = await readJsonBody<Record<string, unknown>>(request)
   if ('response' in bodyResult) return bodyResult.response
-  const body = bodyResult.data
-  if (!body.id) return jsonError('id is required', 400)
-
-  const id = body.id as string
-  const fields = {
-    ...Object.fromEntries(Object.entries(body).filter(([key]) => key !== 'id')),
-    weight_lb: body.weight_lb == null || body.weight_lb === '' ? null : Number(body.weight_lb),
-    cost_quantity: body.cost_quantity == null ? undefined : Number(body.cost_quantity),
-  }
+  const parsed = equipmentItemUpdateSchema.safeParse(bodyResult.data)
+  if (!parsed.success) return jsonError(parsed.error.message, 400)
+  const { id, ...fields } = parsed.data
 
   const { data, error } = await supabase
     .from('equipment_items')

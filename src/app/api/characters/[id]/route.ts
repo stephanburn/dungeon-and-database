@@ -170,22 +170,25 @@ export async function GET(
   const { supabase } = auth
 
   const loadedState = await loadCharacterState(supabase, params.id)
-  if (!loadedState) return jsonError('Character not found', 404)
+  if (loadedState.status === 'not_found') return jsonError('Character not found', 404)
+  if (loadedState.status === 'error') return jsonError(loadedState.error.message, 500)
+  const state = loadedState.state
 
   return NextResponse.json({
-    ...loadedState.character,
-    skill_proficiencies: loadedState.initialSkillProficiencies,
-    ability_bonus_choices: loadedState.initialAbilityBonusChoices,
-    asi_choices: loadedState.initialAsiChoices,
-    language_choices: loadedState.initialLanguageChoices,
-    tool_choices: loadedState.initialToolChoices,
-    spell_choices: loadedState.initialSpellChoices,
-    spell_selections: loadedState.initialSpellSelections,
-    feat_choices: loadedState.initialFeatChoices,
-    feature_option_choices: loadedState.initialFeatureOptionChoices,
-    equipment_items: loadedState.initialEquipmentItems,
-    legality: loadedState.legality,
-    derived: loadedState.legality?.derived ?? null,
+    ...state.character,
+    skill_proficiencies: state.initialSkillProficiencies,
+    ability_bonus_choices: state.initialAbilityBonusChoices,
+    asi_choices: state.initialAsiChoices,
+    language_choices: state.initialLanguageChoices,
+    tool_choices: state.initialToolChoices,
+    spell_choices: state.initialSpellChoices,
+    spell_selections: state.initialSpellSelections,
+    feat_choices: state.initialFeatChoices,
+    feature_option_choices: state.initialFeatureOptionChoices,
+    equipment_items: state.initialEquipmentItems,
+    legality: state.legality,
+    derived: state.legality?.derived ?? null,
+    load_warnings: loadedState.warnings,
   })
 }
 

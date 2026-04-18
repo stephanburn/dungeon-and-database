@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { requireAuth, requireAdmin, jsonError, readJsonBody } from '@/lib/api-helpers'
+import { subclassCreateSchema, subclassUpdateSchema } from '@/lib/content/admin-schemas'
 import { writeAuditLog } from '@/lib/server/audit'
 
 export async function GET(request: NextRequest) {
@@ -24,10 +25,9 @@ export async function POST(request: NextRequest) {
 
   const bodyResult = await readJsonBody<Record<string, unknown>>(request)
   if ('response' in bodyResult) return bodyResult.response
-  const body = bodyResult.data
-  if (!body.name || !body.class_id || !body.source) {
-    return jsonError('name, class_id, and source are required', 400)
-  }
+  const parsed = subclassCreateSchema.safeParse(bodyResult.data)
+  if (!parsed.success) return jsonError(parsed.error.message, 400)
+  const body = parsed.data
 
   const { data, error } = await supabase
     .from('subclasses')
@@ -60,11 +60,10 @@ export async function PUT(request: NextRequest) {
 
   const bodyResult = await readJsonBody<Record<string, unknown>>(request)
   if ('response' in bodyResult) return bodyResult.response
-  const body = bodyResult.data
-  if (!body.id) return jsonError('id is required', 400)
+  const parsed = subclassUpdateSchema.safeParse(bodyResult.data)
+  if (!parsed.success) return jsonError(parsed.error.message, 400)
+  const { id, ...fields } = parsed.data
 
-  const id = body.id as string
-  const fields = Object.fromEntries(Object.entries(body).filter(([key]) => key !== 'id'))
   const { data, error } = await supabase
     .from('subclasses')
     .update(fields)

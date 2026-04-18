@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { requireAuth, requireAdmin, jsonError, readJsonBody } from '@/lib/api-helpers'
 import { getAllowedSources } from '@/lib/content-helpers'
+import { classCreateSchema, classUpdateSchema } from '@/lib/content/admin-schemas'
 import { writeAuditLog } from '@/lib/server/audit'
 import type { MulticlassPrereq, SkillChoices, SpellcastingProgression, SpellcastingType } from '@/lib/types/database'
 
@@ -29,10 +30,9 @@ export async function POST(request: NextRequest) {
 
   const bodyResult = await readJsonBody<Record<string, unknown>>(request)
   if ('response' in bodyResult) return bodyResult.response
-  const body = bodyResult.data
-  if (!body.name || !body.source || body.hit_die == null) {
-    return jsonError('name, hit_die, and source are required', 400)
-  }
+  const parsed = classCreateSchema.safeParse(bodyResult.data)
+  if (!parsed.success) return jsonError(parsed.error.message, 400)
+  const body = parsed.data
 
   const { data, error } = await supabase
     .from('classes')
@@ -76,11 +76,10 @@ export async function PUT(request: NextRequest) {
 
   const bodyResult = await readJsonBody<Record<string, unknown>>(request)
   if ('response' in bodyResult) return bodyResult.response
-  const body = bodyResult.data
-  if (!body.id) return jsonError('id is required', 400)
+  const parsed = classUpdateSchema.safeParse(bodyResult.data)
+  if (!parsed.success) return jsonError(parsed.error.message, 400)
+  const { id, ...fields } = parsed.data
 
-  const id = body.id as string
-  const fields = Object.fromEntries(Object.entries(body).filter(([key]) => key !== 'id'))
   const { data, error } = await supabase
     .from('classes')
     .update(fields)

@@ -20,8 +20,12 @@ export default async function CharacterPage({ params }: { params: { id: string }
     .single()
 
   const loadedState = await loadCharacterState(supabase, params.id)
-  if (!loadedState) notFound()
-  const { character } = loadedState
+  if (loadedState.status === 'not_found') notFound()
+  if (loadedState.status === 'error') {
+    throw new Error(loadedState.error.message)
+  }
+  const state = loadedState.state
+  const { character } = state
 
   // Players can only access their own characters
   if (!hasDmAccess(profile?.role) && character.user_id !== user.id) {
@@ -53,18 +57,18 @@ export default async function CharacterPage({ params }: { params: { id: string }
         </div>
 
         <CharacterSheet
-          character={loadedState.character}
+          character={state.character}
           campaignId={character.campaign_id}
-          initialSkillProficiencies={loadedState.initialSkillProficiencies}
-          initialAbilityBonusChoices={loadedState.initialAbilityBonusChoices}
-          initialAsiChoices={loadedState.initialAsiChoices}
-          initialLanguageChoices={loadedState.initialLanguageChoices}
-          initialToolChoices={loadedState.initialToolChoices}
-          initialSpellChoices={loadedState.initialSpellChoices}
-          initialSelectedSpells={loadedState.initialSelectedSpells}
-          initialFeatChoices={loadedState.initialFeatChoices}
-          initialFeatureOptionChoices={loadedState.initialFeatureOptionChoices}
-          initialLegalityResult={loadedState.legality}
+          initialSkillProficiencies={state.initialSkillProficiencies}
+          initialAbilityBonusChoices={state.initialAbilityBonusChoices}
+          initialAsiChoices={state.initialAsiChoices}
+          initialLanguageChoices={state.initialLanguageChoices}
+          initialToolChoices={state.initialToolChoices}
+          initialSpellChoices={state.initialSpellChoices}
+          initialSelectedSpells={state.initialSelectedSpells}
+          initialFeatChoices={state.initialFeatChoices}
+          initialFeatureOptionChoices={state.initialFeatureOptionChoices}
+          initialLegalityResult={state.legality}
           readOnly={false}
           isDm={isDm}
         />
