@@ -1,3 +1,19 @@
+ALTER TABLE public.species_bonus_spells
+  ADD COLUMN IF NOT EXISTS minimum_character_level int NOT NULL DEFAULT 1;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'species_bonus_spells_minimum_character_level_check'
+  ) THEN
+    ALTER TABLE public.species_bonus_spells
+      ADD CONSTRAINT species_bonus_spells_minimum_character_level_check
+      CHECK (minimum_character_level BETWEEN 1 AND 20);
+  END IF;
+END $$;
+
 WITH species_spells(species_name, spell_name, minimum_character_level) AS (
   VALUES
     ('Dark Elf (Drow)', 'Dancing Lights', 1),
