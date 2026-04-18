@@ -7,6 +7,8 @@ This document turns the repo analysis into an execution plan for making the app 
 This roadmap now has meaningful implementation behind it.
 
 - Batch 1 is effectively complete.
+- Batch 2 is effectively complete.
+- Batch 3 is now effectively complete and closed out by Slice `3l` on 2026-04-18.
 - The app now has a shared derivation pipeline flowing through:
   - raw persistence
   - normalized build context
@@ -57,7 +59,21 @@ Important remaining limitations after Batch 2:
 - the generic `character_feature_option_choices` table exists but Maverick is its only consumer, and no `feature_option_groups` / `feature_options` content tables exist yet
 - languages and tools are still free-text strings across species, background, and character rows
 
-The intended next step is Batch 3 content-model expansion, structured as the execution slices described in the Batch 3 section below.
+Batch 3 closeout status:
+
+- `feature_option_groups` / `feature_options` content tables exist and now drive more than Maverick
+- languages and tools have first-class content catalogs with tolerant migration paths
+- equipment catalogs, starting-equipment packages, character equipment rows, and admin CRUD landed
+- PHB species/subrace support, PHB class option families, PHB subclass spell restrictions, and starting-equipment resolution all landed during the late Batch 3 slices
+- local and remote Supabase migration history match through migration `060`
+
+Known remaining PHB amendment notes after Batch 3 are now explicit rather than hidden:
+
+- Drow sunlight-sensitivity penalties are still not automated
+- Battle Master, Hunter, Circle of the Land, and Four Elements still have combat-time or resource-tracking automation gaps
+- Arcane Trickster and Eldritch Knight still have subclass-feature automation gaps beyond spell legality
+
+The intended next step is now Batch 4 builder-workflow completion, using Batch 3's content model as the baseline.
 
 This plan is written for a single implementation agent working inside the repo, not for a human team. That changes the shape of the backlog:
 
@@ -365,6 +381,60 @@ Each slice should fit in one Codex session and land schema + types + loader/save
 - treat this as the Batch 3 closeout gate before Batch 4 begins
 - acceptance: Batch 3 ends with a concrete PHB completeness checklist and no major unresolved “content exists but behavior is missing” gaps that would surprise Batch 4
 
+**Slice 3m — Pre-Batch-4 structural blockers**
+
+A focused review between Batch 3 closeout and Batch 4 surfaced three issues that would either actively fight Batch 4's builder-workflow work or silently invalidate its promises. Each item was verified in the current repo (`main` at Batch 3 close). This slice is deliberately narrow: no content, no derivation rewrite, no wizard edits. It fixes the structural ground under Batch 4.
+
+Scope items:
+
+1. **Atomicity on the character PUT route.**
+   - `src/app/api/characters/[id]/route.ts` (PUT, ~lines 237–406) runs sequential `delete` + `insert` pairs against `character_levels`, `character_stat_rolls`, and nine typed choice tables, with no transactional wrapper.
+   - A mid-request failure (RLS error, network drop, constraint violation) leaves the character half-wiped: levels deleted but spells not re-inserted, equipment cleared but ability rows not rewritten, etc. The next load then fails inside derivation rather than cleanly surfacing the error.
+   - Batch 4's level-up rewrite will call this path repeatedly and add more tables to it, so fixing the pattern now is cheaper than retrofitting later.
+   - Fix: replace the cascade with a Postgres function / RPC that performs all replacements inside a single transaction, or move each table to an upsert + targeted delete pattern scoped by character + owning-level so a failure cannot strand the row in a partial state.
+
+2. **`character_levels` conflates class-totals with per-level history.**
+   - The schema stores one row per class with the current class level (`LevelUpWizard.tsx:488` increments `level` in place; `[id]/route.ts:254–264` replaces the whole set on save).
+   - `hp_roll` is therefore overwritten at every level-up, which `src/lib/characters/derived.ts:150` explicitly acknowledges (`The current schema stores at most one per-class HP roll`). HP history is unrecoverable after the first level-up in a class.
+   - `character_level_id` foreign keys on `character_asi_choices`, `character_feat_choices`, `character_spell_selections`, and provenance columns elsewhere therefore carry no "which level was this chosen at" information — only "which class". That undermines Batch 4's promise that level-up persists exactly what the new level added.
+   - Fix: introduce a per-level table (e.g. `character_class_levels` with `(character_id, class_id, level_number)` unique, carrying `hp_roll` and `taken_at`), backfill from existing rows, and migrate the provenance FKs before Batch 4's level-up rewrite begins. If full migration is too large for this slice, at minimum add a `character_hp_rolls(character_id, class_id, level_number, roll)` table so HP history stops being destroyed on level-up, and sequence the full `character_class_levels` cutover as the first task inside Milestone 9 (Level-Up Rewrite).
+
+3. **RLS on `characters` blocks owners from their own non-PC rows.**
+   - `supabase/migrations/016_scoped_dm_rls.sql:60–84` restricts the owner-side SELECT/INSERT/UPDATE/DELETE clauses to `user_id = auth.uid() AND character_type = 'pc'`.
+   - Test characters and NPC rows a player legitimately owns are invisible to them through the standard policies; only DMs can interact with those rows. Batch 4 scenarios that touch non-PC character types (fixture-based builder tests, player-authored companions, DM hand-off drafts) will silently 404.
+   - Fix: drop the `character_type = 'pc'` predicate from the owner-side clauses. Keep the role-based gating on who can set `character_type` at creation (already enforced in route code via `hasDmAccess`). Audit the nine child-table policies (all key off the parent), and add a regression test that a logged-in owner can read a non-PC character they created.
+
+Acceptance:
+
+- PUT character saves are atomic end-to-end, verified by a test that injects a mid-save failure and asserts no partial state remains.
+- HP roll history is preserved across level-ups for at least one representative multiclass build, via either a per-level `character_class_levels` table or a dedicated HP-rolls table; if a full cutover is deferred, the follow-up is captured as an explicit first task of Milestone 9.
+- Owners can read, update, and delete their own NPC / test characters through standard RLS.
+- A short follow-up note is added to the roadmap if any items had to be deferred into Batch 4 itself, so Batch 4 inherits them explicitly rather than implicitly.
+
+Follow-up note:
+
+- Slice `3m` may land the dedicated `character_hp_rolls` table as the minimum safe fix for preserved HP history.
+- If that narrower fix lands first, the full `character_class_levels` cutover remains the explicit first task inside Milestone 9 (Level-Up Rewrite), rather than an implicit debt.
+
+**Slice 3n — Pre-Batch-4 hygiene (validation and loader errors)**
+
+Two items from the same review that do not block Batch 4 outright but will compound with every new flow Batch 4 adds. Cheap to fix now, painful to retrofit.
+
+1. **Content admin PUT routes are pass-through over `body`.**
+   - Seven admin PUT routes (`classes`, `subclasses`, `backgrounds`, `feats`, `species`, `spells`, `equipment-items`) build their update object as `Object.fromEntries(Object.entries(body).filter(([k]) => k !== 'id'))` and send it directly to Supabase `.update()`. No zod schema, no column allowlist, no coercion beyond a couple of numeric fields.
+   - `requireAdmin` gates access, so this is not a public-facing vulnerability, but it lets UI typos or a stale form silently change FK-sensitive columns (`source`, `amended`, arrays, jsonb config fields) without validation. A bad admin save can silently break content referenced by existing characters, which Batch 4 will then inherit.
+   - Fix: per-entity zod schemas with an explicit column allowlist; reject unknown keys with a 400; reuse the schemas for POST where the entity overlaps.
+
+2. **`load-character.ts` swallows per-query errors in its `Promise.all`.**
+   - Lines 57–75 run thirteen parallel queries and then destructure only `.data`, defaulting to `null` / `[]`. A transient RLS denial, network failure, or schema drift on any one query produces a silent partial load; derivation then throws deep inside with an opaque "cannot read X of null".
+   - Batch 4 will add more parallel loaders off this seam; formalizing the failure mode now avoids multiplying opaque errors later.
+   - Fix: inspect `.error` on each result, aggregate into a typed `CharacterLoadError`, and either fail the load or attach warnings that the legality engine and UI can render instead of letting derivation crash.
+
+Acceptance:
+
+- Every content admin PUT rejects unknown keys with a 400 and validates known keys through a per-entity zod schema shared with POST where applicable.
+- `loadCharacterState` returns a typed result that distinguishes success, soft warnings (missing optional relations), and hard failures; no consumer sees a silent `null` where an error occurred.
+
 ### Risks
 
 - Designing `feature_option_groups` / `feature_options` too generically will push validation burden back into per-option code. Prerequisite and effect fields should be concrete enough to drive legality and sheet text for Maverick and fighting styles before being pushed further.
@@ -484,6 +554,7 @@ The current stat block is closer to a summary card than a correct character shee
   - legality warnings
   - unresolved issues
   - provenance for selected features and choices
+- Add a `source_entity_id` integrity view that surfaces character rows whose `(source_category, source_entity_id)` pair no longer resolves to a live content row (carried from the Slice 3m/3n review — item #8). Wire it into the DM audit panel so stale provenance is visible before it confuses review.
 
 ### Risks
 
@@ -522,6 +593,7 @@ The seed pipeline currently imports only a subset of content types, and the admi
   - orphaned option groups
   - spell list mismatches
   - duplicate option records
+  - unresolvable spell-name references in feature-grant tables (see below)
 - Expand admin UI to manage:
   - option groups
   - feature options
@@ -533,6 +605,7 @@ The seed pipeline currently imports only a subset of content types, and the admi
   - starting packages
 - Add preview and validation before publishing content changes.
 - Add bulk source import and amendment tools.
+- Migrate hardcoded spell-grant rules off spell-name lookups (carried from the Slice 3m/3n review — item #5). Replace the ~33 `spellName: '...'` entries in `src/lib/characters/feature-grants.ts` with a `feature_spell_grants` content table keyed on `spell_id`, backfill from current rules, and delete the hardcoded tables once parity is verified. If the full migration is deferred, at minimum ship a test-time assertion that every hardcoded `{ spellName, spellSource }` resolves to exactly one spell row, so admin renames fail loudly.
 
 ### Risks
 
@@ -586,6 +659,9 @@ A sophisticated builder that is hard to trust is not useful. The repo already ha
   - save state indicators
   - clear blocked-state explanations
 - Add `.env.example` and setup documentation.
+- Finish the languages/tools catalog cutover (carried from the Slice 3m/3n review — item #6). Switch the primary key on `character_language_choices` / `character_tool_choices` from `(character_id, language|tool)` free text to `(character_id, language_key|tool_key)`, backfill remaining NULL keys, drop the free-text columns, and update `load-character.ts` and the persistence helpers to read/write keys only.
+- Consolidate character-ownership checks behind a single helper (carried from the Slice 3m/3n review — item #9). Replace inlined `user_id !== profile.id` comparisons in `src/app/api/characters/[id]/route.ts`, `.../submit/route.ts`, and peer routes (`approve`, `request-changes`, `snapshots`) with `assertCharacterManageableByUser`, and add tests covering owner / DM / unrelated-user behavior on every mutating route.
+- Split load-bearing modules that have grown past safe edit size (carried from the Slice 3m/3n review — item #10): break `src/lib/characters/feature-grants.ts` (~880 lines) into per-source modules, carve species-trait expansion out of `src/lib/characters/build-context.ts` (~1000 lines) into a `species-traits/` directory, and consider segmenting `src/lib/legality/engine.ts` (~810 lines) and `src/components/character-sheet/CharacterSheet.tsx` by concern. No behavior changes — only structure.
 
 ### Exit Criteria
 

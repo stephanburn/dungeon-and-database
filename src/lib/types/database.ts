@@ -419,6 +419,15 @@ export type CharacterLevel = {
   taken_at: string
 }
 
+export type CharacterHpRoll = {
+  id: string
+  character_id: string
+  class_id: string
+  level_number: number
+  roll: number
+  created_at: string
+}
+
 export type CharacterStatRoll = {
   id: string
   character_id: string
@@ -598,6 +607,7 @@ export type Database = {
       feature_options: { Row: FeatureOption; Insert: Omit<FeatureOption, 'id' | 'amended' | 'amendment_note'> & { amended?: boolean; amendment_note?: string | null }; Update: Partial<Omit<FeatureOption, 'id'>>; Relationships: R }
       characters: { Row: Character; Insert: { user_id: string; campaign_id: string; name: string; character_type?: CharacterType; stat_method?: StatMethod; status?: CharacterStatus; species_id?: string | null; background_id?: string | null; alignment?: Alignment | null; experience_points?: number; base_str?: number; base_dex?: number; base_con?: number; base_int?: number; base_wis?: number; base_cha?: number; hp_max?: number; dm_notes?: string | null }; Update: Partial<Omit<Character, 'id' | 'created_at'>>; Relationships: R }
       character_levels: { Row: CharacterLevel; Insert: Omit<CharacterLevel, 'id' | 'taken_at'>; Update: Partial<Omit<CharacterLevel, 'id'>>; Relationships: R }
+      character_hp_rolls: { Row: CharacterHpRoll; Insert: Omit<CharacterHpRoll, 'id' | 'created_at'>; Update: Partial<Omit<CharacterHpRoll, 'id' | 'created_at'>>; Relationships: R }
       character_stat_rolls: { Row: CharacterStatRoll; Insert: Omit<CharacterStatRoll, 'id' | 'rolled_at'>; Update: Partial<Omit<CharacterStatRoll, 'id'>>; Relationships: R }
       character_snapshots: { Row: CharacterSnapshot; Insert: Omit<CharacterSnapshot, 'id' | 'created_at'>; Update: Partial<Omit<CharacterSnapshot, 'id'>>; Relationships: R }
       character_choices: { Row: CharacterChoice; Insert: Omit<CharacterChoice, 'id'>; Update: Partial<Omit<CharacterChoice, 'id'>>; Relationships: R }
@@ -618,6 +628,10 @@ export type Database = {
       is_dm: { Args: Record<string, never>; Returns: boolean }
       is_campaign_member: { Args: { p_campaign_id: string }; Returns: boolean }
       can_manage_campaign: { Args: { p_campaign_id: string }; Returns: boolean }
+      save_character_atomic: {
+        Args: { p_character_id: string; p_payload?: Record<string, unknown> }
+        Returns: Character
+      }
     }
     Enums: {
       user_role: UserRole

@@ -5,15 +5,10 @@ import { buildLegalityInput } from '@/lib/legality/build-input'
 import { runLegalityChecks } from '@/lib/legality/engine'
 import { loadCharacterState } from '@/lib/characters/load-character'
 import {
-  replaceCharacterAbilityBonusChoices,
-  replaceCharacterAsiChoices,
-  replaceCharacterFeatChoices,
-  replaceCharacterFeatureOptionChoices,
-  replaceCharacterEquipmentItems,
-  replaceCharacterLanguageChoices,
-  replaceCharacterSkillProficiencies,
-  replaceCharacterSpellSelections,
-  replaceCharacterToolChoices,
+  buildCharacterAtomicSavePayload,
+  saveCharacterAtomic,
+} from '@/lib/characters/atomic-save'
+import {
   type AbilityBonusChoiceInput,
   type AsiChoiceInput,
   type FeatChoiceInput,
@@ -233,139 +228,32 @@ export async function PUT(
     (characterFields as Record<string, unknown>).status = 'draft'
   }
 
-  // Update character fields
-  if (Object.keys(characterFields).length > 0) {
-    const { error } = await supabase
-      .from('characters')
-      .update(characterFields)
-      .eq('id', params.id)
+  let saveError: { message: string } | null = null
+  try {
+    const payload = await buildCharacterAtomicSavePayload(supabase, {
+      characterFields,
+      levels,
+      stat_rolls,
+      skill_proficiencies: skill_proficiencies as SkillProficiencyInput[] | undefined,
+      ability_bonus_choices: ability_bonus_choices as AbilityBonusChoiceInput[] | undefined,
+      asi_choices: asi_choices as AsiChoiceInput[] | undefined,
+      feature_option_choices: feature_option_choices as FeatureOptionChoiceInput[] | undefined,
+      equipment_items: equipment_items as EquipmentItemChoiceInput[] | undefined,
+      language_choices: language_choices as LanguageChoiceInput[] | undefined,
+      tool_choices: tool_choices as ToolChoiceInput[] | undefined,
+      spell_choices: spell_choices as SpellChoiceInput[] | undefined,
+      feat_choices: feat_choices as FeatChoiceInput[] | undefined,
+    })
 
-    if (error) return jsonError(error.message, 500)
-  }
-
-  // Replace levels if provided
-  if (levels !== undefined) {
-    const { error: deleteLevelsError } = await supabase
-      .from('character_levels')
-      .delete()
-      .eq('character_id', params.id)
-    if (deleteLevelsError) return jsonError(deleteLevelsError.message, 500)
-
-    if (levels.length > 0) {
-      const rows = levels.map((l) => ({
-        character_id: params.id,
-        class_id: l.class_id,
-        level: l.level,
-        subclass_id: l.subclass_id ?? null,
-        hp_roll: l.hp_roll ?? null,
-      }))
-      const { error } = await supabase.from('character_levels').insert(rows)
-      if (error) return jsonError(error.message, 500)
+    const result = await saveCharacterAtomic(supabase, params.id, payload)
+    saveError = result.error
+  } catch (error) {
+    saveError = {
+      message: error instanceof Error ? error.message : 'Failed to save character',
     }
   }
 
-  // Replace stat rolls if provided
-  if (stat_rolls !== undefined) {
-    const { error: deleteRollsError } = await supabase
-      .from('character_stat_rolls')
-      .delete()
-      .eq('character_id', params.id)
-    if (deleteRollsError) return jsonError(deleteRollsError.message, 500)
-
-    if (stat_rolls.length > 0) {
-      const rows = stat_rolls.map((r) => ({
-        character_id: params.id,
-        assigned_to: r.assigned_to,
-        roll_set: r.roll_set,
-      }))
-      const { error } = await supabase.from('character_stat_rolls').insert(rows)
-      if (error) return jsonError(error.message, 500)
-    }
-  }
-
-  // Replace skill proficiencies if provided
-  if (skill_proficiencies !== undefined) {
-    const error = await replaceCharacterSkillProficiencies(
-      supabase,
-      params.id,
-      skill_proficiencies as SkillProficiencyInput[]
-    )
-    if (error) return jsonError(error.message, 500)
-  }
-
-  if (ability_bonus_choices !== undefined) {
-    const error = await replaceCharacterAbilityBonusChoices(
-      supabase,
-      params.id,
-      ability_bonus_choices as AbilityBonusChoiceInput[]
-    )
-    if (error) return jsonError(error.message, 500)
-  }
-
-  if (asi_choices !== undefined) {
-    const error = await replaceCharacterAsiChoices(
-      supabase,
-      params.id,
-      asi_choices as AsiChoiceInput[]
-    )
-    if (error) return jsonError(error.message, 500)
-  }
-
-  if (feature_option_choices !== undefined) {
-    const error = await replaceCharacterFeatureOptionChoices(
-      supabase,
-      params.id,
-      feature_option_choices as FeatureOptionChoiceInput[]
-    )
-    if (error) return jsonError(error.message, 500)
-  }
-
-  if (equipment_items !== undefined) {
-    const error = await replaceCharacterEquipmentItems(
-      supabase,
-      params.id,
-      equipment_items as EquipmentItemChoiceInput[]
-    )
-    if (error) return jsonError(error.message, 500)
-  }
-
-  if (language_choices !== undefined) {
-    const error = await replaceCharacterLanguageChoices(
-      supabase,
-      params.id,
-      language_choices as LanguageChoiceInput[]
-    )
-    if (error) return jsonError(error.message, 500)
-  }
-
-  if (tool_choices !== undefined) {
-    const error = await replaceCharacterToolChoices(
-      supabase,
-      params.id,
-      tool_choices as ToolChoiceInput[]
-    )
-    if (error) return jsonError(error.message, 500)
-  }
-
-  // Replace spell choices if provided
-  if (spell_choices !== undefined) {
-    const error = await replaceCharacterSpellSelections(
-      supabase,
-      params.id,
-      spell_choices as SpellChoiceInput[]
-    )
-    if (error) return jsonError(error.message, 500)
-  }
-
-  // Replace feat choices if provided (empty strings = ASI taken, skip those)
-  if (feat_choices !== undefined) {
-    const error = await replaceCharacterFeatChoices(
-      supabase,
-      params.id,
-      feat_choices as FeatChoiceInput[]
-    )
-    if (error) return jsonError(error.message, 500)
-  }
+  if (saveError) return jsonError(saveError.message, 500)
 
   // Capture snapshot and run legality check
   await captureSnapshot(supabase, params.id)
