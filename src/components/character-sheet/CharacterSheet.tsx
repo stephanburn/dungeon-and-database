@@ -323,10 +323,16 @@ export function CharacterSheet({
 
   const firstClassId = levels[0]?.class_id
   const firstClassLevel = levels[0]?.level ?? 0
-  const firstClassSubclassIds = levels
-    .filter((level) => level.class_id === firstClassId && level.subclass_id)
-    .map((level) => level.subclass_id as string)
-  const maverickBreakthroughClassIds = getSelectedMaverickBreakthroughClassIds(featureOptionChoices)
+  const firstClassSubclassIds = useMemo(
+    () => levels
+      .filter((level) => level.class_id === firstClassId && level.subclass_id)
+      .map((level) => level.subclass_id as string),
+    [firstClassId, levels]
+  )
+  const maverickBreakthroughClassIds = useMemo(
+    () => getSelectedMaverickBreakthroughClassIds(featureOptionChoices),
+    [featureOptionChoices]
+  )
 
   useEffect(() => {
     const primaryClass = classList.find((cls) => cls.id === firstClassId) ?? null
@@ -352,7 +358,16 @@ export function CharacterSheet({
         const mergedById = new Map<string, SpellOption>()
         for (const spell of initialSelectedSpells) mergedById.set(spell.id, spell)
         for (const spell of Array.isArray(data) ? data : []) mergedById.set(spell.id, spell)
-        setSpellOptions(Array.from(mergedById.values()))
+        setSpellOptions((current) => {
+          const next = Array.from(mergedById.values())
+          if (
+            current.length === next.length
+            && current.every((spell, index) => spell.id === next[index]?.id)
+          ) {
+            return current
+          }
+          return next
+        })
       })
   }, [
     campaignId,
