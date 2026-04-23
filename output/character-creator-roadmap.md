@@ -9,6 +9,7 @@ This roadmap now has meaningful implementation behind it.
 - Batch 1 is effectively complete.
 - Batch 2 is effectively complete.
 - Batch 3 is now effectively complete and closed out by Slice `3l` on 2026-04-18.
+- Batch 4 is now effectively complete and closed out by Slice `4o` on 2026-04-23.
 - The app now has a shared derivation pipeline flowing through:
   - raw persistence
   - normalized build context
@@ -73,7 +74,7 @@ Known remaining PHB amendment notes after Batch 3 are now explicit rather than h
 - Battle Master, Hunter, Circle of the Land, and Four Elements still have combat-time or resource-tracking automation gaps
 - Arcane Trickster and Eldritch Knight still have subclass-feature automation gaps beyond spell legality
 
-The intended next step is now Batch 4 builder-workflow completion, using Batch 3's content model as the baseline.
+The intended next step is now Batch 5 sheet calculation and presentation, with Batch 4 closeout notes captured in `output/batch-4-closeout-audit.md`.
 
 This plan is written for a single implementation agent working inside the repo, not for a human team. That changes the shape of the backlog:
 
@@ -544,7 +545,6 @@ Each slice should fit in one Codex session and land schema (where needed) + type
 - persist through `character_feature_option_choices` and provenance-tagged skill/tool/language rows; no new typed per-feature tables
 - acceptance: every level-1 class-side option pick across PHB classes is selectable through guided steps, persists, round-trips, and is re-checked by legality
 
-#### Do this next:
 **Slice 4f — Creation: spell selection without first-class-only assumptions**
 
 - remove the first-class-only assumption from the creation spell picker and treat each class as its own caster source
@@ -581,6 +581,7 @@ Each slice should fit in one Codex session and land schema (where needed) + type
 - preserve the atomic-transaction guarantee from Slice 3m item #1 across the new narrower save path
 - acceptance: leveling a representative character writes only new rows, earlier-level rows are unchanged by the save, and an injected mid-save failure leaves no partial state
 
+
 **Slice 4k — Level-up: multiclass selection and subclass unlock**
 
 - add dedicated multiclass selection step that checks `classes.multiclass_prereqs` against the character's adjusted ability scores before accepting the class
@@ -588,6 +589,7 @@ Each slice should fit in one Codex session and land schema (where needed) + type
 - wire Batch 3 subclass spell-school restrictions (Eldritch Knight, Arcane Trickster) into legality on unlock so restricted spell selection kicks in immediately
 - acceptance: a player cannot level into a second class whose prereqs they fail, subclass unlock fires at the right per-class level, and restricted-caster subclasses narrow the spell picker at level-up time
 
+#### Do this next:
 **Slice 4l — Level-up: feature-option unlocks including replaceable options**
 
 - render feature-option unlocks (new maneuver, new invocation, new metamagic, new fighting style slot, etc.) through the Slice 4b primitives at the exact level they unlock
@@ -616,6 +618,7 @@ Each slice should fit in one Codex session and land schema (where needed) + type
 - run creation + level-up smokes across representative archetypes: single-class caster, multiclass caster/martial, feat-heavy (Variant Human or equivalent 2014 path if in scope), and species/background-heavy
 - audit what slipped past earlier slices: leftover first-class-only assumptions, placeholder wizard contexts, direct-to-`character_choices` writes, delete-and-replace save paths
 - capture any deferred work as explicit Batch 5 prep notes inside this roadmap rather than as implicit debt
+- closeout artifact: `output/batch-4-closeout-audit.md` records the archetype matrix, verification run, and explicit Batch 5 entry tasks
 - acceptance: Batch 4 ends with a concrete archetype matrix that passes creation + level-up through guided steps only, and any remaining gaps are documented as Batch 5 entry tasks
 
 ### Risks

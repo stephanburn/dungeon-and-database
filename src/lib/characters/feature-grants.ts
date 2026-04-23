@@ -237,7 +237,7 @@ export function buildTypedFeatureSpellChoices(args: {
 }
 
 export function getFeatureOptionChoiceValue(
-  rows: Array<Pick<CharacterFeatureOptionChoice, 'option_group_key' | 'option_key' | 'selected_value'>> | Array<{
+  rows: Array<{
     option_group_key?: string
     optionGroupKey?: string
     option_key?: string
@@ -249,7 +249,7 @@ export function getFeatureOptionChoiceValue(
   optionKey: string,
   valueKey: string
 ) {
-  const row = rows.find((entry) => {
+  const row = getActiveFeatureOptionChoices(rows).find((entry) => {
     const groupKey = 'option_group_key' in entry ? entry.option_group_key : entry.optionGroupKey
     const key = 'option_key' in entry ? entry.option_key : entry.optionKey
     return groupKey === optionGroupKey && key === optionKey
@@ -261,11 +261,29 @@ export function getFeatureOptionChoiceValue(
   return typeof value === 'string' && value.length > 0 ? value : null
 }
 
+export function getActiveFeatureOptionChoices<T extends {
+  option_group_key?: string
+  optionGroupKey?: string
+  option_key?: string
+  optionKey?: string
+}>(rows: T[]) {
+  const latestBySlot = new Map<string, T>()
+
+  for (const row of rows) {
+    const groupKey = 'option_group_key' in row ? row.option_group_key : row.optionGroupKey
+    const optionKey = 'option_key' in row ? row.option_key : row.optionKey
+    if (!groupKey || !optionKey) continue
+    latestBySlot.set(`${groupKey}:${optionKey}`, row)
+  }
+
+  return Array.from(latestBySlot.values())
+}
+
 export function buildFeatureOptionChoiceMap(
   rows: Array<Pick<CharacterFeatureOptionChoice, 'option_group_key' | 'option_key' | 'selected_value'>>
 ) {
   return Object.fromEntries(
-    rows.map((row) => [row.option_key, row.selected_value ?? {}])
+    getActiveFeatureOptionChoices(rows).map((row) => [row.option_key, row.selected_value ?? {}])
   )
 }
 
@@ -333,7 +351,7 @@ export function getMaverickArcaneBreakthroughOptionDefinitions(args: {
 export function getSelectedMaverickBreakthroughClassIds(
   rows: Array<Pick<CharacterFeatureOptionChoice, 'option_group_key' | 'option_key' | 'selected_value'>> | FeatureOptionChoiceInput[]
 ) {
-  const canonicalRows = rows
+  const canonicalRows = getActiveFeatureOptionChoices(rows)
     .filter((row) => row.option_group_key === MAVERICK_ARCANE_BREAKTHROUGH_GROUP_KEY)
     .map((row) => row.selected_value?.class_id)
     .filter((value): value is string => typeof value === 'string' && value.length > 0)

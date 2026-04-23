@@ -1,20 +1,19 @@
 'use client'
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+import { GuidedChooseOne } from '@/components/wizard/GuidedChoiceList'
 import type { FeatureOptionChoiceInput } from '@/lib/characters/choice-persistence'
-import type { FeatureOptionChoiceDefinition } from '@/lib/characters/feature-grants'
+import {
+  getFeatureOptionChoiceValue,
+  type FeatureOptionChoiceDefinition,
+} from '@/lib/characters/feature-grants'
+import type { CharacterFeatureOptionChoice } from '@/lib/types/database'
 
 interface FeatureOptionChoicesCardProps {
   title: string
   definitions: FeatureOptionChoiceDefinition[]
   choices: FeatureOptionChoiceInput[]
+  baselineChoices?: Array<Pick<CharacterFeatureOptionChoice, 'option_group_key' | 'option_key' | 'selected_value'>>
   canEdit: boolean
   onChange: (choices: FeatureOptionChoiceInput[]) => void
 }
@@ -23,24 +22,21 @@ export function FeatureOptionChoicesCard({
   title,
   definitions,
   choices,
+  baselineChoices = [],
   canEdit,
   onChange,
 }: FeatureOptionChoicesCardProps) {
   if (definitions.length === 0) return null
 
-  const selectedValuesByOptionKey = new Map(
-    definitions.map((definition) => {
-      const row = choices.find(
-        (choice) => choice.option_group_key === definition.optionGroupKey && choice.option_key === definition.optionKey
-      )
-      const valueKey = definition.valueKey ?? 'class_id'
-      const selectedValue = row?.selected_value?.[valueKey]
-      return [
-        definition.optionKey,
-        typeof selectedValue === 'string' ? selectedValue : '',
-      ] as const
-    })
-  )
+  const selectedValuesByOptionKey = new Map(definitions.map((definition) => [
+    definition.optionKey,
+    getFeatureOptionChoiceValue(
+      choices,
+      definition.optionGroupKey,
+      definition.optionKey,
+      definition.valueKey ?? 'class_id'
+    ) ?? '',
+  ] as const))
 
   function setChoice(definition: FeatureOptionChoiceDefinition, value: string) {
     const remaining = choices.filter(
@@ -77,6 +73,12 @@ export function FeatureOptionChoicesCard({
           const selectedValue = typeof selectedValuesByOptionKey.get(definition.optionKey) === 'string'
             ? selectedValuesByOptionKey.get(definition.optionKey) as string
             : ''
+          const baselineValue = getFeatureOptionChoiceValue(
+            baselineChoices,
+            definition.optionGroupKey,
+            definition.optionKey,
+            definition.valueKey ?? 'class_id'
+          ) ?? ''
           const otherSelectedValues = new Set(
             Array.from(selectedValuesByOptionKey.entries())
               .filter(([optionKey]) => optionKey !== definition.optionKey)
@@ -106,24 +108,29 @@ export function FeatureOptionChoicesCard({
               </div>
               {canEdit ? (
                 <div className="space-y-2">
-                  <Select
-                    value={selectedValue || 'none'}
-                    onValueChange={(value) => setChoice(definition, value)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Choose an option" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none" className="text-neutral-400">Choose later</SelectItem>
-                      {definition.choices
-                        .filter((choice) => choice.value === selectedValue || !otherSelectedValues.has(choice.value))
-                        .map((choice) => (
-                          <SelectItem key={choice.value} value={choice.value} className="text-neutral-200">
-                            {choice.label}
-                          </SelectItem>
-                        ))}
-                    </SelectContent>
-                  </Select>
+                  <GuidedChooseOne
+                    title={definition.label}
+                    description={definition.description}
+                    selectedId={selectedValue || null}
+                    onChange={(value) => setChoice(definition, value ?? '')}
+                    options={definition.choices.map((choice) => ({
+                      id: choice.value,
+                      label: choice.label,
+                      description: choice.description,
+                      disabledReason: (
+                        choice.value !== selectedValue
+                        && otherSelectedValues.has(choice.value)
+                      )
+                        ? 'Already selected in another slot.'
+                        : null,
+                      replacesLabel: (
+                        baselineValue
+                        && baselineValue !== choice.value
+                      )
+                        ? (definition.choices.find((entry) => entry.value === baselineValue)?.label ?? null)
+                        : null,
+                    }))}
+                  />
                   {selectedChoice?.description ? (
                     <p className="text-sm leading-6 text-neutral-300">{selectedChoice.description}</p>
                   ) : null}

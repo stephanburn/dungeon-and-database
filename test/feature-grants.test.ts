@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import type { Class, Campaign, FeatureOption, Species } from '@/lib/types/database'
 import { deriveLocalCharacter, buildLocalCharacterContext, type ClassDetail } from '@/lib/characters/wizard-helpers'
 import {
+  getFeatureOptionChoiceValue,
   getSpeciesFeatureOptionDefinitions,
   getSpeciesFeatureSpellChoiceDefinitions,
   getMaverickArcaneBreakthroughOptionDefinitions,
@@ -239,6 +240,28 @@ test('mergeFeatureOptionChoiceInputs preserves unrelated feature options while r
       selected_value: { feature_option_key: 'dueling' },
     },
   ])
+})
+
+test('getFeatureOptionChoiceValue prefers the latest row for a replaced slot', () => {
+  const selected = getFeatureOptionChoiceValue(
+    [
+      {
+        option_group_key: 'fighting_style:fighter:2014',
+        option_key: 'fighter:style',
+        selected_value: { feature_option_key: 'archery' },
+      },
+      {
+        option_group_key: 'fighting_style:fighter:2014',
+        option_key: 'fighter:style',
+        selected_value: { feature_option_key: 'defense' },
+      },
+    ],
+    'fighting_style:fighter:2014',
+    'fighter:style',
+    'feature_option_key'
+  )
+
+  assert.equal(selected, 'defense')
 })
 
 test('PHB High Elf and Dragonborn expose species-driven spell and option definitions', () => {

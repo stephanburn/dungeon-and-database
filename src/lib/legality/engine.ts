@@ -11,6 +11,7 @@ import {
   FEATURE_OPTION_VALUE_KEY,
   FIGHTING_STYLE_VALUE_KEY,
   FOUR_ELEMENTS_DISCIPLINE_GROUP_KEY,
+  getActiveFeatureOptionChoices,
   getFightingStyleGroupKey,
   getFightingStyleUnlockLevel,
   HUNTER_DEFENSIVE_TACTICS_GROUP_KEY,
@@ -703,7 +704,7 @@ function countSelectedFeatureOptions(
   optionGroupKey: string,
   expectedValueKey = FEATURE_OPTION_VALUE_KEY
 ) {
-  return input.selectedFeatureOptions.filter((choice) => {
+  return getActiveFeatureOptionChoices(input.selectedFeatureOptions).filter((choice) => {
     if (choice.option_group_key !== optionGroupKey) return false
     const selectedValue = choice.selected_value?.[expectedValueKey]
     return typeof selectedValue === 'string' && selectedValue.length > 0

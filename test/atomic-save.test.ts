@@ -234,6 +234,50 @@ test('buildCharacterLevelUpSavePayload normalizes only additive level-up rows', 
   })
 })
 
+test('buildCharacterLevelUpSavePayload preserves typed spell selection metadata for class-scoped gains', async () => {
+  const supabase = createSupabaseMock()
+
+  const payload = await buildCharacterLevelUpSavePayload(supabase.client as never, {
+    characterFields: { hp_max: 23, status: 'draft' },
+    level_up: {
+      class_id: 'cleric',
+      previous_level: 2,
+      new_level: 3,
+      subclass_id: null,
+      hp_roll: 5,
+    },
+    spell_choices: [{
+      spell_id: 'aid',
+      owning_class_id: 'cleric',
+      granting_subclass_id: null,
+      acquisition_mode: 'prepared',
+      counts_against_selection_limit: true,
+      source_feature_key: null,
+    }],
+  })
+
+  assert.deepEqual(payload, {
+    hp_max: 23,
+    status: 'draft',
+    level_up: {
+      class_id: 'cleric',
+      previous_level: 2,
+      new_level: 3,
+      subclass_id: null,
+      hp_roll: 5,
+    },
+    spell_choices: [{
+      spell_id: 'aid',
+      character_level_id: null,
+      owning_class_id: 'cleric',
+      granting_subclass_id: null,
+      acquisition_mode: 'prepared',
+      counts_against_selection_limit: true,
+      source_feature_key: null,
+    }],
+  })
+})
+
 test('saveCharacterLevelUpAtomic sends the additive payload through the level-up RPC', async () => {
   const supabase = createSupabaseMock()
   const payload = {

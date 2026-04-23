@@ -35,7 +35,6 @@ import type {
   Class,
   Feat,
   FeatureOption,
-  MulticlassPrereq,
   RuleSet,
   Species,
   StatMethod,
@@ -59,8 +58,8 @@ import { buildSpeciesAbilityBonusMap } from '@/lib/characters/species-ability-bo
 import { getFeatSpellChoiceDefinitions } from '@/lib/characters/feat-spell-options'
 import {
   buildFeatureOptionChoicesFromDefinitionMap,
+  getActiveFeatureOptionChoices,
   buildMaverickFeatureOptionChoices,
-  isInteractiveFeatureSpellSourceFeatureKey,
   getFeatureOptionChoiceValue,
   getFightingStyleFeatureOptionDefinition,
   getMaverickArcaneBreakthroughOptionDefinitions,
@@ -71,6 +70,15 @@ import {
 import type { FeatureOptionChoiceInput } from '@/lib/characters/choice-persistence'
 import { isMaverickSubclass } from '@/lib/characters/maverick'
 import { getFixedHpGainValue } from '@/lib/characters/derived'
+import {
+  buildLevelUpClassOptions,
+  getEditableLevelUpSpellChoiceIds,
+  getLevelUpFeatureOptionStepDefinitions,
+  getLevelUpResumeStepIndex,
+  getPreservedLevelUpSpellSelections,
+  isSubclassSelectionRequired,
+  summarizeLevelUpSpellChanges,
+} from '@/lib/characters/level-up-flow'
 
 type CharacterWithRelations = Character & {
   species: Species | null
@@ -79,7 +87,7 @@ type CharacterWithRelations = Character & {
   character_class_levels: CharacterClassLevel[]
 }
 
-type StepId = 'class' | 'subclass' | 'skills' | 'spells' | 'feat' | 'hp' | 'review'
+type StepId = 'class' | 'subclass' | 'features' | 'skills' | 'spells' | 'feat' | 'hp' | 'review'
 
 type LevelUpWizardProps = {
   character: CharacterWithRelations
@@ -101,6 +109,34 @@ type LevelUpWizardProps = {
 }
 
 type HpMode = 'fixed' | 'max' | 'manual'
+
+const LEVEL_UP_REVIEW_STEP_LABELS: Record<StepId, string> = {
+  class: 'Class',
+  subclass: 'Subclass',
+  features: 'Features',
+  skills: 'Skills',
+  spells: 'Spells',
+  feat: 'ASI / Feat',
+  hp: 'HP',
+  review: 'Review',
+}
+
+const LEVEL_UP_CHECK_STEP_MAP: Record<string, StepId> = {
+  source_allowlist: 'class',
+  rule_set_consistency: 'class',
+  level_cap: 'class',
+  multiclass_prerequisites: 'class',
+  subclass_timing: 'subclass',
+  fighting_style_selections: 'features',
+  subclass_feature_option_selections: 'features',
+  multiclass_skill_validation: 'skills',
+  skill_proficiencies: 'skills',
+  spell_legality: 'spells',
+  spell_selection_count: 'spells',
+  feat_prerequisites: 'feat',
+  feat_slots: 'feat',
+  asi_choices: 'feat',
+}
 
 function getAdjustedStats(
   character: CharacterWithRelations,
@@ -129,17 +165,6 @@ function getAdjustedStats(
   }
 }
 
-function findMissingMulticlassPrereqs(
-  adjustedStats: Record<'str' | 'dex' | 'con' | 'int' | 'wis' | 'cha', number>,
-  prereqs: MulticlassPrereq[]
-): string[] {
-  return prereqs.flatMap((prereq) => {
-    const ability = prereq.ability.toLowerCase() as keyof typeof adjustedStats
-    const score = adjustedStats[ability] ?? 0
-    return score >= prereq.min ? [] : [`${prereq.ability.toUpperCase()} ${prereq.min}`]
-  })
-}
-
 function setsDiffer(left: Set<string>, right: Set<string>): boolean {
   if (left.size !== right.size) return true
   for (const value of Array.from(left)) {
@@ -155,6 +180,10 @@ function getFeatureOptionChoiceKey(choice: Pick<FeatureOptionChoiceInput, 'optio
     choice.choice_order ?? 0,
     choice.source_feature_key ?? '',
   ].join('::')
+}
+
+function getFeatureOptionChoiceSignature(choice: Pick<FeatureOptionChoiceInput, 'option_group_key' | 'option_key' | 'selected_value' | 'choice_order' | 'source_feature_key'>) {
+  return `${getFeatureOptionChoiceKey(choice)}::${JSON.stringify(choice.selected_value ?? {})}`
 }
 
 function getSpellSelectionKey(choice: CharacterSpellSelection | Exclude<ReturnType<typeof buildCombinedSpellSelections>[number], string>) {
@@ -193,6 +222,7 @@ export function LevelUpWizard({
 }: LevelUpWizardProps) {
   const router = useRouter()
   const { toast } = useToast()
+  const levelUpDraftStorageKey = `level-up-draft:${character.id}`
 
   const baseLevels = useMemo<Array<WizardLevel & { hp_roll: number | null }>>(
     () => character.character_levels.map((level) => ({
@@ -238,9 +268,7 @@ export function LevelUpWizard({
     getSelectedMaverickBreakthroughClassIds(initialFeatureOptionChoices)
   )
   const [spellChoices, setSpellChoices] = useState<string[]>(
-    initialSpellSelections
-      .filter((selection) => !isInteractiveFeatureSpellSourceFeatureKey(selection.source_feature_key))
-      .map((selection) => selection.spell_id)
+    getEditableLevelUpSpellChoiceIds(initialSpellSelections, baseLevels[0]?.class_id ?? '')
   )
   const [featChoices] = useState<string[]>(initialFeatChoices)
   const [featSpellChoices, setFeatSpellChoices] = useState<Record<string, string>>(initialFeatSpellChoices)
@@ -251,17 +279,24 @@ export function LevelUpWizard({
   const [stepIndex, setStepIndex] = useState(0)
   const [working, setWorking] = useState(false)
   const [savedLegality, setSavedLegality] = useState<LegalityResult | null>(null)
+  const [draftHydrated, setDraftHydrated] = useState(false)
+  const [draftRestored, setDraftRestored] = useState(false)
+  const [showDraftRestoredNotice, setShowDraftRestoredNotice] = useState(false)
+  const activeInitialFeatureOptionChoices = useMemo(
+    () => getActiveFeatureOptionChoices(initialFeatureOptionChoices),
+    [initialFeatureOptionChoices]
+  )
   const initialFightingStyleKeys = useMemo(
     () => new Set(
-      initialFeatureOptionChoices
+      activeInitialFeatureOptionChoices
         .filter((choice) => choice.option_group_key.startsWith('fighting_style:'))
         .map((choice) => `${choice.option_group_key}:${choice.option_key}`)
     ),
-    [initialFeatureOptionChoices]
+    [activeInitialFeatureOptionChoices]
   )
   const initialSubclassFeatureOptionKeys = useMemo(
     () => new Set(
-      initialFeatureOptionChoices
+      activeInitialFeatureOptionChoices
         .filter((choice) => (
           choice.option_group_key === 'maneuver:battle_master:2014'
           || choice.option_group_key.startsWith('hunter:')
@@ -270,12 +305,13 @@ export function LevelUpWizard({
         ))
         .map((choice) => `${choice.option_group_key}:${choice.option_key}`)
     ),
-    [initialFeatureOptionChoices]
+    [activeInitialFeatureOptionChoices]
   )
-  const initialFeatureOptionChoiceKeys = useMemo(
-    () => new Set(initialFeatureOptionChoices.map((choice) => getFeatureOptionChoiceKey({
+  const allInitialFeatureOptionChoiceSignatures = useMemo(
+    () => new Set(initialFeatureOptionChoices.map((choice) => getFeatureOptionChoiceSignature({
       option_group_key: choice.option_group_key,
       option_key: choice.option_key,
+      selected_value: choice.selected_value,
       choice_order: choice.choice_order,
       source_feature_key: choice.source_feature_key,
     }))),
@@ -290,6 +326,110 @@ export function LevelUpWizard({
     () => Array.from(new Set(baseLevels.map((level) => level.class_id))),
     [baseLevels]
   )
+
+  useEffect(() => {
+    const draftJson = window.localStorage.getItem(levelUpDraftStorageKey)
+    if (!draftJson) {
+      setDraftHydrated(true)
+      return
+    }
+
+    try {
+      const draft = JSON.parse(draftJson) as {
+        selectedClassId?: string
+        selectedSubclassId?: string | null
+        skillProficiencies?: string[]
+        asiChoices?: AsiSelection[]
+        featureOptionChoices?: FeatureOptionChoiceInput[]
+        maverickBreakthroughClassIds?: string[]
+        spellChoices?: string[]
+        featSpellChoices?: Record<string, string>
+        newFeatChoice?: string
+        hpMode?: HpMode
+        manualHpRoll?: number
+        stepIndex?: number
+      }
+
+      if (typeof draft.selectedClassId === 'string' && draft.selectedClassId.length > 0) {
+        setSelectedClassId(draft.selectedClassId)
+      }
+      if (draft.selectedSubclassId !== undefined) {
+        setSelectedSubclassId(draft.selectedSubclassId)
+      }
+      if (Array.isArray(draft.skillProficiencies)) {
+        setSkillProficiencies(draft.skillProficiencies)
+      }
+      if (Array.isArray(draft.asiChoices)) {
+        setAsiChoices(draft.asiChoices)
+      }
+      if (Array.isArray(draft.featureOptionChoices)) {
+        setFeatureOptionChoices(draft.featureOptionChoices)
+      }
+      if (Array.isArray(draft.maverickBreakthroughClassIds)) {
+        setMaverickBreakthroughClassIds(draft.maverickBreakthroughClassIds)
+      }
+      if (Array.isArray(draft.spellChoices)) {
+        setSpellChoices(draft.spellChoices)
+      }
+      if (draft.featSpellChoices && typeof draft.featSpellChoices === 'object') {
+        setFeatSpellChoices(draft.featSpellChoices)
+      }
+      if (typeof draft.newFeatChoice === 'string') {
+        setNewFeatChoice(draft.newFeatChoice)
+      }
+      if (draft.hpMode === 'fixed' || draft.hpMode === 'max' || draft.hpMode === 'manual') {
+        setHpMode(draft.hpMode)
+      }
+      if (typeof draft.manualHpRoll === 'number' && Number.isFinite(draft.manualHpRoll)) {
+        setManualHpRoll(draft.manualHpRoll)
+      }
+      if (typeof draft.stepIndex === 'number' && Number.isFinite(draft.stepIndex)) {
+        setStepIndex(Math.max(0, draft.stepIndex))
+      }
+
+      setDraftRestored(true)
+      setShowDraftRestoredNotice(true)
+    } catch {
+      window.localStorage.removeItem(levelUpDraftStorageKey)
+    } finally {
+      setDraftHydrated(true)
+    }
+  }, [levelUpDraftStorageKey])
+
+  useEffect(() => {
+    if (!draftHydrated || working) return
+
+    window.localStorage.setItem(levelUpDraftStorageKey, JSON.stringify({
+      selectedClassId,
+      selectedSubclassId,
+      skillProficiencies,
+      asiChoices,
+      featureOptionChoices,
+      maverickBreakthroughClassIds,
+      spellChoices,
+      featSpellChoices,
+      newFeatChoice,
+      hpMode,
+      manualHpRoll,
+      stepIndex,
+    }))
+  }, [
+    asiChoices,
+    draftHydrated,
+    featSpellChoices,
+    featureOptionChoices,
+    hpMode,
+    levelUpDraftStorageKey,
+    manualHpRoll,
+    maverickBreakthroughClassIds,
+    newFeatChoice,
+    selectedClassId,
+    selectedSubclassId,
+    skillProficiencies,
+    spellChoices,
+    stepIndex,
+    working,
+  ])
 
   useEffect(() => {
     const qs = `?campaign_id=${campaign.id}`
@@ -379,8 +519,24 @@ export function LevelUpWizard({
 
   useEffect(() => {
     const existingSubclassId = baseLevels.find((level) => level.class_id === selectedClassId)?.subclass_id ?? null
+    if (!draftHydrated || draftRestored) return
     setSelectedSubclassId(existingSubclassId)
-  }, [baseLevels, selectedClassId])
+  }, [baseLevels, draftHydrated, draftRestored, selectedClassId])
+
+  useEffect(() => {
+    if (!selectedClassId) {
+      setSpellChoices([])
+      return
+    }
+
+    if (!draftHydrated || draftRestored) return
+    setSpellChoices(getEditableLevelUpSpellChoiceIds(initialSpellSelections, selectedClassId))
+  }, [draftHydrated, draftRestored, initialSpellSelections, selectedClassId])
+
+  useEffect(() => {
+    if (!draftRestored) return
+    setDraftRestored(false)
+  }, [draftRestored])
 
   const mergedSpellOptions = useMemo<SpellOption[]>(() => {
     const byId = new Map<string, SpellOption>()
@@ -398,6 +554,10 @@ export function LevelUpWizard({
   const selectedSubclass = selectedClassId
     ? (subclassMap[selectedClassId] ?? []).find((entry) => entry.id === selectedSubclassId) ?? null
     : null
+  const currentSubclassId = baseLevels.find((level) => level.class_id === selectedClassId)?.subclass_id ?? null
+  const currentSubclass = selectedClassId
+    ? (subclassMap[selectedClassId] ?? []).find((entry) => entry.id === currentSubclassId) ?? null
+    : null
   const fightingStyleDefinitions = useMemo(
     () => getFightingStyleFeatureOptionDefinition({
       classId: selectedClassId || null,
@@ -409,6 +569,18 @@ export function LevelUpWizard({
       optionKey: `${selectedClassId}:style`,
     })),
     [featureOptionRows, nextTargetLevel, selectedClassDetail?.name, selectedClassId]
+  )
+  const currentFightingStyleDefinitions = useMemo(
+    () => getFightingStyleFeatureOptionDefinition({
+      classId: selectedClassId || null,
+      className: selectedClassDetail?.name ?? null,
+      classLevel: currentTargetLevel,
+      optionRows: featureOptionRows,
+    }).map((definition) => ({
+      ...definition,
+      optionKey: `${selectedClassId}:style`,
+    })),
+    [currentTargetLevel, featureOptionRows, selectedClassDetail?.name, selectedClassId]
   )
   const maverickOptionDefinitions = useMemo(
     () => getMaverickArcaneBreakthroughOptionDefinitions({
@@ -429,6 +601,30 @@ export function LevelUpWizard({
       optionRows: featureOptionRows,
     }),
     [featureOptionRows, nextTargetLevel, selectedClassId, selectedSubclass?.name, selectedSubclass?.source, selectedSubclassId]
+  )
+  const currentSubclassFeatureOptionDefinitions = useMemo(
+    () => getSubclassFeatureOptionDefinitions({
+      classId: selectedClassId || null,
+      classLevel: currentTargetLevel,
+      subclassId: currentSubclass?.id ?? null,
+      subclassName: currentSubclass?.name ?? null,
+      subclassSource: currentSubclass?.source ?? null,
+      optionRows: featureOptionRows,
+    }),
+    [currentSubclass?.id, currentSubclass?.name, currentSubclass?.source, currentTargetLevel, featureOptionRows, selectedClassId]
+  )
+  const levelUpFeatureOptionDefinitions = useMemo(
+    () => [
+      ...getLevelUpFeatureOptionStepDefinitions({
+        currentDefinitions: currentFightingStyleDefinitions,
+        nextDefinitions: fightingStyleDefinitions,
+      }),
+      ...getLevelUpFeatureOptionStepDefinitions({
+        currentDefinitions: currentSubclassFeatureOptionDefinitions,
+        nextDefinitions: subclassFeatureOptionDefinitions,
+      }),
+    ],
+    [currentFightingStyleDefinitions, currentSubclassFeatureOptionDefinitions, fightingStyleDefinitions, subclassFeatureOptionDefinitions]
   )
 
   useEffect(() => {
@@ -574,22 +770,12 @@ export function LevelUpWizard({
     languageChoices: initialLanguageChoices,
     toolChoices: initialToolChoices,
     featureOptionRows,
-    featureOptionChoices: initialFeatureOptionChoices,
+    featureOptionChoices: activeInitialFeatureOptionChoices,
   })
 
-  const preservedFeatureSpellSelections = useMemo(
-    () => initialSpellSelections
-      .filter((selection) => selection.source_feature_key?.startsWith('feature_spell:'))
-      .map((selection) => ({
-        spell_id: selection.spell_id,
-        character_level_id: selection.character_level_id,
-        owning_class_id: selection.owning_class_id,
-        granting_subclass_id: selection.granting_subclass_id,
-        acquisition_mode: selection.acquisition_mode,
-        counts_against_selection_limit: selection.counts_against_selection_limit,
-        source_feature_key: selection.source_feature_key,
-      })),
-    [initialSpellSelections]
+  const preservedNonEditableSpellSelections = useMemo(
+    () => getPreservedLevelUpSpellSelections(initialSpellSelections, selectedClassId),
+    [initialSpellSelections, selectedClassId]
   )
 
   const nextFeatChoices = useMemo(() => {
@@ -718,7 +904,7 @@ export function LevelUpWizard({
     derived: null,
     featSpellChoices,
     featList: nextActiveFeatSpellFeats,
-  }).concat(preservedFeatureSpellSelections)
+  }).concat(preservedNonEditableSpellSelections)
 
   const nextContext = buildLocalCharacterContext({
     campaign,
@@ -777,18 +963,43 @@ export function LevelUpWizard({
     derived: nextDerived,
     featSpellChoices,
     featList: nextActiveFeatSpellFeats,
-  }).concat(preservedFeatureSpellSelections)
+  }).concat(preservedNonEditableSpellSelections)
   const localLegality = nextContext ? runLegalityChecks(nextContext) : null
   const canonicalIssues = (savedLegality ?? localLegality)?.derived
-  const canonicalBlockingIssues = canonicalIssues?.blockingIssues ?? []
-  const canonicalWarnings = canonicalIssues?.warnings ?? []
+  const canonicalBlockingIssues = useMemo(
+    () => canonicalIssues?.blockingIssues ?? [],
+    [canonicalIssues]
+  )
+  const canonicalWarnings = useMemo(
+    () => canonicalIssues?.warnings ?? [],
+    [canonicalIssues]
+  )
+  const groupedReviewIssues = useMemo(() => {
+    const groups = new Map<StepId, Array<{ key: string; message: string; severity: 'error' | 'warning' }>>()
+
+    for (const issue of [...canonicalBlockingIssues, ...canonicalWarnings]) {
+      const stepId = LEVEL_UP_CHECK_STEP_MAP[issue.key] ?? 'review'
+      const existing = groups.get(stepId) ?? []
+      existing.push(issue)
+      groups.set(stepId, existing)
+    }
+
+    return Array.from(groups.entries()).map(([stepId, issues]) => ({
+      stepId,
+      stepLabel: LEVEL_UP_REVIEW_STEP_LABELS[stepId],
+      issues,
+    }))
+  }, [canonicalBlockingIssues, canonicalWarnings])
 
   const targetLevelRow = targetLevels.find((level) => level.class_id === selectedClassId) ?? null
   const subclassRequired = Boolean(
     selectedClassDetail &&
     targetLevelRow &&
-    targetLevelRow.level >= selectedClassDetail.subclass_choice_level &&
-    !targetLevelRow.subclass_id
+    isSubclassSelectionRequired({
+      nextClassLevel: targetLevelRow.level,
+      subclassChoiceLevel: selectedClassDetail.subclass_choice_level,
+      selectedSubclassId: targetLevelRow.subclass_id ?? null,
+    })
   )
 
   const featSlots = nextDerived?.featSlots ?? []
@@ -832,8 +1043,8 @@ export function LevelUpWizard({
     [currentFeatSlotCount, nextTypedAsiChoices]
   )
   const newLevelFeatureOptionChoices = useMemo(
-    () => canonicalFeatureOptionChoices.filter((choice) => !initialFeatureOptionChoiceKeys.has(getFeatureOptionChoiceKey(choice))),
-    [canonicalFeatureOptionChoices, initialFeatureOptionChoiceKeys]
+    () => canonicalFeatureOptionChoices.filter((choice) => !allInitialFeatureOptionChoiceSignatures.has(getFeatureOptionChoiceSignature(choice))),
+    [allInitialFeatureOptionChoiceSignatures, canonicalFeatureOptionChoices]
   )
   const newLevelSpellSelections = useMemo(
     () => persistedNextSpellSelections
@@ -847,23 +1058,81 @@ export function LevelUpWizard({
       .filter((choice) => !initialFeatChoiceKeys.has(getFeatChoiceKey(choice))),
     [initialFeatChoiceKeys, nextDerived?.featSlots, nextFeatChoices]
   )
+  const spellNameById = useMemo(() => new Map(
+    [...initialSelectedSpells, ...mergedSpellOptions].map((spell) => [spell.id, spell.name])
+  ), [initialSelectedSpells, mergedSpellOptions])
+  const targetClassSpellDelta = useMemo(() => {
+    const beforeIds = initialSpellSelections
+      .filter((selection) => selection.owning_class_id === selectedClassId && !selection.source_feature_key?.startsWith('feat_spell:') && !selection.source_feature_key?.startsWith('feature_spell:'))
+      .map((selection) => selection.spell_id)
+    const afterIds = persistedNextSpellSelections
+      .filter((selection): selection is Exclude<typeof selection, string> => typeof selection !== 'string')
+      .filter((selection) => selection.owning_class_id === selectedClassId && !selection.source_feature_key?.startsWith('feat_spell:') && !selection.source_feature_key?.startsWith('feature_spell:'))
+      .map((selection) => selection.spell_id)
+
+    return summarizeLevelUpSpellChanges({
+      beforeSpellIds: beforeIds,
+      afterSpellIds: afterIds,
+      spellNameById,
+    })
+  }, [initialSpellSelections, persistedNextSpellSelections, selectedClassId, spellNameById])
+  const newFeatureOptionSummaries = useMemo(() => newLevelFeatureOptionChoices.map((choice) => {
+    const definition = levelUpFeatureOptionDefinitions.find((entry) => (
+      entry.optionGroupKey === choice.option_group_key
+      && entry.optionKey === choice.option_key
+    ))
+    const valueKey = definition?.valueKey ?? 'feature_option_key'
+    const selectedValue = typeof choice.selected_value?.[valueKey] === 'string'
+      ? choice.selected_value?.[valueKey] as string
+      : ''
+    const selectedLabel = definition?.choices.find((entry) => entry.value === selectedValue)?.label ?? selectedValue
+    const previousValue = getFeatureOptionChoiceValue(
+      activeInitialFeatureOptionChoices,
+      choice.option_group_key,
+      choice.option_key,
+      valueKey
+    )
+    const previousLabel = previousValue
+      ? (definition?.choices.find((entry) => entry.value === previousValue)?.label ?? previousValue)
+      : null
+
+    return {
+      label: definition?.label ?? choice.option_key,
+      selectedLabel,
+      previousLabel,
+    }
+  }), [activeInitialFeatureOptionChoices, levelUpFeatureOptionDefinitions, newLevelFeatureOptionChoices])
+  const newFeatNames = useMemo(() => newLevelFeatChoices.map((choice) => (
+    featList.find((feat) => feat.id === choice.feat_id)?.name ?? choice.feat_id
+  )), [featList, newLevelFeatChoices])
+  const newAsiSummary = useMemo(() => {
+    if (newLevelAsiChoices.length === 0) return null
+
+    const totals = new Map<string, number>()
+    for (const choice of newLevelAsiChoices) {
+      const current = totals.get(choice.ability) ?? 0
+      totals.set(choice.ability, current + (choice.bonus ?? 1))
+    }
+
+    return Array.from(totals.entries()).map(([ability, bonus]) => `+${bonus} ${ability.toUpperCase()}`).join(', ')
+  }, [newLevelAsiChoices])
 
   const multiclassSkillConfig = enteringNewClass ? getMulticlassSkillChoiceConfig(selectedClassDetail) : null
   const knownSkills = useMemo(() => new Set(initialSkillProficiencies), [initialSkillProficiencies])
   const multiclassSkillOptions = (multiclassSkillConfig?.from ?? []).filter((skill) => !knownSkills.has(skill))
   const selectedNewSkillCount = skillProficiencies.filter((skill) => !initialSkillProficiencies.includes(skill)).length
+  const needsFeatureOptionStep = levelUpFeatureOptionDefinitions.length > 0
   const needsSkillStep = Boolean(multiclassSkillConfig && multiclassSkillOptions.length > 0)
-  const invalidMulticlassReasons = useMemo(() => {
-    const next = new Map<string, string>()
-    for (const cls of classList) {
-      if (currentClassIds.includes(cls.id)) continue
-      const missing = findMissingMulticlassPrereqs(adjustedStats, cls.multiclass_prereqs)
-      if (missing.length > 0) {
-        next.set(cls.id, `Requires ${missing.join(', ')}`)
-      }
-    }
-    return next
-  }, [adjustedStats, classList, currentClassIds])
+  const multiclassSkillChoicesComplete = !multiclassSkillConfig
+    || selectedNewSkillCount === multiclassSkillConfig.count
+  const classOptions = useMemo(
+    () => buildLevelUpClassOptions({
+      classList,
+      baseLevels,
+      adjustedStats,
+    }),
+    [adjustedStats, baseLevels, classList]
+  )
 
   const currentGrantedSpells = new Set(currentContext?.grantedSpellIds ?? [])
   const nextGrantedSpells = new Set(nextContext?.grantedSpellIds ?? [])
@@ -879,6 +1148,57 @@ export function LevelUpWizard({
       setsDiffer(nextGrantedSpells, currentGrantedSpells)
     )
   )
+  const classStepComplete = Boolean(
+    selectedClassId
+    && selectedClassDetail
+    && (!enteringNewClass || localLegality?.checks.find((check) => check.key === 'multiclass_prerequisites')?.passed !== false)
+  )
+  const subclassStepComplete = !subclassRequired || (
+    Boolean(selectedSubclassId)
+    && (
+      !selectedSubclass
+      || !isMaverickSubclass(selectedSubclass)
+      || maverickBreakthroughClassIds.filter(Boolean).length >= maverickOptionDefinitions.length
+    )
+  )
+  const featuresStepComplete = !needsFeatureOptionStep || levelUpFeatureOptionDefinitions.every((definition) => {
+    const selectedValue = getFeatureOptionChoiceValue(
+      featureOptionChoices,
+      definition.optionGroupKey,
+      definition.optionKey,
+      definition.valueKey ?? 'class_id'
+    )
+    return Boolean(selectedValue)
+  })
+  const spellsStepComplete = !spellUnlockChanged || canonicalBlockingIssues.every((issue) => (
+    issue.key !== 'spell_legality'
+    && issue.key !== 'spell_selection_count'
+  ))
+  const featStepComplete = !needsFeatStep || (
+    Boolean(newFeatChoice)
+    && (newFeatChoice !== 'asi' || newLevelAsiChoices.length === 2)
+    && !(newFeatSlot?.choiceKind === 'feat_only' && newFeatChoice === 'asi')
+  )
+  const hpStepComplete = hpMode !== 'manual' || (manualHpRoll >= 1 && manualHpRoll <= hitDie)
+  const stepCompletion = useMemo<Partial<Record<StepId, boolean>>>(() => ({
+    class: classStepComplete,
+    subclass: subclassStepComplete,
+    features: featuresStepComplete,
+    skills: !needsSkillStep || multiclassSkillChoicesComplete,
+    spells: spellsStepComplete,
+    feat: featStepComplete,
+    hp: hpStepComplete,
+    review: false,
+  }), [
+    classStepComplete,
+    subclassStepComplete,
+    featuresStepComplete,
+    needsSkillStep,
+    multiclassSkillChoicesComplete,
+    spellsStepComplete,
+    featStepComplete,
+    hpStepComplete,
+  ])
 
   const steps = useMemo<Array<{ id: StepId; label: string }>>(() => {
     const nextSteps: Array<{ id: StepId; label: string }> = [
@@ -886,6 +1206,7 @@ export function LevelUpWizard({
     ]
 
     if (subclassRequired) nextSteps.push({ id: 'subclass', label: 'Subclass' })
+    if (needsFeatureOptionStep) nextSteps.push({ id: 'features', label: 'Features' })
     if (needsSkillStep) nextSteps.push({ id: 'skills', label: 'Skills' })
     if (spellUnlockChanged) nextSteps.push({ id: 'spells', label: 'Spells' })
     if (needsFeatStep) nextSteps.push({ id: 'feat', label: 'ASI / Feat' })
@@ -893,13 +1214,25 @@ export function LevelUpWizard({
     nextSteps.push({ id: 'review', label: 'Review' })
 
     return nextSteps
-  }, [needsFeatStep, needsSkillStep, spellUnlockChanged, subclassRequired])
+  }, [needsFeatStep, needsFeatureOptionStep, needsSkillStep, spellUnlockChanged, subclassRequired])
+  const restoredStepIndex = useMemo(
+    () => getLevelUpResumeStepIndex(
+      steps.map((step) => step.id),
+      stepCompletion
+    ),
+    [stepCompletion, steps]
+  )
 
   useEffect(() => {
     if (stepIndex > steps.length - 1) {
       setStepIndex(Math.max(0, steps.length - 1))
     }
   }, [stepIndex, steps.length])
+
+  useEffect(() => {
+    if (!draftHydrated || !draftRestored) return
+    setStepIndex(restoredStepIndex)
+  }, [draftHydrated, draftRestored, restoredStepIndex])
 
   const currentStep = steps[stepIndex]
 
@@ -914,15 +1247,6 @@ export function LevelUpWizard({
         if (enteringNewClass && multiclassCheck && !multiclassCheck.passed) {
           return multiclassCheck.message
         }
-        for (const definition of fightingStyleDefinitions) {
-          const selectedValue = getFeatureOptionChoiceValue(
-            featureOptionChoices,
-            definition.optionGroupKey,
-            definition.optionKey,
-            definition.valueKey ?? 'class_id'
-          )
-          if (!selectedValue) return 'Choose the fighting style unlocked by this level.'
-        }
         return null
       }
       case 'subclass':
@@ -934,8 +1258,22 @@ export function LevelUpWizard({
           }
         }
         return null
+      case 'features':
+        for (const definition of levelUpFeatureOptionDefinitions) {
+          const selectedValue = getFeatureOptionChoiceValue(
+            featureOptionChoices,
+            definition.optionGroupKey,
+            definition.optionKey,
+            definition.valueKey ?? 'class_id'
+          )
+          if (!selectedValue) return 'Finish the feature choices unlocked by this level.'
+        }
+        return null
       case 'skills':
         if (!multiclassSkillConfig) return null
+        if (selectedNewSkillCount < multiclassSkillConfig.count) {
+          return `Choose ${multiclassSkillConfig.count} new skill${multiclassSkillConfig.count === 1 ? '' : 's'} before continuing.`
+        }
         if (selectedNewSkillCount > multiclassSkillConfig.count) {
           return `Choose no more than ${multiclassSkillConfig.count} new skill${multiclassSkillConfig.count === 1 ? '' : 's'}.`
         }
@@ -980,6 +1318,13 @@ export function LevelUpWizard({
     setStepIndex((value) => Math.min(steps.length - 1, value + 1))
   }
 
+  function goToStep(stepId: StepId) {
+    const nextIndex = steps.findIndex((step) => step.id === stepId)
+    if (nextIndex >= 0) {
+      setStepIndex(nextIndex)
+    }
+  }
+
   async function finishLevelUp() {
     const error = validateCurrentStep()
     if (error) {
@@ -1016,6 +1361,7 @@ export function LevelUpWizard({
       }
 
       setSavedLegality(json.legality ?? null)
+      window.localStorage.removeItem(levelUpDraftStorageKey)
       router.push(`/characters/${character.id}`)
       router.refresh()
     } catch (error) {
@@ -1068,6 +1414,17 @@ export function LevelUpWizard({
             </p>
           </div>
 
+          {showDraftRestoredNotice && (
+            <Alert className="border-blue-400/20 bg-blue-400/10">
+              <AlertDescription className="flex items-center justify-between gap-3 text-blue-50">
+                <span>Restored your in-progress level-up draft for this character. Review each step before saving.</span>
+                <Button type="button" variant="ghost" size="sm" onClick={() => setShowDraftRestoredNotice(false)}>
+                  Dismiss
+                </Button>
+              </AlertDescription>
+            </Alert>
+          )}
+
           <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-7">
             {steps.map((step, index) => (
               <div
@@ -1105,21 +1462,15 @@ export function LevelUpWizard({
                     <SelectValue placeholder="Choose class" />
                   </SelectTrigger>
                   <SelectContent>
-                    {classList.map((cls) => {
-                      const existingLevel = baseLevels.find((level) => level.class_id === cls.id)?.level ?? 0
-                      const disabled = existingLevel === 0 && invalidMulticlassReasons.has(cls.id)
-                      const invalidReason = invalidMulticlassReasons.get(cls.id)
-                      const label = existingLevel > 0
-                        ? `${cls.name} (${existingLevel} → ${existingLevel + 1})`
-                        : `${cls.name} (new multiclass${invalidReason ? `, ${invalidReason}` : ''})`
+                    {classOptions.map((option) => {
                       return (
                         <SelectItem
-                          key={cls.id}
-                          value={cls.id}
-                          disabled={disabled}
+                          key={option.classId}
+                          value={option.classId}
+                          disabled={option.disabled}
                           className="text-neutral-200"
                         >
-                          {label}
+                          {option.label}
                         </SelectItem>
                       )
                     })}
@@ -1145,13 +1496,6 @@ export function LevelUpWizard({
                 </Alert>
               )}
 
-              <FeatureOptionChoicesCard
-                title="Fighting Style"
-                definitions={fightingStyleDefinitions}
-                choices={featureOptionChoices}
-                canEdit
-                onChange={setFeatureOptionChoices}
-              />
             </div>
           )}
 
@@ -1181,10 +1525,21 @@ export function LevelUpWizard({
                   onChange={setMaverickBreakthroughClassIds}
                 />
               )}
+            </div>
+          )}
+
+          {currentStep?.id === 'features' && (
+            <div className="space-y-4">
+              <Alert className="border-white/10 bg-white/[0.03]">
+                <AlertDescription className="text-neutral-300">
+                  Resolve the feature options this level unlocked. If one of these systems allows retraining, changing an earlier slot here records a new level-tagged replacement without deleting the old row.
+                </AlertDescription>
+              </Alert>
               <FeatureOptionChoicesCard
-                title="Subclass Options"
-                definitions={subclassFeatureOptionDefinitions}
+                title="Feature Options"
+                definitions={levelUpFeatureOptionDefinitions}
                 choices={featureOptionChoices}
+                baselineChoices={activeInitialFeatureOptionChoices}
                 canEdit
                 onChange={setFeatureOptionChoices}
               />
@@ -1230,7 +1585,7 @@ export function LevelUpWizard({
             <div className="space-y-4">
               <Alert className="border-white/10 bg-white/[0.03]">
                 <AlertDescription className="text-neutral-300">
-                  Update the active spells for the class changes unlocked by this level. Existing spell selections stay in place unless you change them here.
+                  Review only the spells tied to {selectedClassDetail.name} {nextTargetLevel}. You can add newly learned spells or swap older class picks here, while other class and feature-granted spells stay untouched.
                 </AlertDescription>
               </Alert>
               <SpellsCard
@@ -1259,7 +1614,7 @@ export function LevelUpWizard({
                 <AlertDescription className="text-neutral-300">
                   {newFeatSlot?.choiceKind === 'feat_only'
                     ? `${newFeatSlotLabel} grants a bonus feat. Choose that feat now.`
-                    : `${newFeatSlotLabel} unlocks a new ASI / feat decision. Choose the feat now, or mark this slot as an ASI and adjust the ability scores on the full sheet afterwards.`}
+                    : `${newFeatSlotLabel} unlocks a new ASI / feat decision. Choose a feat, or leave the feat slot empty and assign the ASI increases here now.`}
                 </AlertDescription>
               </Alert>
               <FeatsCard
@@ -1352,6 +1707,70 @@ export function LevelUpWizard({
 
           {currentStep?.id === 'review' && (
             <div className="space-y-5">
+              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                <p className="text-sm font-medium text-neutral-100">Level-up Change Summary</p>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
+                    <p className="text-xs uppercase tracking-[0.12em] text-neutral-500">Class</p>
+                    <p className="mt-1 text-sm text-neutral-100">
+                      {selectedClassDetail?.name ?? 'Class'} {currentTargetLevel} → {nextTargetLevel}
+                    </p>
+                    {selectedSubclass && currentSubclassId !== selectedSubclass.id && (
+                      <p className="mt-1 text-sm text-neutral-400">Subclass: {selectedSubclass.name}</p>
+                    )}
+                  </div>
+                  <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
+                    <p className="text-xs uppercase tracking-[0.12em] text-neutral-500">HP</p>
+                    <p className="mt-1 text-sm text-neutral-100">{character.hp_max} → {nextDerived?.hitPoints.max ?? nextHpMax}</p>
+                    <p className="mt-1 text-sm text-neutral-400">+{hpGainTotal} using {hpMode === 'manual' ? `a roll of ${resolvedHpRoll}` : hpMode === 'max' ? 'max hit die' : 'fixed average'}</p>
+                  </div>
+                  {(newAsiSummary || newFeatNames.length > 0) && (
+                    <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
+                      <p className="text-xs uppercase tracking-[0.12em] text-neutral-500">ASI / Feat</p>
+                      {newAsiSummary && <p className="mt-1 text-sm text-neutral-100">{newAsiSummary}</p>}
+                      {newFeatNames.length > 0 && (
+                        <p className="mt-1 text-sm text-neutral-100">{newFeatNames.join(', ')}</p>
+                      )}
+                    </div>
+                  )}
+                  {(newFeatureOptionSummaries.length > 0 || newLevelSkillChoices.length > 0) && (
+                    <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
+                      <p className="text-xs uppercase tracking-[0.12em] text-neutral-500">Features & Skills</p>
+                      {newFeatureOptionSummaries.map((entry) => (
+                        <p key={`${entry.label}:${entry.selectedLabel}`} className="mt-1 text-sm text-neutral-100">
+                          {entry.label}: {entry.selectedLabel}
+                          {entry.previousLabel ? ` (replaces ${entry.previousLabel})` : ''}
+                        </p>
+                      ))}
+                      {newLevelSkillChoices.map((entry) => (
+                        <p key={entry.skill} className="mt-1 text-sm text-neutral-100">
+                          Skill proficiency: {entry.skill}
+                        </p>
+                      ))}
+                    </div>
+                  )}
+                  {spellUnlockChanged && (
+                    <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3 sm:col-span-2">
+                      <p className="text-xs uppercase tracking-[0.12em] text-neutral-500">Spell Changes</p>
+                      {targetClassSpellDelta.replacements.map((entry) => (
+                        <p key={`${entry.removed}:${entry.added}`} className="mt-1 text-sm text-neutral-100">
+                          Swapped: {entry.removed} → {entry.added}
+                        </p>
+                      ))}
+                      {targetClassSpellDelta.additions.length > 0 && (
+                        <p className="mt-1 text-sm text-neutral-100">Added: {targetClassSpellDelta.additions.join(', ')}</p>
+                      )}
+                      {targetClassSpellDelta.removals.length > 0 && (
+                        <p className="mt-1 text-sm text-neutral-400">Removed: {targetClassSpellDelta.removals.join(', ')}</p>
+                      )}
+                      {targetClassSpellDelta.replacements.length === 0 && targetClassSpellDelta.additions.length === 0 && targetClassSpellDelta.removals.length === 0 && (
+                        <p className="mt-1 text-sm text-neutral-400">No class-scoped spell changes were selected on this level.</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
                   <p className="text-sm text-neutral-500">Updated class spread</p>
@@ -1430,30 +1849,40 @@ export function LevelUpWizard({
                   )}
                 </div>
 
-                {canonicalBlockingIssues.length > 0 && (
-                  <Alert className="border-rose-400/20 bg-rose-400/10">
-                    <AlertDescription className="space-y-2 text-rose-50">
-                      <p className="text-sm font-medium">Blocking items</p>
-                      <ul className="space-y-1 text-sm text-rose-100">
-                        {canonicalBlockingIssues.map((item) => (
-                          <li key={item.key}>• {item.message}</li>
-                        ))}
-                      </ul>
-                    </AlertDescription>
-                  </Alert>
-                )}
-
-                {canonicalWarnings.length > 0 && (
-                  <Alert className="border-amber-400/20 bg-amber-400/10">
-                    <AlertDescription className="space-y-2 text-amber-50">
-                      <p className="text-sm font-medium">Warnings</p>
-                      <ul className="space-y-1 text-sm text-amber-100">
-                        {canonicalWarnings.map((item) => (
-                          <li key={item.key}>• {item.message}</li>
-                        ))}
-                      </ul>
-                    </AlertDescription>
-                  </Alert>
+                {groupedReviewIssues.length > 0 && (
+                  <div className="space-y-3">
+                    {groupedReviewIssues.map((group) => (
+                      <div key={group.stepId} className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                          <div>
+                            <p className="text-sm font-medium text-neutral-100">{group.stepLabel}</p>
+                            <p className="mt-1 text-sm text-neutral-400">
+                              {group.issues.length} item{group.issues.length === 1 ? '' : 's'} to review.
+                            </p>
+                          </div>
+                          {group.stepId !== 'review' && (
+                            <Button type="button" variant="outline" onClick={() => goToStep(group.stepId)}>
+                              Edit {group.stepLabel}
+                            </Button>
+                          )}
+                        </div>
+                        <div className="mt-3 space-y-2">
+                          {group.issues.map((issue) => (
+                            <div
+                              key={`${group.stepId}:${issue.key}`}
+                              className={`rounded-xl border px-3 py-2 text-sm ${
+                                issue.severity === 'error'
+                                  ? 'border-rose-400/20 bg-rose-400/10 text-rose-50'
+                                  : 'border-amber-400/20 bg-amber-400/10 text-amber-50'
+                              }`}
+                            >
+                              {issue.message}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 )}
 
                 {(savedLegality ?? localLegality) && (
