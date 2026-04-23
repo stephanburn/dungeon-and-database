@@ -58,6 +58,15 @@ function pointBuyCost(score: number): number | null {
 }
 
 function checkSourceAllowlist(input: LegalityInput): LegalityCheck {
+  if (input.allowedSources.length === 0) {
+    return {
+      key: 'source_allowlist',
+      passed: true,
+      message: 'Campaign has no explicit source allowlist.',
+      severity: 'error',
+    }
+  }
+
   const allowed = new Set(input.allowedSources)
   const violations: string[] = []
 

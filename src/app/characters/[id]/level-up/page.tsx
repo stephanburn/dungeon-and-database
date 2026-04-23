@@ -3,20 +3,21 @@ import { createClient } from '@/lib/supabase/server'
 import { hasDmAccess } from '@/lib/auth/roles'
 import { LevelUpWizard } from '../LevelUpWizard'
 import { buildAsiSelectionsFromRows } from '@/lib/characters/asi-provenance'
+import { aggregateCharacterLevels, sortCharacterClassLevels } from '@/lib/characters/class-levels'
 import type { SpellOption } from '@/lib/characters/wizard-helpers'
+import { loadCampaignWizardContext } from '@/lib/characters/wizard-context'
 import type {
   Background,
-  Campaign,
   CharacterAbilityBonusChoice,
   CharacterAsiChoice,
   Character,
+  CharacterClassLevel,
   CharacterFeatChoice,
   CharacterFeatureOptionChoice,
   CharacterLanguageChoice,
   CharacterLevel,
   CharacterSpellSelection,
   CharacterToolChoice,
-  RuleSet,
   Species,
   Spell,
 } from '@/lib/types/database'
@@ -25,6 +26,7 @@ interface CharacterWithRelations extends Character {
   species: Species | null
   background: Background | null
   character_levels: CharacterLevel[]
+  character_class_levels: CharacterClassLevel[]
 }
 
 export default async function CharacterLevelUpPage({ params }: { params: { id: string } }) {
@@ -54,14 +56,14 @@ export default async function CharacterLevelUpPage({ params }: { params: { id: s
     redirect(`/characters/${params.id}`)
   }
 
-  const [speciesResult, backgroundResult, levelsResult, skillsResult, abilityBonusChoicesResult, asiChoicesResult, languageChoicesResult, toolChoicesResult, featureOptionChoicesResult, typedSpellSelectionsResult, typedFeatChoicesResult, campaignResult, allowlistResult, sourcesResult] = await Promise.all([
+  const [speciesResult, backgroundResult, classLevelsResult, skillsResult, abilityBonusChoicesResult, asiChoicesResult, languageChoicesResult, toolChoicesResult, featureOptionChoicesResult, typedSpellSelectionsResult, typedFeatChoicesResult, campaignContext] = await Promise.all([
     character.species_id
       ? supabase.from('species').select('*').eq('id', character.species_id).single()
       : Promise.resolve({ data: null }),
     character.background_id
       ? supabase.from('backgrounds').select('*').eq('id', character.background_id).single()
       : Promise.resolve({ data: null }),
-    supabase.from('character_levels').select('*').eq('character_id', character.id).order('taken_at'),
+    supabase.from('character_class_levels').select('*').eq('character_id', character.id),
     supabase.from('character_skill_proficiencies').select('*').eq('character_id', character.id),
     supabase.from('character_ability_bonus_choices').select('*').eq('character_id', character.id),
     supabase.from('character_asi_choices').select('*').eq('character_id', character.id),
@@ -70,9 +72,7 @@ export default async function CharacterLevelUpPage({ params }: { params: { id: s
     supabase.from('character_feature_option_choices').select('*').eq('character_id', character.id),
     supabase.from('character_spell_selections').select('*').eq('character_id', character.id),
     supabase.from('character_feat_choices').select('*').eq('character_id', character.id),
-    supabase.from('campaigns').select('*').eq('id', character.campaign_id).single(),
-    supabase.from('campaign_source_allowlist').select('source_key').eq('campaign_id', character.campaign_id),
-    supabase.from('sources').select('key, rule_set'),
+    loadCampaignWizardContext(supabase, character.campaign_id),
   ])
 
   const initialSpellChoiceIds = ((typedSpellSelectionsResult.data ?? []) as CharacterSpellSelection[])
@@ -110,28 +110,25 @@ export default async function CharacterLevelUpPage({ params }: { params: { id: s
     } satisfies SpellOption
   })
 
+  const sortedClassLevels = sortCharacterClassLevels((classLevelsResult.data ?? []) as CharacterClassLevel[])
   const characterWithRelations: CharacterWithRelations = {
     ...character,
     species: speciesResult.data ?? null,
     background: backgroundResult.data ?? null,
-    character_levels: levelsResult.data ?? [],
+    character_levels: aggregateCharacterLevels(sortedClassLevels),
+    character_class_levels: sortedClassLevels,
   }
 
-  const campaign = campaignResult.data as Campaign | null
-  if (!campaign) notFound()
-
-  const allSourceRuleSets = Object.fromEntries(
-    (sourcesResult.data ?? []).map((source) => [source.key, source.rule_set as RuleSet])
-  )
+  if (!campaignContext) notFound()
 
   return (
     <div className="min-h-screen bg-neutral-950 p-6">
       <div className="mx-auto max-w-5xl space-y-6">
         <LevelUpWizard
           character={characterWithRelations}
-          campaign={campaign}
-          allowedSources={(allowlistResult.data ?? []).map((row) => row.source_key)}
-          allSourceRuleSets={allSourceRuleSets}
+          campaign={campaignContext.campaign}
+          allowedSources={campaignContext.allowedSources}
+          allSourceRuleSets={campaignContext.allSourceRuleSets}
           initialSkillProficiencies={(skillsResult.data ?? []).map((row) => row.skill)}
           initialAbilityBonusChoices={initialAbilityBonusChoices}
           initialAsiChoices={initialAsiChoices}

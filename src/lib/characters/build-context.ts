@@ -35,6 +35,11 @@ import {
   getSpeciesFeatSlotDefinitions,
   type FeatSlotDefinition,
 } from '@/lib/characters/feat-slots'
+import {
+  buildSpellSelectionSummary,
+  resolveLeveledSpellSelectionCap,
+  resolvePreparedSpellCap,
+} from '@/lib/characters/spell-selection'
 import { normalizeSkillKey, SAVING_THROW_NAMES, SKILLS, type SkillKey } from '@/lib/skills'
 import type { CharacterFeatureOptionChoice } from '@/lib/types/database'
 
@@ -126,6 +131,7 @@ export interface CharacterBuildContext {
     roll_set: number[]
   }>
   skillProficiencies: string[]
+  skillExpertise: string[]
   selectedAbilityBonuses: Partial<Record<AbilityKey, number>>
   selectedAsiBonuses: Partial<Record<AbilityKey, number>>
   selectedFeatureOptions: CharacterFeatureOptionChoice[]
@@ -353,48 +359,11 @@ function spellcastingContribution(type: SpellcastingType | null, level: number):
   }
 }
 
-function resolvePreparedBase(formula: SpellcastingProgression['prepared_formula'], classLevel: number, fixed = 0): number {
-  switch (formula) {
-    case 'class_level':
-      return classLevel
-    case 'half_level_down':
-      return Math.floor(classLevel / 2)
-    case 'half_level_up':
-      return Math.ceil(classLevel / 2)
-    case 'third_level_down':
-      return Math.floor(classLevel / 3)
-    case 'third_level_up':
-      return Math.ceil(classLevel / 3)
-    case 'fixed':
-      return fixed
-    default:
-      return classLevel
-  }
-}
-
 function maxUnlockedSpellLevel(slots: number[]): number {
   for (let index = slots.length - 1; index >= 0; index -= 1) {
     if ((slots[index] ?? 0) > 0) return index + 1
   }
   return 0
-}
-
-function buildSpellSelectionSummary(
-  className: string,
-  classLevel: number,
-  mode: CharacterProgressionSummary['spellSelectionMode'],
-  leveledCap: number
-): string | null {
-  if (mode === 'known') {
-    return `${className} knows ${leveledCap} leveled spells at level ${classLevel}.`
-  }
-  if (mode === 'spellbook') {
-    return `${className} can prepare ${leveledCap} spells from its spellbook.`
-  }
-  if (mode === 'prepared') {
-    return `${className} can prepare ${leveledCap} spells.`
-  }
-  return null
 }
 
 function getDragonbornBreathWeaponDice(totalLevel: number) {
@@ -583,25 +552,27 @@ export function deriveCharacterProgression(context: CharacterBuildContext): Char
 
   if (primarySpellcastingClass && spellcastingProfile) {
     spellSelectionMode = spellcastingProfile.mode
-    if (spellcastingProfile.mode === 'known') {
-      leveledCapFromProgression = spellcastingProfile.spells_known_by_level?.[primarySpellcastingClass.level - 1] ?? 0
-    } else if (spellcastingProfile.mode === 'prepared' || spellcastingProfile.mode === 'spellbook') {
-      const ability = spellcastingProfile.spellcasting_ability
-      const abilityMod = ability ? abilityModifier(adjustedScores[ability]) : 0
-      const preparedBase = resolvePreparedBase(
-        spellcastingProfile.prepared_formula,
-        primarySpellcastingClass.level,
-        spellcastingProfile.prepared_fixed ?? 0
-      )
-      const totalPrepared = preparedBase + (spellcastingProfile.prepared_add_ability_mod ? abilityMod : 0)
-      leveledCapFromProgression = Math.max(spellcastingProfile.prepared_min ?? 0, totalPrepared)
-    }
-    spellSelectionSummary = buildSpellSelectionSummary(
-      primarySpellcastingClass.name,
-      primarySpellcastingClass.level,
-      spellcastingProfile.mode,
-      leveledCapFromProgression
-    )
+    const ability = spellcastingProfile.spellcasting_ability
+    const abilityMod = ability ? abilityModifier(adjustedScores[ability]) : 0
+    const preparedSpellCap = spellcastingProfile.mode === 'prepared' || spellcastingProfile.mode === 'spellbook'
+      ? resolvePreparedSpellCap({
+          profile: spellcastingProfile,
+          classLevel: primarySpellcastingClass.level,
+          abilityModifier: abilityMod,
+        })
+      : null
+    leveledCapFromProgression = resolveLeveledSpellSelectionCap({
+      profile: spellcastingProfile,
+      classLevel: primarySpellcastingClass.level,
+      abilityModifier: abilityMod,
+    })
+    spellSelectionSummary = buildSpellSelectionSummary({
+      className: primarySpellcastingClass.name,
+      classLevel: primarySpellcastingClass.level,
+      mode: spellcastingProfile.mode,
+      leveledSelectionCap: leveledCapFromProgression,
+      preparedSpellCap,
+    })
     if (primarySpellcastingClass.subclass && isMaverickSubclass(primarySpellcastingClass.subclass)) {
       const extraLevels = getMaverickPreparedBreakthroughLevels(primarySpellcastingClass.level)
       if (extraLevels.length > 0) {
@@ -673,6 +644,7 @@ export function deriveCharacter(context: CharacterBuildContext): DerivedCharacte
   const proficiencyBonus = core.proficiencyBonus
 
   const selectedSkillProficiencies = new Set<string>(context.skillProficiencies.map(normalizeSkillKey))
+  const selectedSkillExpertise = new Set<string>(context.skillExpertise.map(normalizeSkillKey))
   const backgroundSkillProficiencies = new Set<string>((context.background?.skillProficiencies ?? []).map(normalizeSkillKey))
   const savingThrowProficiencies = new Set<string>(
     context.classes.flatMap((cls) => cls.savingThrowProficiencies.map((save) => save.toLowerCase()))
@@ -696,13 +668,14 @@ export function deriveCharacter(context: CharacterBuildContext): DerivedCharacte
 
   const skills = SKILLS.map((skill) => {
     const proficient = backgroundSkillProficiencies.has(skill.key) || selectedSkillProficiencies.has(skill.key)
+    const expertise = proficient && selectedSkillExpertise.has(skill.key)
 
     return {
       key: skill.key,
       name: skill.name,
       ability: skill.ability,
       proficient,
-      modifier: abilityModifier(adjustedScores[skill.ability]) + (proficient ? proficiencyBonus : 0),
+      modifier: abilityModifier(adjustedScores[skill.ability]) + (proficient ? proficiencyBonus * (expertise ? 2 : 1) : 0),
     }
   })
 
@@ -857,21 +830,20 @@ export function deriveCharacter(context: CharacterBuildContext): DerivedCharacte
     const cantripCap = cantripCapBase === null
       ? null
       : cantripCapBase + (cls.subclass && isMaverickSubclass(cls.subclass) ? getMaverickCantripBonus(cls.level) : 0)
-    let leveledCap = 0
-
-    if (profile.mode === 'known') {
-      leveledCap = profile.spells_known_by_level?.[cls.level - 1] ?? 0
-    } else if (profile.mode === 'prepared' || profile.mode === 'spellbook') {
-      const ability = profile.spellcasting_ability
-      const abilityMod = ability ? abilityModifier(adjustedScores[ability]) : 0
-      const preparedBase = resolvePreparedBase(
-        profile.prepared_formula,
-        cls.level,
-        profile.prepared_fixed ?? 0
-      )
-      const totalPrepared = preparedBase + (profile.prepared_add_ability_mod ? abilityMod : 0)
-      leveledCap = Math.max(profile.prepared_min ?? 0, totalPrepared)
-    }
+    const ability = profile.spellcasting_ability
+    const abilityMod = ability ? abilityModifier(adjustedScores[ability]) : 0
+    const preparedSpellCap = profile.mode === 'prepared' || profile.mode === 'spellbook'
+      ? resolvePreparedSpellCap({
+          profile,
+          classLevel: cls.level,
+          abilityModifier: abilityMod,
+        })
+      : null
+    const leveledCap = resolveLeveledSpellSelectionCap({
+      profile,
+      classLevel: cls.level,
+      abilityModifier: abilityMod,
+    })
 
     const sourceSelectedSpells = selectedSpellEntries.filter((spell) =>
       context.selectedSpells.some((selected) =>
@@ -891,7 +863,13 @@ export function deriveCharacter(context: CharacterBuildContext): DerivedCharacte
       ]).filter(([, count]) => count > 0)
     )
 
-    let selectionSummary = buildSpellSelectionSummary(cls.name, cls.level, profile.mode, leveledCap)
+    let selectionSummary = buildSpellSelectionSummary({
+      className: cls.name,
+      classLevel: cls.level,
+      mode: profile.mode,
+      leveledSelectionCap: leveledCap,
+      preparedSpellCap,
+    })
     if (cls.subclass && isMaverickSubclass(cls.subclass)) {
       const extraLevels = getMaverickPreparedBreakthroughLevels(cls.level)
       if (extraLevels.length > 0) {

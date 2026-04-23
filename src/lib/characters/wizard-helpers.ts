@@ -1,6 +1,7 @@
 import type {
   Background,
   Campaign,
+  CharacterSkillProficiency,
   CharacterFeatureOptionChoice,
   Class,
   ClassFeatureProgression,
@@ -72,6 +73,11 @@ export type WizardLevel = {
   hp_roll?: number | null
 }
 
+export type WizardStatRoll = {
+  assigned_to: 'str' | 'dex' | 'con' | 'int' | 'wis' | 'cha'
+  roll_set: number[]
+}
+
 export type WizardLegalitySummary = {
   blockers: string[]
   warnings: string[]
@@ -85,6 +91,7 @@ type LocalBuildContextArgs = {
   statMethod: StatMethod
   persistedHpMax?: number
   stats: Record<'str' | 'dex' | 'con' | 'int' | 'wis' | 'cha', number>
+  statRolls?: WizardStatRoll[]
   selectedSpecies: Species | null
   selectedBackground: Background | null
   levels: WizardLevel[]
@@ -97,6 +104,7 @@ type LocalBuildContextArgs = {
   featChoices: string[]
   asiChoices?: AsiSelection[]
   skillProficiencies?: string[]
+  typedSkillProficiencies?: CharacterSkillProficiency[]
   abilityBonusChoices?: SpeciesChoiceAbilityKey[]
   languageChoices?: string[]
   toolChoices?: string[]
@@ -111,6 +119,7 @@ export function buildLocalCharacterContext({
   statMethod,
   persistedHpMax = 0,
   stats,
+  statRolls = [],
   selectedSpecies,
   selectedBackground,
   levels,
@@ -123,6 +132,7 @@ export function buildLocalCharacterContext({
   featChoices,
   asiChoices = [],
   skillProficiencies = [],
+  typedSkillProficiencies = [],
   abilityBonusChoices = [],
   languageChoices = [],
   toolChoices = [],
@@ -298,9 +308,12 @@ export function buildLocalCharacterContext({
     statMethod,
     persistedHpMax,
     baseStats: stats,
-    statRolls: [],
+    statRolls,
     skillProficiencies,
-  selectedAbilityBonuses: buildSpeciesAbilityBonusMap(selectedSpecies, abilityBonusChoices),
+    skillExpertise: typedSkillProficiencies
+      .filter((row) => row.expertise)
+      .map((row) => row.skill),
+    selectedAbilityBonuses: buildSpeciesAbilityBonusMap(selectedSpecies, abilityBonusChoices),
     selectedAsiBonuses: buildAsiBonusMap(asiChoices),
     asiChoiceSlots: asiChoices
       .map((selection, slotIndex) => ({

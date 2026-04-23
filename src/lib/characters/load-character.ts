@@ -4,12 +4,15 @@ import type {
   CharacterAbilityBonusChoice,
   CharacterAsiChoice,
   Character,
+  CharacterClassLevel,
   CharacterFeatChoice,
   CharacterEquipmentItem,
   CharacterFeatureOptionChoice,
   CharacterLanguageChoice,
   CharacterLevel,
+  CharacterSkillProficiency,
   CharacterSpellSelection,
+  CharacterStatRoll,
   CharacterToolChoice,
   Database,
   Species,
@@ -18,27 +21,34 @@ import type {
 import { buildLegalityInput } from '@/lib/legality/build-input'
 import { runLegalityChecks, type LegalityResult } from '@/lib/legality/engine'
 import { buildAsiSelectionsFromRows, type AsiSelection } from '@/lib/characters/asi-provenance'
+import { aggregateCharacterLevels, sortCharacterClassLevels } from '@/lib/characters/class-levels'
 import type { SpellOption } from '@/lib/characters/wizard-helpers'
 
 export interface CharacterWithRelations extends Character {
   species: Species | null
   background: Background | null
   character_levels: CharacterLevel[]
+  character_class_levels: CharacterClassLevel[]
 }
 
 export interface LoadedCharacterState {
   character: CharacterWithRelations
   initialSkillProficiencies: string[]
+  initialTypedSkillProficiencies: CharacterSkillProficiency[]
   initialAbilityBonusChoices: Array<'str' | 'dex' | 'con' | 'int' | 'wis' | 'cha'>
+  initialTypedAbilityBonusChoices: CharacterAbilityBonusChoice[]
   initialAsiChoices: AsiSelection[]
   initialLanguageChoices: string[]
+  initialTypedLanguageChoices: CharacterLanguageChoice[]
   initialToolChoices: string[]
+  initialTypedToolChoices: CharacterToolChoice[]
   initialSpellChoices: string[]
   initialSpellSelections: CharacterSpellSelection[]
   initialSelectedSpells: SpellOption[]
   initialFeatChoices: string[]
   initialFeatureOptionChoices: CharacterFeatureOptionChoice[]
   initialEquipmentItems: CharacterEquipmentItem[]
+  initialStatRolls: CharacterStatRoll[]
   legality: LegalityResult | null
 }
 
@@ -83,14 +93,14 @@ export async function loadCharacterState(
     }
   }
 
-  const [speciesResult, backgroundResult, levelsResult, skillsResult, abilityBonusChoicesResult, asiChoicesResult, languageChoicesResult, toolChoicesResult, featureOptionChoicesResult, equipmentItemsResult, typedSpellSelectionsResult, typedFeatChoicesResult] = await Promise.all([
+  const [speciesResult, backgroundResult, classLevelsResult, skillsResult, abilityBonusChoicesResult, asiChoicesResult, languageChoicesResult, toolChoicesResult, featureOptionChoicesResult, equipmentItemsResult, typedSpellSelectionsResult, typedFeatChoicesResult, statRollsResult] = await Promise.all([
     character.species_id
       ? supabase.from('species').select('*').eq('id', character.species_id).single()
       : Promise.resolve({ data: null, error: null }),
     character.background_id
       ? supabase.from('backgrounds').select('*').eq('id', character.background_id).single()
       : Promise.resolve({ data: null, error: null }),
-    supabase.from('character_levels').select('*').eq('character_id', character.id),
+    supabase.from('character_class_levels').select('*').eq('character_id', character.id),
     supabase.from('character_skill_proficiencies').select('*').eq('character_id', character.id),
     supabase.from('character_ability_bonus_choices').select('*').eq('character_id', character.id),
     supabase.from('character_asi_choices').select('*').eq('character_id', character.id),
@@ -100,12 +110,13 @@ export async function loadCharacterState(
     supabase.from('character_equipment_items').select('*').eq('character_id', character.id),
     supabase.from('character_spell_selections').select('*').eq('character_id', character.id),
     supabase.from('character_feat_choices').select('*').eq('character_id', character.id),
+    supabase.from('character_stat_rolls').select('*').eq('character_id', character.id),
   ])
 
   const issues = [
     speciesResult,
     backgroundResult,
-    levelsResult,
+    classLevelsResult,
     skillsResult,
     abilityBonusChoicesResult,
     asiChoicesResult,
@@ -115,6 +126,7 @@ export async function loadCharacterState(
     equipmentItemsResult,
     typedSpellSelectionsResult,
     typedFeatChoicesResult,
+    statRollsResult,
   ]
     .flatMap((result, index) => result.error ? [{
       scope: [
@@ -130,6 +142,7 @@ export async function loadCharacterState(
         'equipment_items',
         'spell_selections',
         'feat_choices',
+        'stat_rolls',
       ][index] ?? 'unknown',
       message: result.error.message,
     }] : [])
@@ -145,6 +158,9 @@ export async function loadCharacterState(
   }
 
   const warnings: CharacterLoadWarning[] = []
+  const sortedClassLevels = sortCharacterClassLevels((classLevelsResult.data ?? []) as CharacterClassLevel[])
+  const aggregateLevels = aggregateCharacterLevels(sortedClassLevels)
+
   if (character.species_id && !speciesResult.data) {
     warnings.push({
       scope: 'species',
@@ -258,19 +274,25 @@ export async function loadCharacterState(
       ...character,
       species: speciesResult.data ?? null,
       background: backgroundResult.data ?? null,
-      character_levels: levelsResult.data ?? [],
+      character_levels: aggregateLevels,
+      character_class_levels: sortedClassLevels,
     },
     initialSkillProficiencies: (skillsResult.data ?? []).map((row) => row.skill),
+    initialTypedSkillProficiencies: (skillsResult.data ?? []) as CharacterSkillProficiency[],
     initialAbilityBonusChoices: typedAbilityBonusChoices,
+    initialTypedAbilityBonusChoices: (abilityBonusChoicesResult.data ?? []) as CharacterAbilityBonusChoice[],
     initialAsiChoices: typedAsiChoices,
     initialLanguageChoices: typedLanguageChoices,
+    initialTypedLanguageChoices: (languageChoicesResult.data ?? []) as CharacterLanguageChoice[],
     initialToolChoices: typedToolChoices,
+    initialTypedToolChoices: (toolChoicesResult.data ?? []) as CharacterToolChoice[],
     initialSpellChoices: typedSpellChoices,
     initialSpellSelections: typedSpellSelections,
     initialSelectedSpells,
     initialFeatChoices: typedFeatChoices,
     initialFeatureOptionChoices: typedFeatureOptionChoices,
     initialEquipmentItems: typedEquipmentItems,
+    initialStatRolls: (statRollsResult.data ?? []) as CharacterStatRoll[],
     legality,
   }
 

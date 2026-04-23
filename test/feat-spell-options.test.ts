@@ -19,6 +19,7 @@ function createContext(overrides: Partial<CharacterBuildContext> = {}): Characte
     baseStats: { str: 10, dex: 14, con: 14, int: 16, wis: 12, cha: 10 },
     statRolls: [],
     skillProficiencies: ['arcana', 'history'],
+    skillExpertise: [],
     selectedLanguages: [],
     selectedTools: [],
     selectedAbilityBonuses: {},

@@ -505,6 +505,119 @@ The current wizards are a good skeleton, but they still behave like convenience 
 - Add change summaries before saving.
 - Preserve draft safety for partially completed states.
 
+### Execution Slices
+
+Each slice should fit in one Codex session and land schema (where needed) + types + loader/save + at least one consuming UI or derivation surface + tests. Creation slices (4a–4h) come first so a level-1 character can be built through guided steps without the raw editor. Level-up slices (4i–4n) come after and start with the `character_class_levels` cutover carried in as the explicit first level-up task from Slice 3m. Slice 4o is the Batch 4 closeout gate before Batch 5 begins.
+
+**Slice 4a — Real wizard context: campaign allowlist and ruleset wiring**
+
+- replace the placeholder local wizard context with the character's actual campaign allowlist and ruleset, so creation and level-up flows filter content identically
+- audit every wizard-side content fetch/picker for the old stub and move it to the shared context
+- no new guided steps in this slice; pickers should simply reflect campaign settings
+- acceptance: creation and level-up pickers in a campaign with a restricted allowlist show only allowed content end-to-end, and the placeholder context is gone
+
+**Slice 4b — Reusable guided-choice primitives and change-summary scaffold**
+
+- extract shared "choose one", "choose N", prerequisite-aware, and replaceable-option components that every later Batch 4 step can consume
+- extract a shared per-step review / change-summary scaffold and a draft-safety wrapper that commits only completed steps
+- convert one low-risk existing creation step (e.g. background skill choice) onto the new primitives to prove the pattern
+- acceptance: primitives and scaffold exist with tests, and at least one migrated step renders and persists through them
+
+**Slice 4c — Creation: identity, species, and background steps on the new primitives**
+
+- migrate the campaign/identity, species, and background steps of the creation wizard onto the Slice 4b primitives
+- drive species flex ability bonuses, flex languages/tools, and species-trait feat grants through the unified path, writing into the Batch 2 typed rows
+- drive background skill, tool, language, and feat choices through the same primitives with provenance tagging
+- acceptance: a level-1 character can complete the first three guided steps end-to-end, with every choice landing in typed rows instead of the generic blob
+
+**Slice 4d — Creation: class selection and ability score generation**
+
+- migrate class selection and ability score generation onto shared primitives
+- support standard array, point-buy, and rolled variants inside the ability generation step with durable persistence
+- keep creation single-class (multiclassing is a level-up concern in Slice 4k); surface this constraint explicitly in UI copy
+- acceptance: a level-1 character reaches the end of ability generation with persisted class + ability score rows, and the step re-loads cleanly from a draft
+
+**Slice 4e — Creation: class proficiencies and level-1 feature option choices**
+
+- drive level-1 class feature option picks (Fighter fighting style, Cleric domain, Sorcerer origin, Warlock patron, Wizard tradition, Druid circle where level-1, etc.) through `feature_option_groups` / `feature_options`
+- handle class skill / tool / weapon / language choices through the same primitives with provenance
+- persist through `character_feature_option_choices` and provenance-tagged skill/tool/language rows; no new typed per-feature tables
+- acceptance: every level-1 class-side option pick across PHB classes is selectable through guided steps, persists, round-trips, and is re-checked by legality
+
+#### Do this next:
+**Slice 4f — Creation: spell selection without first-class-only assumptions**
+
+- remove the first-class-only assumption from the creation spell picker and treat each class as its own caster source
+- drive cantrip count, known/prepared counts, spellbook starting list, and caster-mode distinctions (known vs prepared vs spellbook vs pact) from class data for the player's level-1 class
+- persist through `character_spell_selections` with acquisition mode and source class, consuming Batch 3 subclass spell-school restrictions where applicable
+- acceptance: level-1 wizards, clerics, druids, sorcerers, warlocks, bards, and paladins/rangers (where relevant) each emerge from creation with correct caster-mode persistence, and legality no longer flags false errors against single-class casters
+
+**Slice 4g — Creation: starting equipment selection**
+
+- wire the creation wizard into Slice 3k's starting-equipment resolution UX, so class and background packages drive a guided equipment step
+- support package alternatives and bundle sub-choices inside the wizard instead of forcing a raw editor pass
+- persist into `character_equipment_items` with provenance so the sheet can explain where each item came from
+- acceptance: a level-1 character leaves creation with `character_equipment_items` rows that match the chosen packages, including at least one class with alternatives and one background with bundle choices
+
+**Slice 4h — Creation: derived review, legality summary, and draft safety**
+
+- replace the current ad-hoc final step with a review that reads the canonical `DerivedCharacter` and presents grouped legality issues linked back to the originating step
+- formalize partial-completion UX: each step commits its own persistence, a later exit does not corrupt the draft, and re-entering the wizard resumes at the first unresolved step
+- no new choice systems in this slice; it is the closeout that ties creation 4a–4g together
+- acceptance: a player can create a level-1 character across several sessions, saving and resuming at each step, and submit it without touching the raw sheet editor; all final values on the sheet come from shared derivation
+
+**Slice 4i — Per-level history cutover (`character_class_levels`)**
+
+- first level-up-side task, carried in from the Slice 3m follow-up note
+- introduce `character_class_levels` keyed on `(character_id, class_id, level_number)` with `hp_roll`, `taken_at`, and any other per-level attributes the level-up rewrite needs
+- backfill from the existing `character_levels` rows, retire the temporary `character_hp_rolls` table if Slice 3m landed it, and repoint every provenance FK (`character_asi_choices`, `character_feat_choices`, `character_spell_selections`, equipment-acquired-at, etc.) to the per-level row
+- update load-character, snapshots, and the legacy save path to read from the new table without rewriting the save-path cascade yet
+- acceptance: existing characters' per-level history is preserved and visible in derivation, HP rolls from earlier levels survive subsequent level-ups, and provenance FKs reference the exact level at which each choice was made
+
+**Slice 4j — Level-up: additive save path**
+
+- replace the delete-and-replace level-up cascade in the character PUT path with an additive writer that inserts only the new level's rows and leaves prior levels untouched
+- scope HP gain persistence to the new per-level row from Slice 4i so HP roll history is permanent (resolves Slice 3m item #2 at the save layer)
+- preserve the atomic-transaction guarantee from Slice 3m item #1 across the new narrower save path
+- acceptance: leveling a representative character writes only new rows, earlier-level rows are unchanged by the save, and an injected mid-save failure leaves no partial state
+
+**Slice 4k — Level-up: multiclass selection and subclass unlock**
+
+- add dedicated multiclass selection step that checks `classes.multiclass_prereqs` against the character's adjusted ability scores before accepting the class
+- add dedicated subclass-unlock step firing at each class's correct level, persisting through the existing subclass columns
+- wire Batch 3 subclass spell-school restrictions (Eldritch Knight, Arcane Trickster) into legality on unlock so restricted spell selection kicks in immediately
+- acceptance: a player cannot level into a second class whose prereqs they fail, subclass unlock fires at the right per-class level, and restricted-caster subclasses narrow the spell picker at level-up time
+
+**Slice 4l — Level-up: feature-option unlocks including replaceable options**
+
+- render feature-option unlocks (new maneuver, new invocation, new metamagic, new fighting style slot, etc.) through the Slice 4b primitives at the exact level they unlock
+- support the "replace an existing option" pattern (invocation swap, fighting-style retrain) by preserving historical provenance rows while recording the replacement
+- reuse `character_feature_option_choices` with level-tagged rows from Slice 4i; no new typed tables unless a concrete case resists the generic one
+- acceptance: representative characters (Battle Master, Warlock with invocations, Sorcerer with metamagic, Fighter with retrainable fighting style) can level up through guided unlocks and the app records both the new pick and the swapped-out option
+
+**Slice 4m — Level-up: ASI vs feat, spell gains, and HP**
+
+- combine the remaining per-level resolution into one guided sub-flow:
+  - ASI-vs-feat decision at unlocked levels, persisted to `character_asi_choices` / `character_feat_choices` tagged to the per-level row
+  - spell gains by caster source: new known / prepared / spellbook additions with swap rules, persisted to `character_spell_selections`
+  - HP gain (average or rolled) persisted to the per-level row from Slice 4i
+- keep out-of-level-up preparation edits out of this slice; they land in Batch 5 sheet work
+- acceptance: a multiclass caster leveling into a spellcasting class produces correct new spell rows, an ASI level produces either a `+2`/`+1+1` ASI row or a feat row, and HP history accumulates rather than overwrites
+
+**Slice 4n — Level-up: change summary, draft safety, and save**
+
+- final step consumes the canonical `DerivedCharacter` to show a before/after diff of exactly what the new level added, grouped by resolution area
+- apply the same draft-safety wrapper from Slice 4b so a partial level-up cannot corrupt the character and can be resumed later
+- surface legality warnings linked back to the originating sub-step
+- acceptance: a representative multiclass build levels up end-to-end through the guided flow without raw-editor usage, the review clearly shows deltas, and an abandoned mid-flow level-up leaves the character at its prior stable state
+
+**Slice 4o — Batch 4 closeout: end-to-end smoke and gap audit**
+
+- run creation + level-up smokes across representative archetypes: single-class caster, multiclass caster/martial, feat-heavy (Variant Human or equivalent 2014 path if in scope), and species/background-heavy
+- audit what slipped past earlier slices: leftover first-class-only assumptions, placeholder wizard contexts, direct-to-`character_choices` writes, delete-and-replace save paths
+- capture any deferred work as explicit Batch 5 prep notes inside this roadmap rather than as implicit debt
+- acceptance: Batch 4 ends with a concrete archetype matrix that passes creation + level-up through guided steps only, and any remaining gaps are documented as Batch 5 entry tasks
+
 ### Risks
 
 - This batch becomes messy if attempted before explicit choice tables exist.

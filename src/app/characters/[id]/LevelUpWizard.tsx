@@ -28,6 +28,7 @@ import type {
   Background,
   Campaign,
   Character,
+  CharacterClassLevel,
   CharacterFeatureOptionChoice,
   CharacterLevel,
   CharacterSpellSelection,
@@ -78,6 +79,7 @@ type CharacterWithRelations = Character & {
   species: Species | null
   background: Background | null
   character_levels: CharacterLevel[]
+  character_class_levels: CharacterClassLevel[]
 }
 
 type StepId = 'class' | 'subclass' | 'skills' | 'spells' | 'feat' | 'hp' | 'review'

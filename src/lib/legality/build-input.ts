@@ -7,6 +7,7 @@ import type {
   Database,
   CharacterAbilityBonusChoice,
   CharacterAsiChoice,
+  CharacterClassLevel,
   CharacterFeatChoice,
   CharacterFeatureOptionChoice,
   CharacterLanguageChoice,
@@ -23,6 +24,7 @@ import type {
   SubclassBonusSpell,
   SubclassFeature,
 } from '@/lib/types/database'
+import { aggregateCharacterLevels, sortCharacterClassLevels } from '@/lib/characters/class-levels'
 import {
   createBuildBackgroundSummary,
   normalizeToolProficiencies,
@@ -34,6 +36,10 @@ import {
   type BuildSpellSummary,
   type CharacterBuildContext,
 } from '@/lib/characters/build-context'
+import {
+  buildAllSourceRuleSets,
+  resolveAllowedSources,
+} from '@/lib/characters/wizard-context'
 
 function toAbilityBonusMap(species: Species | null): Partial<Record<AbilityKey, number>> {
   const bonuses: Partial<Record<AbilityKey, number>> = {}
@@ -109,7 +115,7 @@ export async function buildCharacterBuildContext(
   ] = await Promise.all([
     supabase.from('campaigns').select('settings, rule_set').eq('id', character.campaign_id).single(),
     supabase.from('campaign_source_allowlist').select('source_key').eq('campaign_id', character.campaign_id),
-    supabase.from('character_levels').select('*').eq('character_id', characterId).order('taken_at'),
+    supabase.from('character_class_levels').select('*').eq('character_id', characterId),
     supabase.from('character_stat_rolls').select('assigned_to, roll_set').eq('character_id', characterId),
     supabase.from('character_skill_proficiencies').select('*').eq('character_id', characterId),
     supabase.from('character_ability_bonus_choices').select('*').eq('character_id', characterId),
@@ -128,7 +134,8 @@ export async function buildCharacterBuildContext(
     supabase.from('sources').select('key, rule_set'),
   ])
 
-  const levels = levelsResult.data ?? []
+  const classLevels = sortCharacterClassLevels((levelsResult.data ?? []) as CharacterClassLevel[])
+  const levels = aggregateCharacterLevels(classLevels)
   const background = (backgroundResult.data as Background | null) ?? null
   const species = (speciesResult.data as Species | null) ?? null
   const speciesTraitIds = species?.traits ?? []
@@ -377,9 +384,11 @@ export async function buildCharacterBuildContext(
     ? featById.get(background.background_feat_id) ?? null
     : null
 
-  const allSourceRuleSets = Object.fromEntries(
-    (allSourcesResult.data ?? []).map((source) => [source.key, source.rule_set as '2014' | '2024'])
-  )
+  const allSourceRows = (allSourcesResult.data ?? []).map((source) => ({
+    key: source.key,
+    rule_set: source.rule_set as '2014' | '2024',
+  }))
+  const allSourceRuleSets = buildAllSourceRuleSets(allSourceRows)
 
   const sourceCollections = {
     classSources: buildClasses.map((cls) => cls.source),
@@ -404,7 +413,7 @@ export async function buildCharacterBuildContext(
   )
 
   return {
-    allowedSources: (allowlistResult.data ?? []).map((row) => row.source_key),
+    allowedSources: resolveAllowedSources(allowlistResult.data ?? [], allSourceRows),
     campaignSettings,
     campaignRuleSet: (campaignResult.data?.rule_set ?? '2014') as '2014' | '2024',
     allSourceRuleSets,
@@ -423,6 +432,7 @@ export async function buildCharacterBuildContext(
       roll_set: row.roll_set,
     })),
     skillProficiencies: (skillsResult.data ?? []).map((row) => row.skill),
+    skillExpertise: (skillsResult.data ?? []).filter((row) => row.expertise).map((row) => row.skill),
     selectedAbilityBonuses: toSelectedAbilityBonusMap((abilityBonusChoicesResult.data ?? []) as CharacterAbilityBonusChoice[]),
     selectedAsiBonuses: toSelectedAsiBonusMap((asiChoicesResult.data ?? []) as CharacterAsiChoice[]),
     selectedFeatureOptions: typedFeatureOptionChoices,

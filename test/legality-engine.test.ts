@@ -23,6 +23,7 @@ function createContext(overrides: Partial<CharacterBuildContext> = {}): Characte
     baseStats: { str: 15, dex: 14, con: 13, int: 12, wis: 10, cha: 8 },
     statRolls: [],
     skillProficiencies: ['arcana', 'history', 'stealth'],
+    skillExpertise: [],
     selectedLanguages: [],
     selectedTools: [],
     selectedAbilityBonuses: {},
@@ -64,6 +65,7 @@ function createContext(overrides: Partial<CharacterBuildContext> = {}): Characte
           mode: 'spellbook',
           spellcasting_ability: 'int',
           cantrips_known_by_level: [3, 3, 3, 4],
+          spellbook_spells_by_level: [6, 8, 10, 12],
           prepared_formula: 'class_level',
           prepared_add_ability_mod: true,
           prepared_min: 1,
@@ -128,7 +130,7 @@ test('deriveCharacterProgression computes ASI slots and spell slots from class p
   assert.deepEqual(derived.spellSlots, [4, 3])
   assert.equal(derived.maxSpellLevel, 2)
   assert.equal(derived.cantripSelectionCap, 4)
-  assert.equal(derived.leveledSpellSelectionCap, 5)
+  assert.equal(derived.leveledSpellSelectionCap, 12)
 })
 
 test('deriveCharacterProgression prepends feat-only slot for Variant Human', () => {
@@ -186,7 +188,7 @@ test('deriveCharacter exposes milestone 1A core sheet values', () => {
   )
   assert.equal(derived.spellcasting.className, 'Wizard')
   assert.equal(derived.spellcasting.mode, 'spellbook')
-  assert.equal(derived.spellcasting.selectionSummary, 'Wizard can prepare 5 spells from its spellbook.')
+  assert.equal(derived.spellcasting.selectionSummary, 'Wizard has 12 leveled spells in its spellbook and can prepare 5 of them.')
   assert.deepEqual(derived.spellcasting.selectedSpellCountsByLevel, { 1: 1 })
   assert.deepEqual(
     derived.spellcasting.selectedSpells.map((spell) => ({
@@ -213,6 +215,27 @@ test('deriveCharacter exposes milestone 1A core sheet values', () => {
       level: 4,
     },
   ])
+})
+
+test('deriveCharacter doubles proficiency for expertise-backed skills', () => {
+  const derived = deriveCharacter(createContext({
+    skillProficiencies: ['arcana'],
+    skillExpertise: ['arcana'],
+  }))
+
+  assert.equal(derived.skills.find((skill) => skill.key === 'arcana')?.modifier, 5)
+})
+
+test('runLegalityChecks treats an empty source allowlist as unrestricted', () => {
+  const result = runLegalityChecks(createContext({
+    allowedSources: [],
+    allSourceRuleSets: { SRD: '2014' },
+  }))
+
+  const sourceCheck = result.checks.find((check) => check.key === 'source_allowlist')
+  assert.ok(sourceCheck)
+  assert.equal(sourceCheck.passed, true)
+  assert.equal(sourceCheck.message, 'Campaign has no explicit source allowlist.')
 })
 
 test('buildTypedSkillProficiencies tags orc primal intuition picks as species choices', () => {
@@ -1075,6 +1098,7 @@ test('legality blocks missing multiclass prerequisites and missing subclass', ()
           mode: 'spellbook',
           spellcasting_ability: 'int',
           cantrips_known_by_level: [3, 3],
+          spellbook_spells_by_level: [6, 8],
           prepared_formula: 'class_level',
           prepared_add_ability_mod: true,
           prepared_min: 1,
@@ -1413,11 +1437,18 @@ test('legality blocks spell selections above class spell-preparation caps', () =
       { id: 'detect-magic', name: 'Detect Magic', level: 1, classes: ['wizard'], source: 'SRD', grantedBySubclassIds: [], countsAgainstSelectionLimit: true, sourceFeatureKey: null },
       { id: 'identify', name: 'Identify', level: 1, classes: ['wizard'], source: 'SRD', grantedBySubclassIds: [], countsAgainstSelectionLimit: true, sourceFeatureKey: null },
       { id: 'feather-fall', name: 'Feather Fall', level: 1, classes: ['wizard'], source: 'SRD', grantedBySubclassIds: [], countsAgainstSelectionLimit: true, sourceFeatureKey: null },
+      { id: 'burning-hands', name: 'Burning Hands', level: 1, classes: ['wizard'], source: 'SRD', grantedBySubclassIds: [], countsAgainstSelectionLimit: true, sourceFeatureKey: null },
+      { id: 'charm-person', name: 'Charm Person', level: 1, classes: ['wizard'], source: 'SRD', grantedBySubclassIds: [], countsAgainstSelectionLimit: true, sourceFeatureKey: null },
+      { id: 'chromatic-orb', name: 'Chromatic Orb', level: 1, classes: ['wizard'], source: 'SRD', grantedBySubclassIds: [], countsAgainstSelectionLimit: true, sourceFeatureKey: null },
+      { id: 'comprehend-languages', name: 'Comprehend Languages', level: 1, classes: ['wizard'], source: 'SRD', grantedBySubclassIds: [], countsAgainstSelectionLimit: true, sourceFeatureKey: null },
+      { id: 'disguise-self', name: 'Disguise Self', level: 1, classes: ['wizard'], source: 'SRD', grantedBySubclassIds: [], countsAgainstSelectionLimit: true, sourceFeatureKey: null },
+      { id: 'expeditious-retreat', name: 'Expeditious Retreat', level: 1, classes: ['wizard'], source: 'SRD', grantedBySubclassIds: [], countsAgainstSelectionLimit: true, sourceFeatureKey: null },
+      { id: 'false-life', name: 'False Life', level: 1, classes: ['wizard'], source: 'SRD', grantedBySubclassIds: [], countsAgainstSelectionLimit: true, sourceFeatureKey: null },
     ],
     sourceCollections: {
       classSources: ['SRD'],
       subclassSources: ['SRD'],
-      spellSources: ['SRD', 'SRD', 'SRD', 'SRD', 'SRD', 'SRD'],
+      spellSources: ['SRD', 'SRD', 'SRD', 'SRD', 'SRD', 'SRD', 'SRD', 'SRD', 'SRD', 'SRD', 'SRD', 'SRD', 'SRD'],
       featSources: [],
     },
     grantedSpellIds: [],
@@ -1425,7 +1456,7 @@ test('legality blocks spell selections above class spell-preparation caps', () =
   }))
 
   assert.equal(result.derived?.spellLevelCaps[1], 4)
-  assert.equal(result.derived?.leveledSpellSelectionCap, 5)
+  assert.equal(result.derived?.leveledSpellSelectionCap, 12)
   assert.equal(result.checks.find((check) => check.key === 'spell_selection_count')?.passed, false)
 })
 
@@ -1631,6 +1662,7 @@ test('deriveCharacter exposes per-source spellcasting summaries for multiclass c
           mode: 'spellbook',
           spellcasting_ability: 'int',
           cantrips_known_by_level: [3, 3, 3],
+          spellbook_spells_by_level: [6, 8, 10],
           prepared_formula: 'class_level',
           prepared_add_ability_mod: true,
           prepared_min: 1,
@@ -1697,7 +1729,7 @@ test('deriveCharacter exposes per-source spellcasting summaries for multiclass c
 
   assert.equal(derived.spellcasting.sources.length, 2)
   assert.equal(derived.spellcasting.sources[0]?.className, 'Wizard')
-  assert.equal(derived.spellcasting.sources[0]?.selectionSummary, 'Wizard can prepare 6 spells from its spellbook.')
+  assert.equal(derived.spellcasting.sources[0]?.selectionSummary, 'Wizard has 10 leveled spells in its spellbook and can prepare 6 of them.')
   assert.deepEqual(derived.spellcasting.sources[0]?.selectedSpellCountsByLevel, { 0: 1, 1: 1 })
   assert.equal(derived.spellcasting.sources[1]?.className, 'Cleric')
   assert.equal(derived.spellcasting.sources[1]?.selectionSummary, 'Cleric can prepare 3 spells.')
@@ -1720,6 +1752,7 @@ test('legality enforces spell selection caps per spellcasting source', () => {
           mode: 'spellbook',
           spellcasting_ability: 'int',
           cantrips_known_by_level: [3],
+          spellbook_spells_by_level: [6],
           prepared_formula: 'class_level',
           prepared_add_ability_mod: true,
           prepared_min: 1,

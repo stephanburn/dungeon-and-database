@@ -2,7 +2,7 @@ import type {
   StartingEquipmentPackageEntry,
   WeaponCatalogEntry,
 } from '@/lib/content/equipment-content'
-import type { EquipmentItem } from '@/lib/types/database'
+import type { CharacterEquipmentItem, EquipmentItem } from '@/lib/types/database'
 import type { EquipmentItemChoiceInput } from '@/lib/characters/choice-persistence'
 
 export type StartingEquipmentSelections = Record<string, {
@@ -433,4 +433,69 @@ export function resolveStartingEquipment(
     lines,
     issues: Array.from(new Set(issues)),
   }
+}
+
+export function restoreStartingEquipmentSelections(args: {
+  packages: StartingEquipmentPackageEntry[]
+  savedItems: CharacterEquipmentItem[]
+  equipmentItems: EquipmentItem[]
+  weapons: WeaponCatalogEntry[]
+}): StartingEquipmentSelections {
+  const { packages, savedItems, equipmentItems, weapons } = args
+  const restored: StartingEquipmentSelections = {}
+
+  for (const pkg of packages) {
+    const packageRows = savedItems.filter((row) => (
+      row.source_category === 'starting_equipment'
+      && row.source_entity_id === pkg.id
+      && row.source_package_item_id
+    ))
+    if (packageRows.length === 0) continue
+
+    const selectedPackageItemIdsByGroup: Record<string, string> = {}
+    for (const group of getPackageChoiceGroups(pkg)) {
+      const selectedOption = group.options.find((option) => (
+        packageRows.some((row) => row.source_package_item_id === option.id)
+      ))
+      if (selectedOption) {
+        selectedPackageItemIdsByGroup[group.key] = selectedOption.id
+      }
+    }
+
+    const helperSelectionsByPackageItemId: Record<string, string[]> = {}
+    for (const packageItem of pkg.items) {
+      const requirements = getHelperRequirements(packageItem, equipmentItems, weapons)
+      if (requirements.length === 0) continue
+
+      const availableRows = packageRows.filter((row) => row.source_package_item_id === packageItem.id)
+      if (availableRows.length === 0) continue
+
+      const usedIndexes = new Set<number>()
+      const restoredSelections = requirements.map((requirement) => {
+        const optionIds = new Set(requirement.options.map((option) => option.itemId))
+        const matchIndex = availableRows.findIndex((row, index) => (
+          !usedIndexes.has(index) && optionIds.has(row.item_id)
+        ))
+        if (matchIndex < 0) return ''
+        usedIndexes.add(matchIndex)
+        return availableRows[matchIndex]?.item_id ?? ''
+      })
+
+      if (restoredSelections.some(Boolean)) {
+        helperSelectionsByPackageItemId[packageItem.id] = restoredSelections
+      }
+    }
+
+    if (
+      Object.keys(selectedPackageItemIdsByGroup).length > 0
+      || Object.keys(helperSelectionsByPackageItemId).length > 0
+    ) {
+      restored[pkg.id] = {
+        selectedPackageItemIdsByGroup,
+        helperSelectionsByPackageItemId,
+      }
+    }
+  }
+
+  return restored
 }

@@ -1,8 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { requireAuth, jsonError, readJsonBody } from '@/lib/api-helpers'
 import { hasDmAccess } from '@/lib/auth/roles'
-import { buildLegalityInput } from '@/lib/legality/build-input'
-import { runLegalityChecks } from '@/lib/legality/engine'
 import { loadCharacterState } from '@/lib/characters/load-character'
 import {
   buildCharacterAtomicSavePayload,
@@ -177,15 +175,20 @@ export async function GET(
   return NextResponse.json({
     ...state.character,
     skill_proficiencies: state.initialSkillProficiencies,
+    typed_skill_proficiencies: state.initialTypedSkillProficiencies,
     ability_bonus_choices: state.initialAbilityBonusChoices,
+    typed_ability_bonus_choices: state.initialTypedAbilityBonusChoices,
     asi_choices: state.initialAsiChoices,
     language_choices: state.initialLanguageChoices,
+    typed_language_choices: state.initialTypedLanguageChoices,
     tool_choices: state.initialToolChoices,
+    typed_tool_choices: state.initialTypedToolChoices,
     spell_choices: state.initialSpellChoices,
     spell_selections: state.initialSpellSelections,
     feat_choices: state.initialFeatChoices,
     feature_option_choices: state.initialFeatureOptionChoices,
     equipment_items: state.initialEquipmentItems,
+    stat_rolls: state.initialStatRolls,
     legality: state.legality,
     derived: state.legality?.derived ?? null,
     load_warnings: loadedState.warnings,
@@ -258,18 +261,19 @@ export async function PUT(
 
   if (saveError) return jsonError(saveError.message, 500)
 
-  // Capture snapshot and run legality check
+  // Capture snapshot and reload through the shared cutover loader so
+  // save responses use the same class-level aggregation as the rest of the app.
   await captureSnapshot(supabase, params.id)
-  const legalityInput = await buildLegalityInput(supabase, params.id)
-  const legalityResult = legalityInput ? runLegalityChecks(legalityInput) : null
+  const loadedState = await loadCharacterState(supabase, params.id)
+  if (loadedState.status === 'not_found') return jsonError('Character not found', 404)
+  if (loadedState.status === 'error') return jsonError(loadedState.error.message, 500)
 
-  const { data: updated } = await supabase
-    .from('characters')
-    .select(`*, species:species_id(*), background:background_id(*), character_levels(*), character_stat_rolls(*)`)
-    .eq('id', params.id)
-    .single()
-
-  return NextResponse.json({ character: updated, legality: legalityResult })
+  return NextResponse.json({
+    character: loadedState.state.character,
+    legality: loadedState.state.legality,
+    derived: loadedState.state.legality?.derived ?? null,
+    load_warnings: loadedState.warnings,
+  })
 }
 
 export async function DELETE(

@@ -7,6 +7,7 @@ import type {
 import type { EquipmentItem } from '@/lib/types/database'
 import {
   resolveStartingEquipment,
+  restoreStartingEquipmentSelections,
   type StartingEquipmentSelections,
 } from '@/lib/characters/starting-equipment'
 
@@ -274,4 +275,201 @@ test('resolveStartingEquipment reports missing helper selections', () => {
 
   assert.deepEqual(resolved.items, [])
   assert.match(resolved.issues[0] ?? '', /Choose musical instrument/i)
+})
+
+test('restoreStartingEquipmentSelections rebuilds choice-group and helper selections from saved rows', () => {
+  const packages: StartingEquipmentPackageEntry[] = [{
+    id: 'fighter-package-id',
+    key: 'class:fighter:phb',
+    name: 'Fighter Starting Equipment',
+    description: 'PHB fighter package',
+    source: 'PHB',
+    amended: false,
+    amendment_note: null,
+    items: [
+      {
+        id: 'armor-chain-mail',
+        package_id: 'fighter-package-id',
+        item_id: 'chain-mail-id',
+        quantity: 1,
+        item_order: 10,
+        choice_group: 'armor_loadout',
+        notes: null,
+        item_key: 'chain_mail',
+        item_name: 'Chain Mail',
+        item_category: 'armor',
+      },
+      {
+        id: 'armor-archer-loadout',
+        package_id: 'fighter-package-id',
+        item_id: 'archer-fighter-loadout-id',
+        quantity: 1,
+        item_order: 20,
+        choice_group: 'armor_loadout',
+        notes: null,
+        item_key: 'archer_fighter_loadout',
+        item_name: 'Leather Armor, Longbow, and 20 Arrows',
+        item_category: 'gear',
+      },
+      {
+        id: 'primary-weapon-set',
+        package_id: 'fighter-package-id',
+        item_id: 'martial-weapon-shield-id',
+        quantity: 1,
+        item_order: 30,
+        choice_group: 'primary_weapon',
+        notes: null,
+        item_key: 'martial_weapon_and_shield_set',
+        item_name: 'Martial Weapon and Shield',
+        item_category: 'gear',
+      },
+      {
+        id: 'pack-explorer',
+        package_id: 'fighter-package-id',
+        item_id: 'explorers-pack-id',
+        quantity: 1,
+        item_order: 40,
+        choice_group: 'pack',
+        notes: null,
+        item_key: 'explorers_pack',
+        item_name: 'Explorer\'s Pack',
+        item_category: 'gear',
+      },
+    ],
+  }, {
+    id: 'entertainer-package-id',
+    key: 'background:entertainer:phb',
+    name: 'Entertainer Starting Equipment',
+    description: 'PHB entertainer package',
+    source: 'PHB',
+    amended: false,
+    amendment_note: null,
+    items: [
+      {
+        id: 'instrument-choice',
+        package_id: 'entertainer-package-id',
+        item_id: 'instrument-placeholder-id',
+        quantity: 1,
+        item_order: 10,
+        choice_group: '',
+        notes: null,
+        item_key: 'musical_instrument_choice',
+        item_name: 'Musical Instrument Choice',
+        item_category: 'gear',
+      },
+    ],
+  }]
+
+  const savedItems = [
+    {
+      id: 'row-1',
+      character_id: 'character-1',
+      item_id: 'leather-armor-id',
+      quantity: 1,
+      equipped: false,
+      source_package_item_id: 'armor-archer-loadout',
+      source_category: 'starting_equipment',
+      source_entity_id: 'fighter-package-id',
+      notes: null,
+      created_at: '',
+    },
+    {
+      id: 'row-2',
+      character_id: 'character-1',
+      item_id: 'longbow-id',
+      quantity: 1,
+      equipped: false,
+      source_package_item_id: 'armor-archer-loadout',
+      source_category: 'starting_equipment',
+      source_entity_id: 'fighter-package-id',
+      notes: null,
+      created_at: '',
+    },
+    {
+      id: 'row-3',
+      character_id: 'character-1',
+      item_id: 'arrows-id',
+      quantity: 20,
+      equipped: false,
+      source_package_item_id: 'armor-archer-loadout',
+      source_category: 'starting_equipment',
+      source_entity_id: 'fighter-package-id',
+      notes: null,
+      created_at: '',
+    },
+    {
+      id: 'row-4',
+      character_id: 'character-1',
+      item_id: 'longsword-id',
+      quantity: 1,
+      equipped: false,
+      source_package_item_id: 'primary-weapon-set',
+      source_category: 'starting_equipment',
+      source_entity_id: 'fighter-package-id',
+      notes: null,
+      created_at: '',
+    },
+    {
+      id: 'row-5',
+      character_id: 'character-1',
+      item_id: 'shield-id',
+      quantity: 1,
+      equipped: false,
+      source_package_item_id: 'primary-weapon-set',
+      source_category: 'starting_equipment',
+      source_entity_id: 'fighter-package-id',
+      notes: null,
+      created_at: '',
+    },
+    {
+      id: 'row-6',
+      character_id: 'character-1',
+      item_id: 'explorers-pack-id',
+      quantity: 1,
+      equipped: false,
+      source_package_item_id: 'pack-explorer',
+      source_category: 'starting_equipment',
+      source_entity_id: 'fighter-package-id',
+      notes: null,
+      created_at: '',
+    },
+    {
+      id: 'row-7',
+      character_id: 'character-1',
+      item_id: 'lute-id',
+      quantity: 1,
+      equipped: false,
+      source_package_item_id: 'instrument-choice',
+      source_category: 'starting_equipment',
+      source_entity_id: 'entertainer-package-id',
+      notes: null,
+      created_at: '',
+    },
+  ]
+
+  const restored = restoreStartingEquipmentSelections({
+    packages,
+    savedItems,
+    equipmentItems,
+    weapons,
+  })
+
+  assert.deepEqual(restored, {
+    'fighter-package-id': {
+      selectedPackageItemIdsByGroup: {
+        armor_loadout: 'armor-archer-loadout',
+        primary_weapon: 'primary-weapon-set',
+        pack: 'pack-explorer',
+      },
+      helperSelectionsByPackageItemId: {
+        'primary-weapon-set': ['longsword-id'],
+      },
+    },
+    'entertainer-package-id': {
+      selectedPackageItemIdsByGroup: {},
+      helperSelectionsByPackageItemId: {
+        'instrument-choice': ['lute-id'],
+      },
+    },
+  })
 })

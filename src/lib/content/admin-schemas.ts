@@ -24,6 +24,7 @@ const spellcastingProgressionSchema = z.object({
   spellcasting_ability: abilityKeySchema.optional(),
   cantrips_known_by_level: z.array(z.number().int().min(0)).optional(),
   spells_known_by_level: z.array(z.number().int().min(0)).optional(),
+  spellbook_spells_by_level: z.array(z.number().int().min(0)).optional(),
   prepared_formula: z.enum([
     'class_level',
     'half_level_down',

@@ -1,5 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { Database } from '@/lib/types/database'
+import type { CharacterClassLevel, Database } from '@/lib/types/database'
+import {
+  aggregateCharacterLevels,
+  sortCharacterClassLevels,
+} from '@/lib/characters/class-levels'
 
 /**
  * Captures a full character snapshot and stores it in character_snapshots.
@@ -8,9 +12,9 @@ export async function captureSnapshot(
   supabase: SupabaseClient<Database>,
   characterId: string
 ): Promise<void> {
-  const [characterResult, levelsResult, hpRollsResult, choicesResult, spellSelectionsResult, featChoicesResult, abilityBonusChoicesResult, asiChoicesResult, featureOptionChoicesResult, languageChoicesResult, toolChoicesResult, equipmentItemsResult, rollsResult, skillsResult] = await Promise.all([
+  const [characterResult, classLevelsResult, hpRollsResult, choicesResult, spellSelectionsResult, featChoicesResult, abilityBonusChoicesResult, asiChoicesResult, featureOptionChoicesResult, languageChoicesResult, toolChoicesResult, equipmentItemsResult, rollsResult, skillsResult] = await Promise.all([
     supabase.from('characters').select('*').eq('id', characterId).single(),
-    supabase.from('character_levels').select('*').eq('character_id', characterId),
+    supabase.from('character_class_levels').select('*').eq('character_id', characterId),
     supabase.from('character_hp_rolls').select('*').eq('character_id', characterId),
     supabase.from('character_choices').select('*').eq('character_id', characterId),
     supabase.from('character_spell_selections').select('*').eq('character_id', characterId),
@@ -27,10 +31,12 @@ export async function captureSnapshot(
 
   if (!characterResult.data) return
 
-  const levels = levelsResult.data ?? []
+  const classLevels = sortCharacterClassLevels((classLevelsResult.data ?? []) as CharacterClassLevel[])
+  const levels = aggregateCharacterLevels(classLevels)
   const snapshot = {
     character: characterResult.data,
     levels,
+    class_levels: classLevels,
     hp_rolls: hpRollsResult.data ?? [],
     choices: choicesResult.data ?? [],
     spell_selections: spellSelectionsResult.data ?? [],
@@ -48,6 +54,6 @@ export async function captureSnapshot(
   await supabase.from('character_snapshots').insert({
     character_id: characterId,
     snapshot,
-    level_total: levels.reduce((sum, l) => sum + (l.level ?? 0), 0),
+    level_total: classLevels.length,
   })
 }

@@ -61,7 +61,7 @@ test('loadCharacterState returns warnings for missing optional relations', async
       error: null,
     },
     [`species:eq:00000000-0000-0000-0000-000000000010`]: { data: null, error: null },
-    [`character_levels:eq:${characterId}`]: { data: [], error: null },
+    [`character_class_levels:eq:${characterId}`]: { data: [], error: null },
     [`character_skill_proficiencies:eq:${characterId}`]: { data: [], error: null },
     [`character_ability_bonus_choices:eq:${characterId}`]: { data: [], error: null },
     [`character_asi_choices:eq:${characterId}`]: { data: [], error: null },
@@ -81,6 +81,120 @@ test('loadCharacterState returns warnings for missing optional relations', async
   if (result.status !== 'success') return
   assert.equal(result.warnings.length, 1)
   assert.equal(result.warnings[0]?.scope, 'species')
+})
+
+test('loadCharacterState rebuilds aggregate levels from per-level class history', async () => {
+  const wizardLevelOneId = '10000000-0000-0000-0000-000000000001'
+  const wizardLevelTwoId = '10000000-0000-0000-0000-000000000002'
+  const fighterLevelOneId = '20000000-0000-0000-0000-000000000001'
+  const wizardClassId = '30000000-0000-0000-0000-000000000001'
+  const fighterClassId = '30000000-0000-0000-0000-000000000002'
+  const evocatorSubclassId = '40000000-0000-0000-0000-000000000001'
+
+  const supabase = createSupabaseMock({
+    [`characters:eq:${characterId}`]: {
+      data: {
+        id: characterId,
+        user_id: 'user-1',
+        campaign_id: 'campaign-1',
+        name: 'Aelar',
+        species_id: null,
+        background_id: null,
+        alignment: null,
+        experience_points: 0,
+        status: 'draft',
+        stat_method: 'point_buy',
+        base_str: 8,
+        base_dex: 14,
+        base_con: 13,
+        base_int: 15,
+        base_wis: 12,
+        base_cha: 10,
+        hp_max: 14,
+        character_type: 'pc',
+        dm_notes: null,
+        created_at: '',
+        updated_at: '',
+      },
+      error: null,
+    },
+    [`character_class_levels:eq:${characterId}`]: {
+      data: [
+        {
+          id: wizardLevelOneId,
+          character_id: characterId,
+          class_id: wizardClassId,
+          level_number: 1,
+          subclass_id: null,
+          hp_roll: 6,
+          taken_at: '2026-04-20T10:00:00.000Z',
+        },
+        {
+          id: fighterLevelOneId,
+          character_id: characterId,
+          class_id: fighterClassId,
+          level_number: 1,
+          subclass_id: null,
+          hp_roll: 10,
+          taken_at: '2026-04-21T10:00:00.000Z',
+        },
+        {
+          id: wizardLevelTwoId,
+          character_id: characterId,
+          class_id: wizardClassId,
+          level_number: 2,
+          subclass_id: evocatorSubclassId,
+          hp_roll: 4,
+          taken_at: '2026-04-22T10:00:00.000Z',
+        },
+      ],
+      error: null,
+    },
+    [`character_skill_proficiencies:eq:${characterId}`]: { data: [], error: null },
+    [`character_ability_bonus_choices:eq:${characterId}`]: { data: [], error: null },
+    [`character_asi_choices:eq:${characterId}`]: { data: [], error: null },
+    [`character_language_choices:eq:${characterId}`]: { data: [], error: null },
+    [`character_tool_choices:eq:${characterId}`]: { data: [], error: null },
+    [`character_feature_option_choices:eq:${characterId}`]: { data: [], error: null },
+    [`character_equipment_items:eq:${characterId}`]: { data: [], error: null },
+    [`character_spell_selections:eq:${characterId}`]: { data: [], error: null },
+    [`character_feat_choices:eq:${characterId}`]: { data: [], error: null },
+    [`character_stat_rolls:eq:${characterId}`]: { data: [], error: null },
+  })
+
+  const result = await loadCharacterState(supabase as never, characterId, {
+    buildLegalityInputImpl: async () => null,
+  })
+
+  assert.equal(result.status, 'success')
+  if (result.status !== 'success') return
+
+  assert.equal(result.state.character.character_class_levels.length, 3)
+  assert.deepEqual(
+    result.state.character.character_levels.map((level) => ({
+      id: level.id,
+      class_id: level.class_id,
+      level: level.level,
+      subclass_id: level.subclass_id,
+      hp_roll: level.hp_roll,
+    })),
+    [
+      {
+        id: fighterLevelOneId,
+        class_id: fighterClassId,
+        level: 1,
+        subclass_id: null,
+        hp_roll: 10,
+      },
+      {
+        id: wizardLevelTwoId,
+        class_id: wizardClassId,
+        level: 2,
+        subclass_id: evocatorSubclassId,
+        hp_roll: 4,
+      },
+    ]
+  )
 })
 
 test('loadCharacterState returns a hard failure when one parallel query errors', async () => {
@@ -111,9 +225,9 @@ test('loadCharacterState returns a hard failure when one parallel query errors',
       },
       error: null,
     },
-    [`character_levels:eq:${characterId}`]: {
+    [`character_class_levels:eq:${characterId}`]: {
       data: null,
-      error: { message: 'permission denied for character_levels' },
+      error: { message: 'permission denied for character_class_levels' },
     },
   })
 

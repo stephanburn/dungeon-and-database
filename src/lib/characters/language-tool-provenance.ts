@@ -1,4 +1,4 @@
-import type { Background, Class, Species } from '@/lib/types/database'
+import type { Background, Class, Species, Subclass } from '@/lib/types/database'
 import type { LanguageChoiceInput, ToolChoiceInput } from '@/lib/characters/choice-persistence'
 
 type LanguageToolArgs = {
@@ -102,7 +102,10 @@ export const STANDARD_TOOL_OPTIONS = [
   'Viol',
 ]
 
-const ARTISANS_TOOL_OPTIONS = STANDARD_TOOL_OPTIONS.filter((tool) => tool.includes("Tools") || tool.includes("Supplies") || tool.includes('Utensils'))
+export const ARTISANS_TOOL_OPTIONS = STANDARD_TOOL_OPTIONS.filter((tool) => tool.includes("Tools") || tool.includes("Supplies") || tool.includes('Utensils'))
+export const MUSICAL_INSTRUMENT_OPTIONS = STANDARD_TOOL_OPTIONS.filter((tool) => (
+  ['Bagpipes', 'Drum', 'Dulcimer', 'Flute', 'Horn', 'Lute', 'Lyre', 'Pan Flute', 'Shawm', 'Viol'].includes(tool)
+))
 
 const SPECIES_LANGUAGE_CHOICE_RULES: SpeciesChoiceRule[] = [
   {
@@ -211,7 +214,7 @@ function parseBackgroundLanguages(background: Background | null): ParsedBackgrou
   }
 }
 
-function getSpeciesLanguageChoiceConfig(species: Species | null, availableLanguages = STANDARD_LANGUAGE_OPTIONS): LanguageChoiceConfig | null {
+export function getSpeciesLanguageChoiceConfig(species: Species | null, availableLanguages = STANDARD_LANGUAGE_OPTIONS): LanguageChoiceConfig | null {
   if (!species) return null
 
   if (species.name === 'Changeling' && species.source === 'ERftLW') {
@@ -251,7 +254,7 @@ function getSpeciesLanguageChoiceConfig(species: Species | null, availableLangua
   return null
 }
 
-function getBackgroundLanguageChoiceConfig(background: Background | null, availableLanguages = STANDARD_LANGUAGE_OPTIONS): LanguageChoiceConfig | null {
+export function getBackgroundLanguageChoiceConfig(background: Background | null, availableLanguages = STANDARD_LANGUAGE_OPTIONS): LanguageChoiceConfig | null {
   if (!background) return null
 
   const parsed = parseBackgroundLanguages(background)
@@ -266,7 +269,62 @@ function getBackgroundLanguageChoiceConfig(background: Background | null, availa
   }
 }
 
-function getSpeciesToolChoiceConfig(species: Species | null, availableTools = STANDARD_TOOL_OPTIONS): ToolChoiceConfig | null {
+export function getClassToolChoiceConfig(selectedClass: Class | null, availableTools = STANDARD_TOOL_OPTIONS): ToolChoiceConfig | null {
+  if (!selectedClass) return null
+
+  const normalizedSource = selectedClass.source.toUpperCase()
+  if (selectedClass.name === 'Bard' && ['PHB', 'SRD'].includes(normalizedSource)) {
+    return {
+      count: 3,
+      options: availableTools.filter((tool) => MUSICAL_INSTRUMENT_OPTIONS.includes(tool)),
+      sourceCategory: 'class_choice',
+      sourceEntityId: selectedClass.id,
+      sourceFeatureKey: 'class_tools:bard',
+    }
+  }
+
+  if (selectedClass.name === 'Monk' && ['PHB', 'SRD'].includes(normalizedSource)) {
+    return {
+      count: 1,
+      options: availableTools.filter((tool) => ARTISANS_TOOL_OPTIONS.includes(tool) || MUSICAL_INSTRUMENT_OPTIONS.includes(tool)),
+      sourceCategory: 'class_choice',
+      sourceEntityId: selectedClass.id,
+      sourceFeatureKey: 'class_tools:monk',
+    }
+  }
+
+  if (selectedClass.name === 'Artificer' && normalizedSource === 'ERFTLW') {
+    return {
+      count: 1,
+      options: availableTools.filter((tool) => ARTISANS_TOOL_OPTIONS.includes(tool)),
+      sourceCategory: 'class_choice',
+      sourceEntityId: selectedClass.id,
+      sourceFeatureKey: 'class_tools:artificer',
+    }
+  }
+
+  return null
+}
+
+export function getSubclassLanguageChoiceConfig(
+  subclass: Subclass | null,
+  availableLanguages = STANDARD_LANGUAGE_OPTIONS,
+  excludedLanguages: string[] = []
+): LanguageChoiceConfig | null {
+  if (!subclass) return null
+  if (!(subclass.name === 'Knowledge Domain' && subclass.source === 'PHB')) return null
+
+  const excluded = new Set(excludedLanguages.map((language) => language.trim().toLowerCase()))
+  return {
+    count: 2,
+    options: availableLanguages.filter((language) => !excluded.has(language.trim().toLowerCase())),
+    sourceCategory: 'subclass_choice',
+    sourceEntityId: subclass.id,
+    sourceFeatureKey: 'subclass_feature:knowledge_domain:blessings_of_knowledge',
+  }
+}
+
+export function getSpeciesToolChoiceConfig(species: Species | null, availableTools = STANDARD_TOOL_OPTIONS): ToolChoiceConfig | null {
   if (!species) return null
 
   if (species.name === 'Warforged' && species.source === 'ERftLW') {
@@ -380,7 +438,9 @@ export function buildTypedToolChoices({
   species,
 }: Pick<LanguageToolArgs, 'toolChoices' | 'selectedClass' | 'species'>): ToolChoiceInput[] {
   const speciesConfig = getSpeciesToolChoiceConfig(species)
+  const classConfig = getClassToolChoiceConfig(selectedClass)
   let speciesLeft = speciesConfig?.count ?? 0
+  let classLeft = classConfig?.count ?? 0
 
   return dedupe(toolChoices).map((tool) => {
     if (speciesConfig && speciesLeft > 0 && speciesConfig.options.includes(tool)) {
@@ -391,6 +451,17 @@ export function buildTypedToolChoices({
         source_category: speciesConfig.sourceCategory,
         source_entity_id: speciesConfig.sourceEntityId,
         source_feature_key: speciesConfig.sourceFeatureKey,
+      }
+    }
+
+    if (classConfig && classLeft > 0 && classConfig.options.includes(tool)) {
+      classLeft -= 1
+      return {
+        tool,
+        character_level_id: null,
+        source_category: classConfig.sourceCategory,
+        source_entity_id: classConfig.sourceEntityId,
+        source_feature_key: classConfig.sourceFeatureKey,
       }
     }
 

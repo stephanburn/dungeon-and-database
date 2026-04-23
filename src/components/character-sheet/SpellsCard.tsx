@@ -104,6 +104,13 @@ export function SpellsCard({
   const effectiveLeveledSpellSelectionCap = activeDerivedSource?.leveledSpellSelectionCap ?? derivedSpellcasting?.leveledSpellSelectionCap ?? leveledSpellSelectionCap
   const effectiveCantripSelectionCap = activeDerivedSource?.cantripSelectionCap ?? derivedSpellcasting?.cantripSelectionCap ?? cantripSelectionCap
   const effectiveSelectionSummary = activeDerivedSource?.selectionSummary ?? derivedSpellcasting?.selectionSummary ?? selectionSummary
+  const selectionInstruction = activeDerivedSource?.mode === 'spellbook'
+    ? 'Choose the spells written in this spellbook right now.'
+    : activeDerivedSource?.mode === 'prepared'
+      ? 'Choose the spells this character has prepared right now.'
+      : activeDerivedSource?.mode === 'known'
+        ? 'Choose the spells this character knows right now.'
+        : 'Choose the spells this character can actively use right now.'
   const derivedSelectedSpellMap = new Map(
     (derivedSpellcasting?.selectedSpells ?? []).map((spell) => [spell.id, spell])
   )
@@ -164,7 +171,7 @@ export function SpellsCard({
       <CardContent className="space-y-4">
         {canEdit && (
           <div className="space-y-1 text-xs text-neutral-500">
-            <p>Choose the spells this character can actively use right now.</p>
+            <p>{selectionInstruction}</p>
             {effectiveSelectionSummary && <p>{effectiveSelectionSummary}</p>}
             {effectiveLeveledSpellSelectionCap !== undefined && (
               <p>Leveled spells: {leveledSelectionCount}/{effectiveLeveledSpellSelectionCap} selected. Cantrips are shown separately.</p>

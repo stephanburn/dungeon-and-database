@@ -1,4 +1,4 @@
-import type { Background, Class, Species } from '@/lib/types/database'
+import type { Background, Class, Species, Subclass } from '@/lib/types/database'
 import type { SkillProficiencyInput } from '@/lib/characters/choice-persistence'
 import { SKILLS, normalizeSkillKey, type SkillKey } from '@/lib/skills'
 
@@ -13,6 +13,13 @@ type SpeciesSkillChoiceConfig = {
   count: number
   from: Set<SkillKey>
   sourceFeatureKey: string
+}
+
+type SubclassSkillChoiceConfig = {
+  count: number
+  from: Set<SkillKey>
+  sourceFeatureKey: string
+  expertise: boolean
 }
 
 export type SkillChoiceBuckets = {
@@ -84,6 +91,21 @@ export function getSpeciesSkillChoiceConfig(species: Species | null): SpeciesSki
       count: 1,
       from: new Set<SkillKey>(SKILLS.map((skill) => skill.key)),
       sourceFeatureKey: 'species_trait:variant_human_skill',
+    }
+  }
+
+  return null
+}
+
+export function getSubclassSkillChoiceConfig(subclass: Subclass | null): SubclassSkillChoiceConfig | null {
+  if (!subclass) return null
+
+  if (subclass.name === 'Knowledge Domain' && subclass.source === 'PHB') {
+    return {
+      count: 2,
+      from: new Set<SkillKey>(['arcana', 'history', 'nature', 'religion']),
+      sourceFeatureKey: 'subclass_feature:knowledge_domain:blessings_of_knowledge',
+      expertise: true,
     }
   }
 
