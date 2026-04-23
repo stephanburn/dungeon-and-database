@@ -903,7 +903,7 @@ export function CharacterSheet({
                     <SelectItem key={s.id} value={s.id} className="text-neutral-200">
                       <span className="flex items-center gap-2">
                         {s.name}
-                        <SourceTag source={s.source} amended={s.amended} />
+                        <SourceTag source={s.source} amended={s.amended} amendmentNote={s.amendment_note} />
                       </span>
                     </SelectItem>
                   ))}
@@ -912,7 +912,13 @@ export function CharacterSheet({
             ) : (
               <div className="flex items-center gap-2">
                 <p className="text-neutral-200">{initial.species?.name ?? '—'}</p>
-                {initial.species && <SourceTag source={initial.species.source} amended={initial.species.amended} />}
+                {initial.species && (
+                  <SourceTag
+                    source={initial.species.source}
+                    amended={initial.species.amended}
+                    amendmentNote={initial.species.amendment_note}
+                  />
+                )}
               </div>
             )}
           </div>
@@ -929,7 +935,7 @@ export function CharacterSheet({
                     <SelectItem key={b.id} value={b.id} className="text-neutral-200">
                       <span className="flex items-center gap-2">
                         {b.name}
-                        <SourceTag source={b.source} amended={b.amended} />
+                        <SourceTag source={b.source} amended={b.amended} amendmentNote={b.amendment_note} />
                       </span>
                     </SelectItem>
                   ))}
@@ -938,7 +944,13 @@ export function CharacterSheet({
             ) : (
               <div className="flex items-center gap-2">
                 <p className="text-neutral-200">{initial.background?.name ?? '—'}</p>
-                {initial.background && <SourceTag source={initial.background.source} amended={initial.background.amended} />}
+                {initial.background && (
+                  <SourceTag
+                    source={initial.background.source}
+                    amended={initial.background.amended}
+                    amendmentNote={initial.background.amendment_note}
+                  />
+                )}
               </div>
             )}
           </div>
