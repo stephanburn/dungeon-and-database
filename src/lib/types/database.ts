@@ -644,6 +644,10 @@ export type Database = {
         Args: { p_character_id: string; p_payload?: Record<string, unknown> }
         Returns: Character
       }
+      save_character_level_up_atomic: {
+        Args: { p_character_id: string; p_payload?: Record<string, unknown> }
+        Returns: Character
+      }
     }
     Enums: {
       user_role: UserRole

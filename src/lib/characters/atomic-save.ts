@@ -34,6 +34,14 @@ type SaveStatRollsInput = Array<{
   roll_set: number[]
 }>
 
+type LevelUpInput = {
+  class_id: string
+  previous_level: number
+  new_level: number
+  subclass_id?: string | null
+  hp_roll?: number | null
+}
+
 function normalizeSpellChoice(choice: SpellChoiceInput) {
   if (typeof choice === 'string') {
     return {
@@ -315,12 +323,75 @@ export async function buildCharacterAtomicSavePayload(
   return payload
 }
 
+export async function buildCharacterLevelUpSavePayload(
+  supabase: SupabaseClient<Database>,
+  input: {
+    characterFields: Record<string, unknown>
+    level_up: LevelUpInput
+    skill_proficiencies?: SkillProficiencyInput[]
+    asi_choices?: AsiChoiceInput[]
+    feature_option_choices?: FeatureOptionChoiceInput[]
+    spell_choices?: SpellChoiceInput[]
+    feat_choices?: FeatChoiceInput[]
+  }
+) {
+  const payload: CharacterAtomicPayload = {
+    ...input.characterFields,
+    level_up: {
+      class_id: input.level_up.class_id,
+      previous_level: input.level_up.previous_level,
+      new_level: input.level_up.new_level,
+      subclass_id: input.level_up.subclass_id ?? null,
+      hp_roll: input.level_up.hp_roll ?? null,
+    },
+  }
+
+  if (input.skill_proficiencies !== undefined) {
+    payload.skill_proficiencies = input.skill_proficiencies
+      .filter((choice) => (typeof choice === 'string' ? choice.length > 0 : choice.skill.length > 0))
+      .map(normalizeSkillChoice)
+  }
+
+  if (input.asi_choices !== undefined) {
+    payload.asi_choices = input.asi_choices.map(normalizeAsiChoice)
+  }
+
+  if (input.feature_option_choices !== undefined) {
+    payload.feature_option_choices = input.feature_option_choices
+      .filter((choice) => choice.option_group_key.trim().length > 0 && choice.option_key.trim().length > 0)
+      .map(normalizeFeatureOptionChoice)
+  }
+
+  if (input.spell_choices !== undefined) {
+    payload.spell_choices = input.spell_choices.map(normalizeSpellChoice)
+  }
+
+  if (input.feat_choices !== undefined) {
+    payload.feat_choices = input.feat_choices
+      .filter((choice) => (typeof choice === 'string' ? choice.length > 0 : choice.feat_id.length > 0))
+      .map(normalizeFeatChoice)
+  }
+
+  return payload
+}
+
 export async function saveCharacterAtomic(
   supabase: SupabaseClient<Database>,
   characterId: string,
   payload: CharacterAtomicPayload
 ) {
   return supabase.rpc('save_character_atomic', {
+    p_character_id: characterId,
+    p_payload: payload,
+  })
+}
+
+export async function saveCharacterLevelUpAtomic(
+  supabase: SupabaseClient<Database>,
+  characterId: string,
+  payload: CharacterAtomicPayload
+) {
+  return supabase.rpc('save_character_level_up_atomic', {
     p_character_id: characterId,
     p_payload: payload,
   })

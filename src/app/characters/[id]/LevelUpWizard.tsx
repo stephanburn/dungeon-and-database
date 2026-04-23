@@ -45,11 +45,8 @@ import {
   buildCombinedSpellSelections,
   buildTypedAsiChoices,
   buildLocalCharacterContext,
-  buildTypedAbilityBonusChoices,
   buildTypedFeatChoices,
-  buildTypedLanguageChoices,
   buildTypedSkillProficiencies,
-  buildTypedToolChoices,
   calculateLevelUpHpGain,
   ClassDetail,
   deriveLocalCharacter,
@@ -151,6 +148,31 @@ function setsDiffer(left: Set<string>, right: Set<string>): boolean {
   return false
 }
 
+function getFeatureOptionChoiceKey(choice: Pick<FeatureOptionChoiceInput, 'option_group_key' | 'option_key' | 'choice_order' | 'source_feature_key'>) {
+  return [
+    choice.option_group_key,
+    choice.option_key,
+    choice.choice_order ?? 0,
+    choice.source_feature_key ?? '',
+  ].join('::')
+}
+
+function getSpellSelectionKey(choice: CharacterSpellSelection | Exclude<ReturnType<typeof buildCombinedSpellSelections>[number], string>) {
+  return [
+    choice.spell_id,
+    choice.owning_class_id ?? '',
+    choice.granting_subclass_id ?? '',
+    choice.acquisition_mode ?? 'known',
+  ].join('::')
+}
+
+function getFeatChoiceKey(choice: Exclude<ReturnType<typeof buildTypedFeatChoices>[number], string>) {
+  return [
+    choice.feat_id,
+    choice.choice_kind ?? 'feat',
+  ].join('::')
+}
+
 export function LevelUpWizard({
   character,
   campaign,
@@ -249,6 +271,19 @@ export function LevelUpWizard({
         .map((choice) => `${choice.option_group_key}:${choice.option_key}`)
     ),
     [initialFeatureOptionChoices]
+  )
+  const initialFeatureOptionChoiceKeys = useMemo(
+    () => new Set(initialFeatureOptionChoices.map((choice) => getFeatureOptionChoiceKey({
+      option_group_key: choice.option_group_key,
+      option_key: choice.option_key,
+      choice_order: choice.choice_order,
+      source_feature_key: choice.source_feature_key,
+    }))),
+    [initialFeatureOptionChoices]
+  )
+  const initialSpellSelectionKeys = useMemo(
+    () => new Set(initialSpellSelections.map((choice) => getSpellSelectionKey(choice))),
+    [initialSpellSelections]
   )
 
   const currentClassIds = useMemo(
@@ -761,6 +796,57 @@ export function LevelUpWizard({
   const newFeatSlot = featSlots[currentFeatSlotCount] ?? null
   const newFeatSlotLabel = newFeatSlot?.label ?? null
   const needsFeatStep = Boolean(newFeatSlot)
+  const initialTypedFeatChoices = useMemo(
+    () => buildTypedFeatChoices(initialFeatChoices, currentDerived?.featSlots),
+    [currentDerived?.featSlots, initialFeatChoices]
+  )
+  const initialFeatChoiceKeys = useMemo(
+    () => new Set(
+      initialTypedFeatChoices
+        .filter((choice): choice is Exclude<typeof choice, string> => typeof choice !== 'string')
+        .map((choice) => getFeatChoiceKey(choice))
+    ),
+    [initialTypedFeatChoices]
+  )
+  const nextTypedAsiChoices = useMemo(
+    () => buildTypedAsiChoices(
+      asiChoices,
+      nextDerived?.featSlots,
+      nextFeatChoices
+    ),
+    [asiChoices, nextDerived?.featSlots, nextFeatChoices]
+  )
+  const newLevelSkillChoices = useMemo(
+    () => buildTypedSkillProficiencies({
+      skillProficiencies,
+      background: character.background,
+      selectedClass: selectedClassDetail,
+      species: character.species,
+    })
+      .filter((choice): choice is Exclude<typeof choice, string> => typeof choice !== 'string')
+      .filter((choice) => !initialSkillProficiencies.includes(choice.skill)),
+    [character.background, character.species, initialSkillProficiencies, selectedClassDetail, skillProficiencies]
+  )
+  const newLevelAsiChoices = useMemo(
+    () => nextTypedAsiChoices.filter((choice) => choice.slot_index === currentFeatSlotCount),
+    [currentFeatSlotCount, nextTypedAsiChoices]
+  )
+  const newLevelFeatureOptionChoices = useMemo(
+    () => canonicalFeatureOptionChoices.filter((choice) => !initialFeatureOptionChoiceKeys.has(getFeatureOptionChoiceKey(choice))),
+    [canonicalFeatureOptionChoices, initialFeatureOptionChoiceKeys]
+  )
+  const newLevelSpellSelections = useMemo(
+    () => persistedNextSpellSelections
+      .filter((choice): choice is Exclude<typeof choice, string> => typeof choice !== 'string')
+      .filter((choice) => !initialSpellSelectionKeys.has(getSpellSelectionKey(choice))),
+    [initialSpellSelectionKeys, persistedNextSpellSelections]
+  )
+  const newLevelFeatChoices = useMemo(
+    () => buildTypedFeatChoices(nextFeatChoices, nextDerived?.featSlots)
+      .filter((choice): choice is Exclude<typeof choice, string> => typeof choice !== 'string')
+      .filter((choice) => !initialFeatChoiceKeys.has(getFeatChoiceKey(choice))),
+    [initialFeatChoiceKeys, nextDerived?.featSlots, nextFeatChoices]
+  )
 
   const multiclassSkillConfig = enteringNewClass ? getMulticlassSkillChoiceConfig(selectedClassDetail) : null
   const knownSkills = useMemo(() => new Set(initialSkillProficiencies), [initialSkillProficiencies])
@@ -903,50 +989,24 @@ export function LevelUpWizard({
 
     setWorking(true)
     try {
-      const levelsPayload = targetLevels.map((level) => {
-        const existing = baseLevels.find((entry) => entry.class_id === level.class_id)
-        return {
-          class_id: level.class_id,
-          level: level.level,
-          subclass_id: level.subclass_id,
-          hp_roll: level.class_id === selectedClassId ? resolvedHpRoll : existing?.hp_roll ?? null,
-        }
-      })
-
       const response = await fetch(`/api/characters/${character.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          save_mode: 'level_up',
           hp_max: nextHpMax,
-          levels: levelsPayload,
-          skill_proficiencies: buildTypedSkillProficiencies({
-            skillProficiencies,
-            background: character.background,
-            selectedClass: selectedClassDetail,
-            species: character.species,
-          }),
-          ability_bonus_choices: buildTypedAbilityBonusChoices(
-            character.species,
-            initialAbilityBonusChoices
-          ),
-          asi_choices: buildTypedAsiChoices(
-            asiChoices,
-            nextDerived?.featSlots,
-            nextFeatChoices
-          ),
-          language_choices: buildTypedLanguageChoices({
-            languageChoices,
-            background: character.background,
-            species: character.species,
-          }),
-          tool_choices: buildTypedToolChoices({
-            toolChoices,
-            selectedClass: selectedClassDetail,
-            species: character.species,
-          }),
-          feature_option_choices: canonicalFeatureOptionChoices,
-          spell_choices: persistedNextSpellSelections,
-          feat_choices: buildTypedFeatChoices(nextFeatChoices, nextDerived?.featSlots),
+          level_up: {
+            class_id: selectedClassId,
+            previous_level: currentTargetLevel,
+            new_level: nextTargetLevel,
+            subclass_id: selectedSubclassId,
+            hp_roll: resolvedHpRoll,
+          },
+          skill_proficiencies: newLevelSkillChoices,
+          asi_choices: newLevelAsiChoices,
+          feature_option_choices: newLevelFeatureOptionChoices,
+          spell_choices: newLevelSpellSelections,
+          feat_choices: newLevelFeatChoices,
         }),
       })
 

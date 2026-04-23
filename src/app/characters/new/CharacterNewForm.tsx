@@ -613,16 +613,19 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
     }
 
     if (statMethod === 'point_buy') {
-      setStats((prev) => ({
-        str: Math.min(15, Math.max(8, prev.str)),
-        dex: Math.min(15, Math.max(8, prev.dex)),
-        con: Math.min(15, Math.max(8, prev.con)),
-        int: Math.min(15, Math.max(8, prev.int)),
-        wis: Math.min(15, Math.max(8, prev.wis)),
-        cha: Math.min(15, Math.max(8, prev.cha)),
-      }))
+      const clampedStats = {
+        str: Math.min(15, Math.max(8, stats.str)),
+        dex: Math.min(15, Math.max(8, stats.dex)),
+        con: Math.min(15, Math.max(8, stats.con)),
+        int: Math.min(15, Math.max(8, stats.int)),
+        wis: Math.min(15, Math.max(8, stats.wis)),
+        cha: Math.min(15, Math.max(8, stats.cha)),
+      }
+      if (!ABILITY_KEYS.every((ability) => stats[ability] === clampedStats[ability])) {
+        setStats(clampedStats)
+      }
     }
-  }, [statMethod])
+  }, [statMethod, stats])
 
   const currentStep = STEPS[stepIndex]
   const selectedSpecies = speciesList.find((species) => species.id === speciesId) ?? null
@@ -1312,7 +1315,8 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
   const cappedSpellChoices = useMemo(
     () => spellChoices
       .map((spellId) => spellOptions.find((option) => option.id === spellId))
-      .filter((spell): spell is SpellOption => Boolean(spell) && spell.counts_against_selection_limit !== false),
+      .filter((spell): spell is SpellOption => spell !== undefined)
+      .filter((spell) => spell.counts_against_selection_limit !== false),
     [spellChoices, spellOptions]
   )
   const cappedCantripChoiceCount = cappedSpellChoices.filter((spell) => spell.level === 0).length
@@ -1441,6 +1445,7 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
     abilityBonusChoices.length,
     asiChoices,
     backgroundId,
+    backgroundLanguageConfig?.count,
     backgroundLanguageChoices.length,
     backgroundSkillChoices.length,
     campaignId,
@@ -1448,8 +1453,6 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
     classSkillChoices.length,
     classToolChoices.length,
     classToolConfig?.count,
-    cappedCantripChoiceCount,
-    cappedLeveledChoiceCount,
     derived,
     featChoices,
     featureOptionChoices,
@@ -1465,6 +1468,7 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
     rolledStatsComplete,
     selectedBackground,
     resolvedStartingEquipment.issues.length,
+    selectedClass?.skill_choices?.count,
     spellsStepComplete,
     speciesFeatChoice,
     speciesFeatSlotIndex,

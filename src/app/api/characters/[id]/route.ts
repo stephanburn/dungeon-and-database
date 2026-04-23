@@ -4,7 +4,9 @@ import { hasDmAccess } from '@/lib/auth/roles'
 import { loadCharacterState } from '@/lib/characters/load-character'
 import {
   buildCharacterAtomicSavePayload,
+  buildCharacterLevelUpSavePayload,
   saveCharacterAtomic,
+  saveCharacterLevelUpAtomic,
 } from '@/lib/characters/atomic-save'
 import {
   type AbilityBonusChoiceInput,
@@ -118,6 +120,7 @@ const equipmentItemSchema = z.object({
 })
 
 const updateCharacterSchema = z.object({
+  save_mode: z.enum(['replace', 'level_up']).optional(),
   name: z.string().min(1).max(100).optional(),
   species_id: z.string().uuid().nullable().optional(),
   background_id: z.string().uuid().nullable().optional(),
@@ -152,6 +155,13 @@ const updateCharacterSchema = z.object({
     subclass_id: z.string().uuid().nullable().optional(),
     hp_roll: z.number().int().nullable().optional(),
   })).optional(),
+  level_up: z.object({
+    class_id: z.string().uuid(),
+    previous_level: z.number().int().min(0).max(19),
+    new_level: z.number().int().min(1).max(20),
+    subclass_id: z.string().uuid().nullable().optional(),
+    hp_roll: z.number().int().nullable().optional(),
+  }).optional(),
   // Stat rolls: full replacement
   stat_rolls: z.array(z.object({
     assigned_to: z.enum(['str','dex','con','int','wis','cha']),
@@ -221,7 +231,7 @@ export async function PUT(
   const parsed = updateCharacterSchema.safeParse(body)
   if (!parsed.success) return jsonError(parsed.error.message, 400)
 
-  const { levels, stat_rolls, skill_proficiencies, ability_bonus_choices, asi_choices, feature_option_choices, equipment_items, language_choices, tool_choices, spell_choices, feat_choices, character_type, dm_notes, ...characterFields } = parsed.data
+  const { save_mode, levels, level_up, stat_rolls, skill_proficiencies, ability_bonus_choices, asi_choices, feature_option_choices, equipment_items, language_choices, tool_choices, spell_choices, feat_choices, character_type, dm_notes, ...characterFields } = parsed.data
 
   // DM-only fields
   if (hasDmAccess(profile.role)) {
@@ -234,24 +244,44 @@ export async function PUT(
     (characterFields as Record<string, unknown>).status = 'draft'
   }
 
+  if (save_mode === 'level_up' && !level_up) {
+    return jsonError('Level-up payload is required', 400)
+  }
+
   let saveError: { message: string } | null = null
   try {
-    const payload = await buildCharacterAtomicSavePayload(supabase, {
-      characterFields,
-      levels,
-      stat_rolls,
-      skill_proficiencies: skill_proficiencies as SkillProficiencyInput[] | undefined,
-      ability_bonus_choices: ability_bonus_choices as AbilityBonusChoiceInput[] | undefined,
-      asi_choices: asi_choices as AsiChoiceInput[] | undefined,
-      feature_option_choices: feature_option_choices as FeatureOptionChoiceInput[] | undefined,
-      equipment_items: equipment_items as EquipmentItemChoiceInput[] | undefined,
-      language_choices: language_choices as LanguageChoiceInput[] | undefined,
-      tool_choices: tool_choices as ToolChoiceInput[] | undefined,
-      spell_choices: spell_choices as SpellChoiceInput[] | undefined,
-      feat_choices: feat_choices as FeatChoiceInput[] | undefined,
-    })
-
-    const result = await saveCharacterAtomic(supabase, params.id, payload)
+    const result = save_mode === 'level_up'
+      ? await saveCharacterLevelUpAtomic(
+        supabase,
+        params.id,
+        await buildCharacterLevelUpSavePayload(supabase, {
+          characterFields,
+          level_up: level_up!,
+          skill_proficiencies: skill_proficiencies as SkillProficiencyInput[] | undefined,
+          asi_choices: asi_choices as AsiChoiceInput[] | undefined,
+          feature_option_choices: feature_option_choices as FeatureOptionChoiceInput[] | undefined,
+          spell_choices: spell_choices as SpellChoiceInput[] | undefined,
+          feat_choices: feat_choices as FeatChoiceInput[] | undefined,
+        })
+      )
+      : await saveCharacterAtomic(
+        supabase,
+        params.id,
+        await buildCharacterAtomicSavePayload(supabase, {
+          characterFields,
+          levels,
+          stat_rolls,
+          skill_proficiencies: skill_proficiencies as SkillProficiencyInput[] | undefined,
+          ability_bonus_choices: ability_bonus_choices as AbilityBonusChoiceInput[] | undefined,
+          asi_choices: asi_choices as AsiChoiceInput[] | undefined,
+          feature_option_choices: feature_option_choices as FeatureOptionChoiceInput[] | undefined,
+          equipment_items: equipment_items as EquipmentItemChoiceInput[] | undefined,
+          language_choices: language_choices as LanguageChoiceInput[] | undefined,
+          tool_choices: tool_choices as ToolChoiceInput[] | undefined,
+          spell_choices: spell_choices as SpellChoiceInput[] | undefined,
+          feat_choices: feat_choices as FeatChoiceInput[] | undefined,
+        })
+      )
     saveError = result.error
   } catch (error) {
     saveError = {
