@@ -10,6 +10,16 @@ This roadmap now has meaningful implementation behind it.
 - Batch 2 is effectively complete.
 - Batch 3 is now effectively complete and closed out by Slice `3l` on 2026-04-18.
 - Batch 4 is now effectively complete and closed out by Slice `4o` on 2026-04-23.
+- Batch 4.5 is now effectively complete and closed out by Slice `4.5h` on 2026-04-24; Batch 5 is unblocked, with live data-copy migration smoke for migrations `067`/`068` retained as a deployment gate.
+- A post-Batch-4 production hotfix shipped on 2026-04-23 to stop the character sheet from entering a React update loop when loading class-scoped spell options for newly created characters.
+- A Batch 4 senior-review pass on 2026-04-23 found several level-up data-integrity bugs that the additive save path makes reachable in normal play (silent spell/feat swap loss, skill PK collision on multiclass overlap, feature-option value-change collision, preserved-spell level misattribution, and a concurrency window in the per-level sync trigger). Batch 4.5 is scheduled before Batch 5 to close these.
+- Batch 4 delivered the end-to-end guided builder workflows that were blocking real character creation:
+  - creation now saves through the typed atomic persistence path instead of the old generic write flow
+  - the review step summarizes the actual persisted build state and legality output before save
+  - starting equipment is resolved into character equipment rows during guided creation
+  - feature-option and feature-spell choice surfaces now cover the Batch 4 support matrix rather than only the earliest special cases
+  - level-up now runs as a resumable guided flow with step-local validation, class-scoped spell editing, additive save behavior, and grouped review output
+  - Batch 4 closeout coverage and audit notes live in `output/batch-4-closeout-audit.md`
 - The app now has a shared derivation pipeline flowing through:
   - raw persistence
   - normalized build context
@@ -74,7 +84,7 @@ Known remaining PHB amendment notes after Batch 3 are now explicit rather than h
 - Battle Master, Hunter, Circle of the Land, and Four Elements still have combat-time or resource-tracking automation gaps
 - Arcane Trickster and Eldritch Knight still have subclass-feature automation gaps beyond spell legality
 
-The intended next step is now Batch 5 sheet calculation and presentation, with Batch 4 closeout notes captured in `output/batch-4-closeout-audit.md`.
+The intended next step is Batch 5 sheet calculation and presentation. Batch 4 / 4.5 closeout notes live in `output/batch-4-closeout-audit.md`.
 
 This plan is written for a single implementation agent working inside the repo, not for a human team. That changes the shape of the backlog:
 
@@ -589,7 +599,6 @@ Each slice should fit in one Codex session and land schema (where needed) + type
 - wire Batch 3 subclass spell-school restrictions (Eldritch Knight, Arcane Trickster) into legality on unlock so restricted spell selection kicks in immediately
 - acceptance: a player cannot level into a second class whose prereqs they fail, subclass unlock fires at the right per-class level, and restricted-caster subclasses narrow the spell picker at level-up time
 
-#### Do this next:
 **Slice 4l — Level-up: feature-option unlocks including replaceable options**
 
 - render feature-option unlocks (new maneuver, new invocation, new metamagic, new fighting style slot, etc.) through the Slice 4b primitives at the exact level they unlock
@@ -631,6 +640,133 @@ Each slice should fit in one Codex session and land schema (where needed) + type
 - A player can create a level 1 character through guided steps without relying on the raw sheet editor.
 - A player can level up through a guided flow and the app persists exactly what changed.
 - Multiclassing and spellcasting no longer rely on first-class-only assumptions.
+
+## Batch 4.5: Level-Up Data-Integrity Hardening
+
+### Objective
+
+Close the correctness and concurrency bugs introduced by the additive level-up save path before Batch 5 builds sheet presentation on top of it. This is a narrow corrective batch, not a new feature batch.
+
+### Why
+
+The 2026-04-23 senior-review pass on Batch 4 identified a cluster of data-integrity bugs concentrated in `save_character_level_up_atomic` (migration 064), the client filter logic in `LevelUpWizard.tsx`, and the per-level sync triggers in migration 063. Each bug is reachable in documented Batch 4 archetypes:
+
+- spell swaps on caster level-up silently leave the old spell attached (client filter discards removals; RPC is INSERT-only)
+- multiclass skill grants fail outright when any granted skill overlaps a skill already held, because `character_skill_proficiencies` primary key is `(character_id, skill)` and the RPC has no `ON CONFLICT` handling
+- editing a persisted feature-option value during level-up aborts the save via unique-key collision on `(character_id, option_group_key, option_key, choice_order, source_feature_key)`
+- feat swaps leave the outgoing feat attached for the same reason as spell swaps
+- preserved spell rows risk being re-anchored to the wrong per-level row when `character_level_id` is defaulted to `v_level_row_id`
+- `sync_character_class_levels_for_class` deletes-then-inserts, which combined with the `ON DELETE SET NULL` cascade on provenance FKs can silently strip `character_level_id` from choice rows under admin edits or concurrent saves
+
+Batch 5 will key sheet presentation (AC provenance, spell preparation state, feat/ASI history, DM audit panel) off per-level rows that must be trustworthy. Shipping Batch 5 on top of the current level-up path would surface these bugs as apparent sheet bugs and make them much harder to isolate.
+
+### Scope
+
+In:
+
+- RPC behavior for level-up writes: spell/feat/feature-option upsert semantics, skill overlap handling, `character_level_id` anchoring rules
+- Per-level sync trigger idempotency and FK-null-ification avoidance
+- Concurrency guardrails on the level-up transaction and on the trigger-driven sync
+- Structured error mapping from RPC validation exceptions to 4xx responses with stable error codes
+- Client-side contract alignment with the RPC: route creation through `buildCharacterAtomicSavePayload`, clear species-scoped choice state on species change, gate the step selector against incomplete steps, add double-submit protection
+- Server-side rolled-stat generation to remove the client `Math.random` path
+- Hydration gating so DM-only fields are not pushed into non-DM component state
+- Regression test matrix that exercises every critical-severity scenario from the review
+
+Out (deferred to later batches as appropriate):
+
+- Adding new content (no species, class, subclass, feat, or equipment rows)
+- Sheet presentation changes (these belong to Batch 5)
+- Rewriting feature-grants off spell-name lookups (Batch 6 carry-in)
+- Consolidating character-ownership checks behind a single helper (Batch 7 carry-in)
+- Splitting load-bearing modules past safe edit size (Batch 7 carry-in)
+
+### Execution Slices
+
+Each slice should fit in one Codex session and leave the repo in a coherent state. Slices 4.5a–4.5d change RPC/trigger behavior and are the main data-integrity correction. Slices 4.5e–4.5f are client-side hardening. Slice 4.5g is the regression test matrix. Slice 4.5h is the Batch 4.5 closeout gate before Batch 5 begins.
+
+**Slice 4.5a — RPC swap/replace semantics for spells, feats, and feature options** (delivered)
+
+- rewrite the `spell_choices`, `feat_choices`, and `feature_option_choices` branches of `save_character_level_up_atomic` to match the unique constraints on their target tables
+- for `spell_choices`: when the payload is present, delete existing non-feature, non-feat-granted rows for `owning_class_id = v_class_id` scoped to the level-up's class, then insert the full after-state; feature-spell and feat-spell rows must be left untouched
+- for `feat_choices`: replace the outgoing feat row for the same `(character_id, feat_id, choice_kind)` scope instead of appending; support the "retrained feat" shape rather than silently orphaning the old row
+- for `feature_option_choices`: `INSERT ... ON CONFLICT (character_id, option_group_key, option_key, choice_order, source_feature_key) DO UPDATE SET selected_value = EXCLUDED.selected_value, character_level_id = EXCLUDED.character_level_id` so value changes succeed without UNIQUE violations
+- update `LevelUpWizard.tsx` to send the full after-state for these three families (no more client-side "new keys only" filter), and update `atomic-save.ts` helpers to carry the correct `owning_class_id` / `character_level_id` through
+- acceptance: spell swap, feat retrain, and feature-option value change all round-trip through level-up for a representative caster and a representative Battle Master without leaving orphan rows or failing on unique collisions
+
+**Slice 4.5b — Skill overlap handling and multi-source provenance** (delivered 2026-04-24)
+
+- recorded decision: **Path B**. Keep the narrow `(character_id, skill)` PK and make the level-up RPC upsert with `ON CONFLICT (character_id, skill) DO UPDATE SET expertise = character_skill_proficiencies.expertise OR EXCLUDED.expertise`. Existing provenance (`source_category`, `source_entity_id`, `source_feature_key`, `character_level_id`) is **preserved** on conflict — i.e. first-write-wins for provenance — which matches the sheet's one-row-per-skill read at `src/lib/characters/load-character.ts:104` and avoids a cascade through legality aggregation, `initialTypedSkillProficiencies`, and the sheet's skill display. Path A was rejected because widening the PK would require touching every skill read site and add a new "aggregate-back-to-one-row" layer purely to preserve current UX.
+- migration `supabase/migrations/066_level_up_atomic_save_skill_overlap.sql` replaces `save_character_level_up_atomic` with the ON CONFLICT handling above; spells/feats/feature-options semantics from 4.5a carry forward unchanged
+- `LevelUpWizard.tsx` now holds a single `initialSkillProficiencyKeys` Set (replacing the duplicate `knownSkills` Set and the repeated `initialSkillProficiencies.includes(...)` scans) and uses it to dedupe the `newLevelSkillChoices` payload, the multiclass-skill options filter, and the skill picker's `onChange` bucketing
+- regression: `test/level-up-atomic-skill-overlap-migration.test.ts` pins the ON CONFLICT clause and the preservation-on-conflict policy so a future edit cannot silently revert to overwrite-on-conflict
+- acceptance carried: a Fighter-1 multiclass save against a character whose background already grants one of the Fighter multiclass skills no longer fails at the RPC; the pre-existing skill's provenance is retained; an expertise-granting later source (e.g. Knowledge Domain) can still promote an existing skill to expertise
+- residual for 4.5h: capture the Path B decision and rationale inside `output/batch-4-closeout-audit.md` alongside the rest of the 4.5 addendum; no parallel provenance audit table was introduced in this slice because nothing downstream reads multi-source skill provenance today — if Batch 5's sheet presentation needs it, add a dedicated `character_skill_proficiency_sources` table then rather than up-front here
+
+**Slice 4.5c — Preserved provenance and per-level anchor safety** (delivered 2026-04-24)
+
+- migration `supabase/migrations/067_level_up_preserved_provenance_anchor_safety.sql` replaces `sync_character_class_levels_for_class` with an idempotent insert/upsert path: valid existing `character_class_levels` rows keep their stable `id`, missing rows are inserted, and only rows above an explicit lowered/deleted aggregate class level are removed
+- `save_character_level_up_atomic` now carries forward 4.5a/4.5b behavior while preserving existing feature-option and feat `character_level_id` anchors when the full after-state payload reasserts already-held choices; spell fallback remains scoped so cross-class preserved rows are not defaulted onto the new level
+- conservative backfills restore null anchors where the class source can be inferred: class-owned spells by `owning_class_id`, and class-sourced language, tool, ability-bonus, feature-option, and skill rows by `source_category = 'class'` plus `source_entity_id`
+- regression: `test/level-up-preserved-provenance-anchor-safety-migration.test.ts` pins the idempotent sync, class-recoverable backfills, feat/feature-option anchor preservation, and cross-class spell fallback behavior
+- residual for 4.5h: test this migration against a copy of production data before applying remotely, because trigger rewrites are the highest-risk part of Batch 4.5 and regex tests cannot prove data-shape safety
+
+**Slice 4.5d — Concurrency guardrails and structured error mapping** (delivered 2026-04-24)
+
+- migration `supabase/migrations/068_level_up_concurrency_guardrails.sql` carries forward 4.5c and adds `FOR UPDATE` on `public.characters` inside `sync_character_class_levels_for_class`, so trigger-driven syncs serialize against the same owning character row that level-up saves lock
+- `save_character_level_up_atomic` now requires `expected_updated_at` in the JSON payload and rejects stale tokens with an `Optimistic lock mismatch` exception before mutating character or level rows
+- `src/app/api/characters/[id]/route.ts` requires `expected_updated_at` on every character `PUT`, performs an early stale-token check for all save modes, forwards the token into the RPC payload, and maps known save failures to stable structured 4xx responses (`optimistic_lock_required`, `stale_character`, `stale_level_up`, `invalid_level_up_increment`, `duplicate_level_up_choice`)
+- character sheet saves, guided level-up saves, and resumed creation-draft saves now send and refresh the current `updated_at` token so normal repeated saves do not trip the guardrail
+- regressions: `test/level-up-concurrency-guardrails-migration.test.ts` pins the trigger lock and RPC token checks; `test/character-route-concurrency-errors.test.ts` pins route error mapping and client token forwarding
+- acceptance carried: two concurrent level-up attempts on the same loaded character now serialize through the character row lock; the second stale writer receives a structured 409 instead of a generic 500
+
+**Slice 4.5e — Client contract alignment and submit safety** (delivered 2026-04-24)
+
+- creation and level-up `PUT` requests continue through `src/app/api/characters/[id]/route.ts`, which normalizes via `buildCharacterAtomicSavePayload` / `buildCharacterLevelUpSavePayload`; `test/client-submit-safety.test.ts` now pins that server-side contract
+- `CharacterNewForm.tsx` now centralizes dependent-state clearing in `handleSpeciesChange`, `handleBackgroundChange`, `setPrimaryClass`, and subclass updates: stale species ability/language/tool/skill choices, background choices, class choices, subclass choices, feature spells, feat spells, and relevant feature-option rows are cleared when their owner changes
+- the creation step selector is now a gated button strip; steps beyond `completedSteps.length + 1` are disabled and `goToStep` refuses jump-ahead attempts with a specific toast
+- creation draft saves and the level-up final save now use `AbortController` plus early `working` guards, so rapid repeated clicks cannot launch overlapping writes from the same client
+- the previous ability-generation constant cleanup remains satisfied: `CharacterNewForm.tsx` imports `STANDARD_ARRAY`, `ABILITY_KEYS`, and point-buy helpers from `src/lib/characters/ability-generation.ts`
+- regressions: `test/client-submit-safety.test.ts` pins the shared server normalizer contract, stale-state clearing handlers, gated step selector, and abortable/working-gated save submits
+
+**Slice 4.5f — Server-side rolled stats and DM-only hydration** (delivered 2026-04-24)
+
+- added `POST /api/characters/[id]/stat-rolls`, which checks character ownership / DM manage access and generates six 4d6 sets with Node `crypto.randomInt`
+- `CharacterNewForm.tsx` no longer imports or calls the local `createRolledStatSets` / `Math.random` path; the roll button creates/uses the draft character, requests server rolls, renders the returned sets immediately, and persists the final assignment through the existing atomic save path
+- `GET /api/characters/[id]` now strips `character_type` and `dm_notes` from non-DM responses before draft hydration, and `CharacterNewForm` keeps `characterType` unset for non-DM users
+- regressions: `test/server-side-rolled-stats.test.ts` pins server-side crypto roll generation, client fetch-based roll generation, and non-DM DM-field stripping
+
+**Slice 4.5g — Regression test matrix** (delivered 2026-04-24)
+
+- added `test/batch-45-regression-matrix.test.ts`, which ties every critical 2026-04-23 data-integrity finding to concrete SQL, route, or client regression coverage rather than leaving the coverage spread implicit across slice tests
+- extended `output/batch-4-closeout-audit.md` with a `4.5 overlap regression` archetype covering overlapping multiclass skills, class spell swaps, feat retrains, feature-option edits, preserved anchors, stale-write handling, and client submit safety
+- extended `test/batch-4-closeout.test.ts` so the closeout matrix fails if the overlap archetype or its key safeguards disappear
+- documented the Batch 4.5 verification file list in the audit: swap/replace SQL, skill-overlap SQL, anchor-safety SQL, concurrency guardrails, structured route errors, client submit safety, server-side rolls / DM-field stripping, and the matrix binder test itself
+- acceptance carried locally: this repo does not currently include a live Supabase transaction harness; the regression matrix pins the generated SQL/RPC definitions and App Router/client contracts that would feed such a harness, while 4.5h remains responsible for smoke-running the full archetype flow against a real environment before Batch 5 opens
+
+**Slice 4.5h — Batch 4.5 closeout and Batch 5 entry update** (delivered 2026-04-24)
+
+- `output/batch-4-closeout-audit.md` now includes a Batch 4.5 addendum with the final correction list, the Slice 4.5b Path B skill-provenance decision, and explicit residuals
+- the representative archetype matrix now includes the 4.5 overlap regression scenario; local verification covers the archetype contract through targeted SQL, route, client, and matrix tests plus a successful Next build
+- Batch 5 entry tasks were reconciled: sheet/audit presentation remains the next product work; multi-source skill provenance is deferred until sheet UI needs it; broader smoke automation and live data-copy migration validation for `067`/`068` are explicit follow-ons
+- acceptance carried: Batch 5 can begin against a hardened per-level save path, with remote data-copy migration smoke retained as a deployment gate rather than hidden backlog
+
+### Risks
+
+- Changing spell/feat/feature-option semantics on the RPC without aligning the client will break the level-up flow for existing in-progress drafts. Slice 4.5a should land the RPC and client changes together.
+- The skill-provenance decision in Slice 4.5b (narrow-PK-with-merge vs widened-PK-with-multi-row) has downstream implications for the sheet. Pick deliberately and record the choice; do not drift later.
+- Trigger rewrites in Slice 4.5c are the most migration-risky change in this batch. Test on a copy of production data before shipping.
+- Optimistic-lock tokens (4.5d) must be threaded through every PUT path, not only level-up, or non-level-up saves will silently lose the token and hit false stale-write rejections.
+- Server-side roll generation (4.5f) must not break the "rolled stats are visible to the player before assignment" UX; surface rolls through an API call that returns them immediately rather than hiding them until save.
+
+### Exit Criteria
+
+- The review's six critical findings (C1–C6) are closed by code changes and pinned by regression tests.
+- The review's high-severity findings (H1–H7) are closed or have explicit deferral notes in the audit doc with justification.
+- A double-click on any save button produces exactly one write.
+- A species change during creation no longer persists stale bonus / language / tool / skill state.
+- A concurrent two-tab level-up on the same character produces exactly one successful advance and one clear error message.
+- Batch 5 can begin against a per-level save path whose data-integrity guarantees are documented and tested.
 
 ## Batch 5: Sheet Calculation and Presentation
 

@@ -121,6 +121,7 @@ const equipmentItemSchema = z.object({
 
 const updateCharacterSchema = z.object({
   save_mode: z.enum(['replace', 'level_up']).optional(),
+  expected_updated_at: z.string().min(1).optional(),
   name: z.string().min(1).max(100).optional(),
   species_id: z.string().uuid().nullable().optional(),
   background_id: z.string().uuid().nullable().optional(),
@@ -169,21 +170,83 @@ const updateCharacterSchema = z.object({
   })).optional(),
 })
 
+type CharacterSaveErrorResponse = {
+  status: number
+  code: string
+  message: string
+}
+
+function mapCharacterSaveError(error: { message: string; code?: string }): CharacterSaveErrorResponse {
+  const message = error.message
+
+  if (/Optimistic lock token is required/i.test(message)) {
+    return {
+      status: 428,
+      code: 'optimistic_lock_required',
+      message: 'This character was saved without a current edit token. Refresh the character and try again.',
+    }
+  }
+
+  if (/Optimistic lock mismatch/i.test(message)) {
+    return {
+      status: 409,
+      code: 'stale_character',
+      message: 'This character changed in another tab or session. Refresh before saving again.',
+    }
+  }
+
+  if (/Level-up expected previous level/i.test(message)) {
+    return {
+      status: 409,
+      code: 'stale_level_up',
+      message: 'This level-up is based on an older character level. Refresh before saving again.',
+    }
+  }
+
+  if (/Level-up must advance exactly one class level/i.test(message)) {
+    return {
+      status: 400,
+      code: 'invalid_level_up_increment',
+      message: 'Level-up saves must advance exactly one class level.',
+    }
+  }
+
+  if (/duplicate key value violates unique constraint/i.test(message)) {
+    return {
+      status: 409,
+      code: 'duplicate_level_up_choice',
+      message: 'This level-up contains a duplicate choice. Refresh and review the selected spells, feats, and features.',
+    }
+  }
+
+  return {
+    status: 500,
+    code: 'character_save_failed',
+    message,
+  }
+}
+
 export async function GET(
   _request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   const auth = await requireAuth()
   if (auth instanceof NextResponse) return auth
-  const { supabase } = auth
+  const { profile, supabase } = auth
 
   const loadedState = await loadCharacterState(supabase, params.id)
   if (loadedState.status === 'not_found') return jsonError('Character not found', 404)
   if (loadedState.status === 'error') return jsonError(loadedState.error.message, 500)
   const state = loadedState.state
 
+  const responseCharacter = { ...state.character }
+  if (!hasDmAccess(profile.role)) {
+    delete (responseCharacter as Partial<typeof responseCharacter>).character_type
+    delete (responseCharacter as Partial<typeof responseCharacter>).dm_notes
+  }
+
   return NextResponse.json({
-    ...state.character,
+    ...responseCharacter,
     skill_proficiencies: state.initialSkillProficiencies,
     typed_skill_proficiencies: state.initialTypedSkillProficiencies,
     ability_bonus_choices: state.initialAbilityBonusChoices,
@@ -216,7 +279,7 @@ export async function PUT(
   // Verify ownership (players) or DM access
   const { data: existing } = await supabase
     .from('characters')
-    .select('user_id, status')
+    .select('user_id, status, updated_at')
     .eq('id', params.id)
     .single()
 
@@ -231,7 +294,23 @@ export async function PUT(
   const parsed = updateCharacterSchema.safeParse(body)
   if (!parsed.success) return jsonError(parsed.error.message, 400)
 
-  const { save_mode, levels, level_up, stat_rolls, skill_proficiencies, ability_bonus_choices, asi_choices, feature_option_choices, equipment_items, language_choices, tool_choices, spell_choices, feat_choices, character_type, dm_notes, ...characterFields } = parsed.data
+  const { save_mode, expected_updated_at, levels, level_up, stat_rolls, skill_proficiencies, ability_bonus_choices, asi_choices, feature_option_choices, equipment_items, language_choices, tool_choices, spell_choices, feat_choices, character_type, dm_notes, ...characterFields } = parsed.data
+
+  if (!expected_updated_at) {
+    return NextResponse.json({
+      error: 'This character was saved without a current edit token. Refresh the character and try again.',
+      code: 'optimistic_lock_required',
+    }, { status: 428 })
+  }
+
+  if (existing.updated_at !== expected_updated_at) {
+    return NextResponse.json({
+      error: 'This character changed in another tab or session. Refresh before saving again.',
+      code: 'stale_character',
+    }, { status: 409 })
+  }
+
+  Object.assign(characterFields, { expected_updated_at })
 
   // DM-only fields
   if (hasDmAccess(profile.role)) {
@@ -248,7 +327,7 @@ export async function PUT(
     return jsonError('Level-up payload is required', 400)
   }
 
-  let saveError: { message: string } | null = null
+  let saveError: { message: string; code?: string } | null = null
   try {
     const result = save_mode === 'level_up'
       ? await saveCharacterLevelUpAtomic(
@@ -289,7 +368,10 @@ export async function PUT(
     }
   }
 
-  if (saveError) return jsonError(saveError.message, 500)
+  if (saveError) {
+    const mapped = mapCharacterSaveError(saveError)
+    return NextResponse.json({ error: mapped.message, code: mapped.code }, { status: mapped.status })
+  }
 
   // Capture snapshot and reload through the shared cutover loader so
   // save responses use the same class-level aggregation as the rest of the app.

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -55,7 +55,6 @@ import {
   ABILITY_KEYS,
   buildStatRollRows,
   buildStatsFromRollRows,
-  createRolledStatSets,
   isStandardArrayAssignment,
   restoreRolledState,
   STANDARD_ARRAY,
@@ -226,15 +225,18 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
   const [campaignId, setCampaignId] = useState('')
   const [name, setName] = useState('')
   const [statMethod, setStatMethod] = useState<StatMethod>('point_buy')
-  const [characterType, setCharacterType] = useState<CharacterType>('pc')
+  const [characterType, setCharacterType] = useState<CharacterType | ''>(isDm ? 'pc' : '')
   const [stepIndex, setStepIndex] = useState(0)
   const [working, setWorking] = useState(false)
+  const [rollingStats, setRollingStats] = useState(false)
   const [characterId, setCharacterId] = useState<string | null>(null)
+  const [characterUpdatedAt, setCharacterUpdatedAt] = useState<string | null>(null)
   const [legalityResult, setLegalityResult] = useState<LegalityResult | null>(null)
   const [draftHydrated, setDraftHydrated] = useState(false)
   const [draftStepInitialized, setDraftStepInitialized] = useState(false)
   const [draftEquipmentItems, setDraftEquipmentItems] = useState<CharacterEquipmentItem[]>([])
   const [equipmentSelectionsHydrated, setEquipmentSelectionsHydrated] = useState(false)
+  const saveAbortControllerRef = useRef<AbortController | null>(null)
 
   const [speciesList, setSpeciesList] = useState<Species[]>([])
   const [backgroundList, setBackgroundList] = useState<Background[]>([])
@@ -319,9 +321,10 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
     type DraftCharacterResponse = {
       id: string
       campaign_id: string
+      updated_at: string
       name: string
       stat_method: StatMethod
-      character_type: CharacterType
+      character_type?: CharacterType
       species_id: string | null
       background_id: string | null
       base_str: number
@@ -366,6 +369,7 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
         const restoredRolledState = restoreRolledState(data.stat_rolls ?? [])
 
         setCharacterId(data.id)
+        setCharacterUpdatedAt(data.updated_at)
         setCampaignId(data.campaign_id)
         setName(data.name ?? '')
         setStatMethod(data.stat_method ?? 'point_buy')
@@ -1496,6 +1500,10 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
     ),
     [stepCompletion]
   )
+  const maxReachableStepIndex = useMemo(
+    () => Math.min(completedSteps.length + 1, STEPS.length - 1),
+    [completedSteps.length]
+  )
 
   useEffect(() => {
     if (!resumeCharacterId || !draftHydrated || draftStepInitialized) return
@@ -1529,22 +1537,94 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
     setStats((prev) => ({ ...prev, [stat]: value }))
   }
 
+  function isChoiceFromDefinitions(
+    choice: FeatureOptionChoiceInput,
+    definitions: Array<{ optionGroupKey: string; optionKey: string }>
+  ) {
+    return definitions.some((definition) => (
+      choice.option_group_key === definition.optionGroupKey
+      && choice.option_key === definition.optionKey
+    ))
+  }
+
+  function handleSpeciesChange(nextSpeciesId: string) {
+    if (nextSpeciesId === speciesId) return
+
+    setSpeciesId(nextSpeciesId)
+    setAbilityBonusChoices([])
+    setSpeciesSkillChoices([])
+    setSpeciesLanguageChoices([])
+    setSpeciesToolChoices([])
+    setFeatureOptionChoices((prev) => prev.filter((choice) => !isChoiceFromDefinitions(choice, speciesOptionDefinitions)))
+
+    if (speciesFeatSlotIndex >= 0) {
+      setFeatChoices((prev) => {
+        const next = [...prev]
+        next[speciesFeatSlotIndex] = ''
+        while (next.length > 0 && !next[next.length - 1]) next.pop()
+        return next
+      })
+    }
+  }
+
+  function handleBackgroundChange(nextBackgroundId: string) {
+    if (nextBackgroundId === backgroundId) return
+
+    setBackgroundId(nextBackgroundId)
+    setBackgroundSkillChoices([])
+    setBackgroundLanguageChoices([])
+  }
+
   function setPrimaryClass(classId: string) {
+    const classChanged = levels[0]?.class_id !== classId
+
     setLevels((prev) => [{
       class_id: classId,
       level: 1,
       subclass_id: prev[0]?.class_id === classId ? (prev[0]?.subclass_id ?? null) : null,
     }])
+
+    if (!classChanged) return
+
     setClassSkillChoices([])
     setClassToolChoices([])
     setSubclassSkillChoices([])
     setSubclassLanguageChoices([])
+    setMaverickBreakthroughClassIds([])
+    setSpellChoices([])
+    setFeatSpellChoices({})
+    setFeatureSpellChoices({})
+    setFeatureOptionChoices((prev) => prev.filter((choice) => isChoiceFromDefinitions(choice, speciesOptionDefinitions)))
   }
 
-  function rollAbilitySets() {
-    const nextSets = createRolledStatSets()
-    setRolledStatSets(nextSets)
-    setRolledAssignments({})
+  async function rollAbilitySets() {
+    if (rollingStats || working) return
+
+    setRollingStats(true)
+    try {
+      const id = await ensureCharacter()
+      if (!id) return
+
+      const response = await fetch(`/api/characters/${id}/stat-rolls`, {
+        method: 'POST',
+      })
+      const json = await response.json()
+
+      if (!response.ok) {
+        throw new Error(json.error ?? 'Unable to roll ability scores.')
+      }
+
+      setRolledStatSets(json.rolled_sets ?? [])
+      setRolledAssignments({})
+    } catch (error) {
+      toast({
+        title: 'Roll failed',
+        description: error instanceof Error ? error.message : 'Unable to roll ability scores.',
+        variant: 'destructive',
+      })
+    } finally {
+      setRollingStats(false)
+    }
   }
 
   function setRolledAssignment(ability: StatAbilityKey, rolledSetId: string) {
@@ -1555,6 +1635,14 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
   }
 
   function updateLevel(index: number, field: 'class_id' | 'level' | 'subclass_id', value: string | number | null) {
+    if (field === 'subclass_id' && levels[index]?.subclass_id !== value) {
+      setSubclassSkillChoices([])
+      setSubclassLanguageChoices([])
+      setMaverickBreakthroughClassIds([])
+      setFeatureSpellChoices({})
+      setFeatureOptionChoices((prev) => prev.filter((choice) => !isChoiceFromDefinitions(choice, subclassFeatureOptionDefinitions)))
+    }
+
     setLevels((prev) => prev.map((level, i) => (i === index ? { ...level, [field]: value } : level)))
   }
 
@@ -1722,7 +1810,7 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
         campaign_id: campaignId,
         name,
         stat_method: statMethod,
-        ...(isDm ? { character_type: characterType } : {}),
+        ...(isDm && characterType ? { character_type: characterType } : {}),
       }),
     })
     const json = await response.json()
@@ -1731,13 +1819,18 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
       return null
     }
     setCharacterId(json.id)
+    setCharacterUpdatedAt(json.updated_at)
     const nextParams = new URLSearchParams(searchParams.toString())
     nextParams.set('characterId', json.id)
     router.replace(`/characters/new?${nextParams.toString()}`)
     return json.id
   }
 
-  async function persistDraft(targetCharacterId: string) {
+  async function persistDraft(targetCharacterId: string, signal?: AbortSignal) {
+    if (!characterUpdatedAt) {
+      throw new Error('Refresh the draft before saving again.')
+    }
+
     const saveIdentity = hasCompletedStep(completedSteps, 'identity')
     const saveSpecies = hasCompletedStep(completedSteps, 'species')
     const saveBackground = hasCompletedStep(completedSteps, 'background')
@@ -1759,7 +1852,9 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
     const response = await fetch(`/api/characters/${targetCharacterId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
+      signal,
       body: JSON.stringify({
+        expected_updated_at: characterUpdatedAt,
         name: saveIdentity ? name : '',
         stat_method: saveStats ? statMethod : 'point_buy',
         species_id: saveSpecies ? (speciesId || null) : null,
@@ -1856,10 +1951,13 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
     if (!response.ok) {
       throw new Error(json.error ?? 'Unable to save draft')
     }
+    setCharacterUpdatedAt(json.character.updated_at)
     setLegalityResult(json.legality ?? null)
   }
 
   async function goNext() {
+    if (working) return
+
     const validationError = validateCurrentStep()
     if (validationError) {
       toast({ title: 'Cannot continue', description: validationError, variant: 'destructive' })
@@ -1867,12 +1965,15 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
     }
 
     setWorking(true)
+    const controller = new AbortController()
+    saveAbortControllerRef.current?.abort()
+    saveAbortControllerRef.current = controller
     try {
       const id = await ensureCharacter()
       if (!id) return
 
       if (currentStep.id !== 'identity') {
-        await persistDraft(id)
+        await persistDraft(id, controller.signal)
       }
 
       if (stepIndex < STEPS.length - 1) {
@@ -1885,6 +1986,9 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
         variant: 'destructive',
       })
     } finally {
+      if (saveAbortControllerRef.current === controller) {
+        saveAbortControllerRef.current = null
+      }
       setWorking(false)
     }
   }
@@ -1893,18 +1997,28 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
     setStepIndex((value) => Math.max(0, value - 1))
   }
 
-  function goToStep(stepId: Exclude<StepId, 'review'>) {
+  function goToStep(stepId: StepId) {
     const nextIndex = STEPS.findIndex((step) => step.id === stepId)
-    if (nextIndex >= 0) {
+    if (nextIndex >= 0 && nextIndex <= maxReachableStepIndex) {
       setStepIndex(nextIndex)
+      return
     }
+
+    toast({
+      title: 'Step locked',
+      description: 'Finish the current required steps before jumping ahead.',
+      variant: 'destructive',
+    })
   }
 
   async function finishWizard() {
-    if (!characterId) return
+    if (!characterId || working) return
     setWorking(true)
+    const controller = new AbortController()
+    saveAbortControllerRef.current?.abort()
+    saveAbortControllerRef.current = controller
     try {
-      await persistDraft(characterId)
+      await persistDraft(characterId, controller.signal)
       router.push(`/characters/${characterId}`)
     } catch (error) {
       toast({
@@ -1913,6 +2027,9 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
         variant: 'destructive',
       })
     } finally {
+      if (saveAbortControllerRef.current === controller) {
+        saveAbortControllerRef.current = null
+      }
       setWorking(false)
     }
   }
@@ -1942,20 +2059,27 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
             </div>
 
             <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-10">
-              {STEPS.map((step, index) => (
-                <div
+              {STEPS.map((step, index) => {
+                const locked = index > maxReachableStepIndex
+                return (
+                <button
+                  type="button"
                   key={step.id}
-                  className={`rounded-xl border px-3 py-2 text-xs ${
+                  disabled={locked || working}
+                  onClick={() => goToStep(step.id)}
+                  className={`rounded-xl border px-3 py-2 text-left text-xs transition ${
                     index === stepIndex
                       ? 'border-blue-400/30 bg-blue-400/10 text-blue-50'
                       : index < stepIndex
                         ? 'border-emerald-400/20 bg-emerald-400/10 text-emerald-100'
-                        : 'border-white/10 bg-white/[0.02] text-neutral-500'
-                  }`}
+                        : locked
+                          ? 'border-white/10 bg-white/[0.01] text-neutral-600'
+                          : 'border-white/10 bg-white/[0.02] text-neutral-500 hover:border-white/20 hover:text-neutral-300'
+                  } disabled:cursor-not-allowed`}
                 >
                   {step.label}
-                </div>
-              ))}
+                </button>
+              )})}
             </div>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -1984,7 +2108,7 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
                   {isDm && (
                     <div className="space-y-2">
                       <Label className="text-neutral-300">Character Type</Label>
-                      <Select value={characterType} onValueChange={(value) => setCharacterType(value as CharacterType)}>
+                      <Select value={characterType || 'pc'} onValueChange={(value) => setCharacterType(value as CharacterType)}>
                         <SelectTrigger>
                           <SelectValue />
                         </SelectTrigger>
@@ -2012,7 +2136,7 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
                   description="Choose one species for the character."
                   options={speciesChoiceOptions}
                   selectedId={speciesId || null}
-                  onChange={(value) => setSpeciesId(value ?? '')}
+                  onChange={(value) => handleSpeciesChange(value ?? '')}
                   emptyMessage="No species are available for this campaign allowlist."
                 />
 
@@ -2100,7 +2224,7 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
                   description="Choose one background for this character."
                   options={backgroundChoiceOptions}
                   selectedId={backgroundId || null}
-                  onChange={(value) => setBackgroundId(value ?? '')}
+                  onChange={(value) => handleBackgroundChange(value ?? '')}
                   emptyMessage="No backgrounds are available for this campaign allowlist."
                 />
 
@@ -2251,8 +2375,8 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
                           Roll six sets, then assign each result to one ability.
                         </p>
                       </div>
-                      <Button type="button" variant="outline" onClick={rollAbilitySets}>
-                        {rolledStatSets.length > 0 ? 'Reroll all six sets' : 'Roll six sets'}
+                      <Button type="button" variant="outline" onClick={rollAbilitySets} disabled={rollingStats || working}>
+                        {rollingStats ? 'Rolling...' : rolledStatSets.length > 0 ? 'Reroll all six sets' : 'Roll six sets'}
                       </Button>
                     </div>
 

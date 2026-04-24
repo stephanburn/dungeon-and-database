@@ -251,6 +251,7 @@ export function CharacterSheet({
   const [submitting, setSubmitting] = useState(false)
   const [legalityResult, setLegalityResult] = useState<LegalityResult | null>(initialLegalityResult)
   const [status, setStatus] = useState(initial.status)
+  const [updatedAt, setUpdatedAt] = useState(initial.updated_at)
   const [dmNotes, setDmNotes] = useState(initial.dm_notes ?? '')
   const [highlightedSection, setHighlightedSection] = useState<SectionId | null>(null)
   const highlightTimerRef = useRef<number | null>(null)
@@ -450,6 +451,7 @@ export function CharacterSheet({
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          expected_updated_at: updatedAt,
           name,
           alignment: alignment || null,
           experience_points: experiencePoints,
@@ -516,6 +518,7 @@ export function CharacterSheet({
 
       setLegalityResult(json.legality)
       setStatus(json.character.status)
+      setUpdatedAt(json.character.updated_at)
       toast({ title: 'Character saved' })
       router.refresh()
     } finally {

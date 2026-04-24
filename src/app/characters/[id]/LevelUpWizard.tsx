@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -186,15 +186,6 @@ function getFeatureOptionChoiceSignature(choice: Pick<FeatureOptionChoiceInput, 
   return `${getFeatureOptionChoiceKey(choice)}::${JSON.stringify(choice.selected_value ?? {})}`
 }
 
-function getSpellSelectionKey(choice: CharacterSpellSelection | Exclude<ReturnType<typeof buildCombinedSpellSelections>[number], string>) {
-  return [
-    choice.spell_id,
-    choice.owning_class_id ?? '',
-    choice.granting_subclass_id ?? '',
-    choice.acquisition_mode ?? 'known',
-  ].join('::')
-}
-
 function getFeatChoiceKey(choice: Exclude<ReturnType<typeof buildTypedFeatChoices>[number], string>) {
   return [
     choice.feat_id,
@@ -223,6 +214,7 @@ export function LevelUpWizard({
   const router = useRouter()
   const { toast } = useToast()
   const levelUpDraftStorageKey = `level-up-draft:${character.id}`
+  const saveAbortControllerRef = useRef<AbortController | null>(null)
 
   const baseLevels = useMemo<Array<WizardLevel & { hp_roll: number | null }>>(
     () => character.character_levels.map((level) => ({
@@ -317,11 +309,6 @@ export function LevelUpWizard({
     }))),
     [initialFeatureOptionChoices]
   )
-  const initialSpellSelectionKeys = useMemo(
-    () => new Set(initialSpellSelections.map((choice) => getSpellSelectionKey(choice))),
-    [initialSpellSelections]
-  )
-
   const currentClassIds = useMemo(
     () => Array.from(new Set(baseLevels.map((level) => level.class_id))),
     [baseLevels]
@@ -1027,6 +1014,10 @@ export function LevelUpWizard({
     ),
     [asiChoices, nextDerived?.featSlots, nextFeatChoices]
   )
+  const initialSkillProficiencyKeys = useMemo(
+    () => new Set(initialSkillProficiencies),
+    [initialSkillProficiencies]
+  )
   const newLevelSkillChoices = useMemo(
     () => buildTypedSkillProficiencies({
       skillProficiencies,
@@ -1035,8 +1026,8 @@ export function LevelUpWizard({
       species: character.species,
     })
       .filter((choice): choice is Exclude<typeof choice, string> => typeof choice !== 'string')
-      .filter((choice) => !initialSkillProficiencies.includes(choice.skill)),
-    [character.background, character.species, initialSkillProficiencies, selectedClassDetail, skillProficiencies]
+      .filter((choice) => !initialSkillProficiencyKeys.has(choice.skill)),
+    [character.background, character.species, initialSkillProficiencyKeys, selectedClassDetail, skillProficiencies]
   )
   const newLevelAsiChoices = useMemo(
     () => nextTypedAsiChoices.filter((choice) => choice.slot_index === currentFeatSlotCount),
@@ -1046,17 +1037,25 @@ export function LevelUpWizard({
     () => canonicalFeatureOptionChoices.filter((choice) => !allInitialFeatureOptionChoiceSignatures.has(getFeatureOptionChoiceSignature(choice))),
     [allInitialFeatureOptionChoiceSignatures, canonicalFeatureOptionChoices]
   )
-  const newLevelSpellSelections = useMemo(
-    () => persistedNextSpellSelections
-      .filter((choice): choice is Exclude<typeof choice, string> => typeof choice !== 'string')
-      .filter((choice) => !initialSpellSelectionKeys.has(getSpellSelectionKey(choice))),
-    [initialSpellSelectionKeys, persistedNextSpellSelections]
-  )
   const newLevelFeatChoices = useMemo(
     () => buildTypedFeatChoices(nextFeatChoices, nextDerived?.featSlots)
       .filter((choice): choice is Exclude<typeof choice, string> => typeof choice !== 'string')
       .filter((choice) => !initialFeatChoiceKeys.has(getFeatChoiceKey(choice))),
     [initialFeatChoiceKeys, nextDerived?.featSlots, nextFeatChoices]
+  )
+  const afterStateFeatureOptionChoices = useMemo(
+    () => canonicalFeatureOptionChoices,
+    [canonicalFeatureOptionChoices]
+  )
+  const afterStateSpellSelections = useMemo(
+    () => persistedNextSpellSelections
+      .filter((choice): choice is Exclude<typeof choice, string> => typeof choice !== 'string'),
+    [persistedNextSpellSelections]
+  )
+  const afterStateFeatChoices = useMemo(
+    () => buildTypedFeatChoices(nextFeatChoices, nextDerived?.featSlots)
+      .filter((choice): choice is Exclude<typeof choice, string> => typeof choice !== 'string'),
+    [nextDerived?.featSlots, nextFeatChoices]
   )
   const spellNameById = useMemo(() => new Map(
     [...initialSelectedSpells, ...mergedSpellOptions].map((spell) => [spell.id, spell.name])
@@ -1118,9 +1117,8 @@ export function LevelUpWizard({
   }, [newLevelAsiChoices])
 
   const multiclassSkillConfig = enteringNewClass ? getMulticlassSkillChoiceConfig(selectedClassDetail) : null
-  const knownSkills = useMemo(() => new Set(initialSkillProficiencies), [initialSkillProficiencies])
-  const multiclassSkillOptions = (multiclassSkillConfig?.from ?? []).filter((skill) => !knownSkills.has(skill))
-  const selectedNewSkillCount = skillProficiencies.filter((skill) => !initialSkillProficiencies.includes(skill)).length
+  const multiclassSkillOptions = (multiclassSkillConfig?.from ?? []).filter((skill) => !initialSkillProficiencyKeys.has(skill))
+  const selectedNewSkillCount = skillProficiencies.filter((skill) => !initialSkillProficiencyKeys.has(skill)).length
   const needsFeatureOptionStep = levelUpFeatureOptionDefinitions.length > 0
   const needsSkillStep = Boolean(multiclassSkillConfig && multiclassSkillOptions.length > 0)
   const multiclassSkillChoicesComplete = !multiclassSkillConfig
@@ -1326,6 +1324,8 @@ export function LevelUpWizard({
   }
 
   async function finishLevelUp() {
+    if (working) return
+
     const error = validateCurrentStep()
     if (error) {
       toast({ title: 'Cannot save level-up', description: error, variant: 'destructive' })
@@ -1333,12 +1333,17 @@ export function LevelUpWizard({
     }
 
     setWorking(true)
+    const controller = new AbortController()
+    saveAbortControllerRef.current?.abort()
+    saveAbortControllerRef.current = controller
     try {
       const response = await fetch(`/api/characters/${character.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
         body: JSON.stringify({
           save_mode: 'level_up',
+          expected_updated_at: character.updated_at,
           hp_max: nextHpMax,
           level_up: {
             class_id: selectedClassId,
@@ -1349,9 +1354,9 @@ export function LevelUpWizard({
           },
           skill_proficiencies: newLevelSkillChoices,
           asi_choices: newLevelAsiChoices,
-          feature_option_choices: newLevelFeatureOptionChoices,
-          spell_choices: newLevelSpellSelections,
-          feat_choices: newLevelFeatChoices,
+          feature_option_choices: afterStateFeatureOptionChoices,
+          spell_choices: afterStateSpellSelections,
+          feat_choices: afterStateFeatChoices,
         }),
       })
 
@@ -1371,6 +1376,9 @@ export function LevelUpWizard({
         variant: 'destructive',
       })
     } finally {
+      if (saveAbortControllerRef.current === controller) {
+        saveAbortControllerRef.current = null
+      }
       setWorking(false)
     }
   }
@@ -1570,9 +1578,9 @@ export function LevelUpWizard({
                 skillProficiencies={skillProficiencies}
                 canEdit
                 onChange={(nextSkills) => {
-                  const preserved = nextSkills.filter((skill) => initialSkillProficiencies.includes(skill))
+                  const preserved = nextSkills.filter((skill) => initialSkillProficiencyKeys.has(skill))
                   const newChoices = nextSkills
-                    .filter((skill) => !initialSkillProficiencies.includes(skill))
+                    .filter((skill) => !initialSkillProficiencyKeys.has(skill))
                     .filter((skill) => multiclassSkillOptions.includes(skill))
                     .slice(0, multiclassSkillConfig.count)
                   setSkillProficiencies([...preserved, ...newChoices])

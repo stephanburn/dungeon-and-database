@@ -18,6 +18,7 @@ Creation remains intentionally single-class and level 1. The multiclass smoke th
 | Multiclass caster / martial | Fighter 1 | Fighter 1 / Wizard 1 | Exercises multiclass prerequisite validation, multiclass skill grant, and class-scoped spell persistence |
 | Feat-heavy | Variant Human Fighter 1 | Fighter 2 or Fighter 4 depending on feat-slot fixture | Exercises species feat handling in creation and ASI / feat persistence in level-up |
 | Species / background-heavy | Changeling Bard 1 or Warforged Artificer 1 | same class to next level | Exercises typed language/tool/species-choice provenance and feature-driven spell / option handling |
+| 4.5 overlap regression | Background-skilled Fighter 1 or Wizard 3 / Bard 1 | add an overlapping multiclass skill, swap a class spell, retrain a feat, and edit a feature-option value | Exercises the Batch 4.5 data-integrity fixes: skill overlap merge, spell/feat replacement, feature-option upsert, preserved per-level anchors, stale-write handling, and client submit safety |
 
 ## Smoke Evidence
 
@@ -31,6 +32,50 @@ Verification run for Slice 4o:
 
 - `npm test -- test/level-up-flow.test.ts test/atomic-save.test.ts test/wizard-step-helpers.test.ts test/batch-4-closeout.test.ts`
 - `node node_modules/next/dist/bin/next build`
+
+Verification added during Batch 4.5:
+
+- `test/level-up-atomic-swap-replace-migration.test.ts` pins spell swap, feat retrain, and feature-option value-change SQL behavior
+- `test/level-up-atomic-skill-overlap-migration.test.ts` pins skill-overlap merge behavior and first-write-wins provenance
+- `test/level-up-preserved-provenance-anchor-safety-migration.test.ts` pins preserved anchors and idempotent class-level sync behavior
+- `test/level-up-concurrency-guardrails-migration.test.ts` pins trigger locking and level-up optimistic-lock token checks
+- `test/character-route-concurrency-errors.test.ts` pins structured 4xx error mapping and client token forwarding
+- `test/client-submit-safety.test.ts` pins species/class/subclass stale-state clearing, step-selector gating, and double-submit protection
+- `test/server-side-rolled-stats.test.ts` pins server-side stat rolling and non-DM DM-field stripping
+- `test/batch-45-regression-matrix.test.ts` ties the critical 2026-04-23 review findings to the tests above so a future cleanup cannot remove coverage silently
+
+Verification run for Slice 4.5h:
+
+- `npm test -- --runInBand`
+- `node node_modules/next/dist/bin/next build`
+
+## Batch 4.5 Addendum
+
+Batch 4.5 closed the level-up data-integrity findings from the 2026-04-23 senior review before Batch 5 sheet presentation work begins.
+
+Final correction list:
+
+- spell swaps and feat retrains now use replacement/upsert semantics instead of append-only level-up writes
+- feature-option value edits now upsert `selected_value` instead of failing on the unique key
+- overlapping multiclass skills merge safely on `(character_id, skill)` and preserve the first grant's provenance
+- per-level class history sync updates valid rows in place instead of deleting and reinserting them, protecting `character_level_id` anchors from `ON DELETE SET NULL`
+- preserved spell, feat, and feature-option rows keep their existing anchors when a full after-state level-up payload reasserts them
+- level-up saves and trigger-driven class-level syncs now serialize through the owning character row, with `expected_updated_at` optimistic-lock checks and structured 4xx route errors
+- creation and level-up clients now send save tokens, gate double-submit paths, clear stale owner-scoped choice state, and request rolled stats from the server
+- non-DM draft hydration no longer receives `character_type` or `dm_notes`
+
+Skill-provenance decision from Slice 4.5b:
+
+- Chosen path: **Path B**, keep the narrow `character_skill_proficiencies` primary key `(character_id, skill)`.
+- Conflict behavior: `expertise` merges with OR semantics; existing `character_level_id`, `source_category`, `source_entity_id`, and `source_feature_key` are preserved.
+- Rationale: current loaders, legality aggregation, and sheet display all read one row per skill. Path A, widening the key for multi-row skill provenance, would require a broader read-model refactor and an aggregate-back-to-one-row layer before the sheet could render the same UX.
+- Deferred option: if Batch 5 needs multi-source skill provenance in presentation, add a dedicated `character_skill_proficiency_sources` table rather than widening the existing primary key in place.
+
+Residuals explicitly deferred:
+
+- Live Supabase transaction smoke against a copy of production data remains a deployment gate for migrations `067` and `068`; the local repo pins generated SQL and route/client contracts, but does not include a real transaction harness.
+- A broader programmatic browser smoke harness is still a Batch 5-or-later quality task, not a blocker for entering Batch 5.
+- Multi-source skill provenance presentation is deferred until sheet/audit UI work demonstrates a concrete need.
 
 ## Gap Audit
 
@@ -53,9 +98,11 @@ These are explicit follow-ons, not hidden Batch 4 blockers:
 
 - deepen sheet presentation so adjusted scores, AC sources, spell DC / attack mods, and proficiency provenance are readable without DB inspection
 - surface character choice provenance and stale `(source_category, source_entity_id)` references in DM-facing audit UI
+- decide during sheet presentation whether skill overlap history needs a new `character_skill_proficiency_sources` audit table, based on actual UI needs rather than preemptive schema churn
 - improve combat-time presentation for already-modeled but lightly surfaced feature systems such as maneuvers, terrains, disciplines, and reactive species traits
-- consider a broader smoke harness that programmatically walks representative creation and level-up payloads instead of relying only on targeted helper and save-path tests
+- add a broader smoke harness that programmatically walks representative creation and level-up payloads, including the 4.5 overlap regression archetype
+- run migrations `067` and `068` against a copy of production data before remote deployment to verify idempotent class-level sync and lock behavior on real rows
 
 ## Closeout Result
 
-Batch 4 is effectively complete. A player can create a level 1 character through guided steps without depending on the raw editor, and can level up through a guided flow that persists only what changed. Remaining work is now primarily Batch 5 sheet depth and audit presentation rather than missing builder workflow plumbing.
+Batch 4 and Batch 4.5 are effectively complete. A player can create a level 1 character through guided steps without depending on the raw editor, and can level up through a guided flow that persists exactly what changed without the data-integrity regressions identified in the 2026-04-23 review. Batch 5 can begin against a hardened per-level save path; remaining work is now primarily sheet depth, audit presentation, and broader smoke automation.
