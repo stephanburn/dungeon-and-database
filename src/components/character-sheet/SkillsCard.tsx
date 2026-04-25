@@ -5,9 +5,16 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { SKILLS, SAVING_THROW_NAMES } from '@/lib/skills'
 import type { AbilityKey, SkillKey } from '@/lib/skills'
 import type { DerivedCharacter } from '@/lib/characters/build-context'
-import { abilityModifier, proficiencyBonusFromLevel } from '@/lib/characters/derived'
-import { deriveSkillChoiceBuckets } from '@/lib/characters/skill-provenance'
-import type { Class, Background, Species } from '@/lib/types/database'
+import {
+  deriveAbilityScores,
+  buildSavingThrowSourceMap,
+  deriveSheetSavingThrows,
+  deriveSheetSkills,
+  formatModifier,
+  proficiencyBonusFromLevel,
+} from '@/lib/characters/derived'
+import { buildSkillDisplaySummaries, deriveSkillChoiceBuckets, type SkillSourceRowLike } from '@/lib/characters/skill-provenance'
+import type { Class, Background, Feat, Species, Subclass } from '@/lib/types/database'
 
 interface Stats {
   str: number; dex: number; con: number
@@ -18,16 +25,18 @@ interface SkillsCardProps {
   stats: Stats
   totalLevel: number
   selectedClass: Class | null
+  classOptions?: Array<Pick<Class, 'id' | 'name'>>
   background: Background | null
   species?: Species | null
+  subclasses?: Array<Pick<Subclass, 'id' | 'name'>>
+  feats?: Array<Pick<Feat, 'id' | 'name'>>
   derived?: Pick<DerivedCharacter, 'savingThrows' | 'skills'>
+  typedSkillRows?: SkillSourceRowLike[]
   // All actively-chosen skill proficiencies (class + background choices combined)
   skillProficiencies: string[]
   canEdit: boolean
   onChange: (skills: string[]) => void
 }
-
-function fmtMod(n: number) { return n >= 0 ? `+${n}` : `${n}` }
 
 function SkillStateIcon({
   proficient,
@@ -42,12 +51,16 @@ function SkillStateIcon({
 }
 
 export function SkillsCard({
-  stats, totalLevel, selectedClass, background,
+  stats, totalLevel, selectedClass, classOptions = [], background,
   species = null,
+  subclasses = [],
+  feats = [],
   derived,
+  typedSkillRows = [],
   skillProficiencies, canEdit, onChange,
 }: SkillsCardProps) {
   const pb = proficiencyBonusFromLevel(totalLevel)
+  const fallbackAbilities = deriveAbilityScores(stats, {})
   const {
     bgAutoSkills,
     bgChoiceFrom,
@@ -101,6 +114,31 @@ export function SkillsCard({
   const savingThrows = new Set(
     (selectedClass?.saving_throw_proficiencies ?? []).map((s) => s.toLowerCase() as AbilityKey)
   )
+  const fallbackSavingThrows = deriveSheetSavingThrows({
+    abilities: fallbackAbilities,
+    proficiencyBonus: pb,
+    proficientAbilities: Array.from(savingThrows),
+    proficiencySources: buildSavingThrowSourceMap(selectedClass
+      ? [{
+          className: selectedClass.name,
+          savingThrowProficiencies: selectedClass.saving_throw_proficiencies,
+        }]
+      : []
+    ),
+  })
+  const fallbackSkills = deriveSheetSkills({
+    abilities: fallbackAbilities,
+    proficiencyBonus: pb,
+    proficientSkills: Array.from(allChosen).concat(Array.from(bgAutoSkills)),
+  })
+  const skillDisplays = buildSkillDisplaySummaries({
+    rows: typedSkillRows,
+    background,
+    species,
+    classes: classOptions,
+    subclasses,
+    feats,
+  })
 
   const abilities: AbilityKey[] = ['str', 'dex', 'con', 'int', 'wis', 'cha']
 
@@ -123,15 +161,37 @@ export function SkillsCard({
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
             {abilities.map((ability) => {
               const derivedSave = derived?.savingThrows.find((save) => save.ability === ability)
-              const proficient = derivedSave?.proficient ?? savingThrows.has(ability)
-              const modifier = derivedSave?.modifier ?? (abilityModifier(stats[ability]) + (proficient ? pb : 0))
+              const fallbackSave = fallbackSavingThrows.find((save) => save.ability === ability)
+              const proficient = derivedSave?.proficient ?? fallbackSave?.proficient ?? false
+              const modifier = derivedSave?.modifier ?? fallbackSave?.modifier ?? 0
+              const abilityMod = derivedSave?.abilityModifier ?? fallbackSave?.abilityModifier ?? 0
+              const profBonus = derivedSave?.proficiencyBonus ?? fallbackSave?.proficiencyBonus ?? 0
+              const sourceLabel = (derivedSave?.proficiencySources ?? fallbackSave?.proficiencySources ?? []).join(', ')
               return (
-                <div key={ability} className="flex items-center gap-3 rounded-xl border border-white/8 bg-white/[0.02] px-3 py-2 text-sm">
-                  <span className={`h-2 w-2 rounded-full flex-shrink-0 ${proficient ? 'bg-emerald-400' : 'bg-neutral-600'}`} />
-                  <span className="w-7 font-mono text-xs text-neutral-400">{fmtMod(modifier)}</span>
-                  <span className={proficient ? 'text-neutral-200' : 'text-neutral-500'}>
-                    {SAVING_THROW_NAMES[ability]}
-                  </span>
+                <div key={ability} className="rounded-xl border border-white/8 bg-white/[0.02] px-3 py-2 text-sm">
+                  <div className="flex items-center gap-3">
+                    <span className={`h-2 w-2 flex-shrink-0 rounded-full ${proficient ? 'bg-emerald-400' : 'bg-neutral-600'}`} />
+                    <span className="w-7 font-mono text-xs text-neutral-400">{formatModifier(modifier)}</span>
+                    <span className={proficient ? 'text-neutral-200' : 'text-neutral-500'}>
+                      {SAVING_THROW_NAMES[ability]}
+                    </span>
+                  </div>
+                  <div className="mt-1 flex flex-wrap items-center gap-1 pl-8 text-[11px] text-neutral-500">
+                    <span>{formatModifier(abilityMod)}</span>
+                    {proficient && (
+                      <>
+                        <span>+</span>
+                        <span>{formatModifier(profBonus)} prof</span>
+                      </>
+                    )}
+                    <span>=</span>
+                    <span>{formatModifier(modifier)}</span>
+                    {sourceLabel && (
+                      <span className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-2 py-0.5 text-[10px] text-emerald-100">
+                        {sourceLabel}
+                      </span>
+                    )}
+                  </div>
                 </div>
               )
             })}
@@ -149,9 +209,13 @@ export function SkillsCard({
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {SKILLS.map((skill) => {
               const derivedSkill = derived?.skills.find((entry) => entry.key === skill.key)
-              const proficient = derivedSkill?.proficient ?? isProficient(skill.key)
-              const abilityMod = abilityModifier(stats[skill.ability])
-              const modifier = derivedSkill?.modifier ?? (abilityMod + (proficient ? pb : 0))
+              const fallbackSkill = fallbackSkills.find((entry) => entry.key === skill.key)
+              const proficient = derivedSkill?.proficient ?? fallbackSkill?.proficient ?? isProficient(skill.key)
+              const modifier = derivedSkill?.modifier ?? fallbackSkill?.modifier ?? 0
+              const abilityModifier = derivedSkill?.abilityModifier ?? fallbackSkill?.abilityModifier ?? 0
+              const proficiencyBonus = derivedSkill?.proficiencyBonus ?? fallbackSkill?.proficiencyBonus ?? 0
+              const expertise = derivedSkill?.expertise ?? fallbackSkill?.expertise ?? skillDisplays.get(skill.key)?.expertise ?? false
+              const sources = skillDisplays.get(skill.key)?.sources ?? []
               const fromBgAuto = bgAutoSkills.has(skill.key)
               const fromBgChoice = bgChosen.has(skill.key)
               const fromClassChoice = classChosen.has(skill.key)
@@ -183,30 +247,61 @@ export function SkillsCard({
                   type="button"
                   onClick={() => toggleSkill(skill.key)}
                   disabled={!isChoosable || (atLimit && !proficient)}
-                  className={`flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left text-sm transition-colors
+                  className={`flex w-full flex-col items-start gap-2 rounded-xl border px-3 py-2.5 text-left text-sm transition-colors
                     ${isEligible
                       ? 'cursor-pointer border-white/12 bg-white/[0.03] hover:border-white/18 hover:bg-white/[0.05]'
                       : 'cursor-default border-white/8 bg-white/[0.02]'}
                   `}
                 >
-                  <span className="flex-shrink-0">
-                    <SkillStateIcon proficient={proficient} locked={fromBgAuto} />
-                  </span>
-                  <span className="w-7 font-mono text-xs text-neutral-400">{fmtMod(modifier)}</span>
-                  <span className={proficient ? 'text-neutral-200' : isEligible ? 'text-neutral-400' : 'text-neutral-600'}>
-                    {skill.name}
-                  </span>
-                  {fromBgChoice && (
-                    <span className="rounded-full border border-amber-400/20 bg-amber-400/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-amber-100">
-                      BG
+                  <div className="flex w-full items-center gap-3">
+                    <span className="flex-shrink-0">
+                      <SkillStateIcon proficient={proficient} locked={fromBgAuto} />
                     </span>
-                  )}
-                  {fromSpeciesChoice && (
-                    <span className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-emerald-100">
-                      Species
+                    <span className="w-7 font-mono text-xs text-neutral-400">{formatModifier(modifier)}</span>
+                    <span className={proficient ? 'text-neutral-200' : isEligible ? 'text-neutral-400' : 'text-neutral-600'}>
+                      {skill.name}
                     </span>
+                    {expertise && (
+                      <span className="rounded-full border border-sky-400/20 bg-sky-400/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-sky-100">
+                        Expertise
+                      </span>
+                    )}
+                    {fromBgChoice && (
+                      <span className="rounded-full border border-amber-400/20 bg-amber-400/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-amber-100">
+                        BG
+                      </span>
+                    )}
+                    {fromSpeciesChoice && (
+                      <span className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-emerald-100">
+                        Species
+                      </span>
+                    )}
+                    <span className="ml-auto text-xs text-neutral-600">{skill.ability.toUpperCase()}</span>
+                  </div>
+                  <div className="pl-10 text-[11px] text-neutral-500">
+                    {formatModifier(abilityModifier)}
+                    {proficient && (
+                      <>
+                        {' + '}
+                        {formatModifier(proficiencyBonus)}
+                        {expertise ? ' expertise' : ' prof'}
+                      </>
+                    )}
+                    {' = '}
+                    {formatModifier(modifier)}
+                  </div>
+                  {sources.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 pl-10">
+                      {sources.map((source) => (
+                        <span
+                          key={`${skill.key}-${source.category}-${source.label}`}
+                          className="rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 text-[10px] text-neutral-300"
+                        >
+                          {source.label}
+                        </span>
+                      ))}
+                    </div>
                   )}
-                  <span className="ml-auto text-xs text-neutral-600">{skill.ability.toUpperCase()}</span>
                 </button>
               )
             })}

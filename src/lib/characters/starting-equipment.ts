@@ -410,7 +410,7 @@ export function resolveStartingEquipment(
         resolvedRows.push({
           item_id: item.id,
           quantity: resolvedItem.quantity,
-          equipped: false,
+          equipped: item.item_category === 'armor' || item.item_category === 'shield',
           source_package_item_id: packageItem.id,
           source_category: 'starting_equipment',
           source_entity_id: pkg.id,

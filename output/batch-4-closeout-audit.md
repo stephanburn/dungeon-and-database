@@ -99,6 +99,7 @@ These are explicit follow-ons, not hidden Batch 4 blockers:
 - deepen sheet presentation so adjusted scores, AC sources, spell DC / attack mods, and proficiency provenance are readable without DB inspection
 - surface character choice provenance and stale `(source_category, source_entity_id)` references in DM-facing audit UI
 - decide during sheet presentation whether skill overlap history needs a new `character_skill_proficiency_sources` audit table, based on actual UI needs rather than preemptive schema churn
+- Slice 5c decision: a new audit table is still deferred. The current sheet contract is satisfied from existing typed skill rows plus structural grants already present in content and build context: background auto-proficiencies are rendered from the background row, class/species/subclass choices come from persisted typed skill rows, and subclass expertise grants are surfaced from those same rows. That is sufficient for the representative overlap archetype (`Soldier`-style background Athletics plus Fighter multiclass Athletics) and for Knowledge Domain expertise promotion. If a later sheet or audit panel needs provenance for overlap cases where both grants are typed and the second one was collapsed by Path B's first-write-wins merge, add `character_skill_proficiency_sources` then rather than widening the main table.
 - improve combat-time presentation for already-modeled but lightly surfaced feature systems such as maneuvers, terrains, disciplines, and reactive species traits
 - add a broader smoke harness that programmatically walks representative creation and level-up payloads, including the 4.5 overlap regression archetype
 - run migrations `067` and `068` against a copy of production data before remote deployment to verify idempotent class-level sync and lock behavior on real rows
@@ -106,3 +107,60 @@ These are explicit follow-ons, not hidden Batch 4 blockers:
 ## Closeout Result
 
 Batch 4 and Batch 4.5 are effectively complete. A player can create a level 1 character through guided steps without depending on the raw editor, and can level up through a guided flow that persists exactly what changed without the data-integrity regressions identified in the 2026-04-23 review. Batch 5 can begin against a hardened per-level save path; remaining work is now primarily sheet depth, audit presentation, and broader smoke automation.
+
+## Slice 5m: Migration Smoke Verification (2026-04-25)
+
+Migrations `067` and `068` verified against live production database (`cqpyvaynpzgyjerfesmz`, region `eu-west-2`). Both were already applied. This run confirms clean post-application state.
+
+### Dataset shape at time of verification
+
+| Table | Row count |
+| --- | --- |
+| `characters` | 11 |
+| `character_levels` | 12 |
+| `character_class_levels` | 26 |
+| `character_hp_rolls` | 1 |
+| `character_spell_selections` | 14 |
+| `character_feat_choices` | 0 |
+| `character_feature_option_choices` | 0 |
+| `character_skill_proficiencies` | 16 |
+| `character_language_choices` | 2 |
+| `character_tool_choices` | 0 |
+| `character_ability_bonus_choices` | 1 |
+
+### Migration 067 — preserved provenance anchor safety
+
+- **Null anchor backfill**: All class-sourced rows across `character_language_choices`, `character_tool_choices`, `character_ability_bonus_choices`, `character_feature_option_choices`, and `character_skill_proficiencies` have 0 null `character_level_id` values. Backfill was a no-op or succeeded cleanly.
+- **Spell selections null anchors**: 14 of 14 spell selections have null `character_level_id`. All 14 have `owning_class_id = NULL` — these are pre-Batch-4 rows written before class scoping existed. The backfill correctly skipped them (conditioned on `owning_class_id IS NOT NULL`). This is expected, not an anomaly.
+- **`character_class_levels` alignment**: All 12 character-class rows in `character_levels` have correctly populated `character_class_levels` per-level rows. Max level in `character_class_levels` matches `character_levels.level` for every row.
+
+### Migration 068 — concurrency guardrails
+
+- **`sync_character_class_levels_for_class`**: `FOR UPDATE` lock on `public.characters` confirmed present in deployed function body.
+- **`save_character_level_up_atomic`**: `expected_updated_at` token extraction, "Optimistic lock token is required" guard, and "Optimistic lock mismatch" check all confirmed present in deployed function body.
+- **Triggers**: `sync_character_class_levels_from_levels` (on `character_levels`) and `sync_character_class_levels_from_hp_rolls` (on `character_hp_rolls`) both enabled and wired correctly.
+
+### Idempotency check
+
+Re-ran `sync_character_class_levels_for_class` for all 12 character-class pairs against live data:
+
+| Metric | Result |
+| --- | --- |
+| Rows before | 26 |
+| Rows after | 26 |
+| Rows changed or deleted | 0 |
+| New rows inserted | 0 |
+
+The sync function is fully idempotent on real production data.
+
+### Orphan provenance check
+
+Zero orphan `character_level_id` anchors across all six choice tables (spell selections, feat choices, feature-option choices, skill proficiencies, language choices, ability-bonus choices).
+
+### HP roll integrity
+
+The one `character_hp_rolls` row (`level_number = 1, roll = 8`) correctly matches its `character_class_levels` row and `ccl.hp_roll = 8`. No unanchored HP rolls.
+
+### Gate status
+
+**Batch 4.5 deployment gate closed.** Migrations `067` and `068` run cleanly with no orphan provenance, no lock anomalies, and fully idempotent class-level sync. Batch 5 deployments may proceed.

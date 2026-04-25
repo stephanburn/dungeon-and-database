@@ -1,3 +1,4 @@
+import type { ArmorCatalogEntry, ShieldCatalogEntry } from '@/lib/content/equipment-content'
 import type {
   Background,
   Campaign,
@@ -16,6 +17,7 @@ import type {
 } from '@/lib/types/database'
 import type { LegalityResult } from '@/lib/legality/engine'
 import type {
+  EquipmentItemChoiceInput,
   FeatChoiceInput,
   SpellChoiceInput,
 } from '@/lib/characters/choice-persistence'
@@ -105,6 +107,9 @@ type LocalBuildContextArgs = {
   asiChoices?: AsiSelection[]
   skillProficiencies?: string[]
   typedSkillProficiencies?: CharacterSkillProficiency[]
+  equipmentItems?: EquipmentItemChoiceInput[]
+  armorCatalog?: ArmorCatalogEntry[]
+  shieldCatalog?: ShieldCatalogEntry[]
   abilityBonusChoices?: SpeciesChoiceAbilityKey[]
   languageChoices?: string[]
   toolChoices?: string[]
@@ -133,6 +138,9 @@ export function buildLocalCharacterContext({
   asiChoices = [],
   skillProficiencies = [],
   typedSkillProficiencies = [],
+  equipmentItems = [],
+  armorCatalog = [],
+  shieldCatalog = [],
   abilityBonusChoices = [],
   languageChoices = [],
   toolChoices = [],
@@ -315,6 +323,36 @@ export function buildLocalCharacterContext({
       .map((row) => row.skill),
     selectedAbilityBonuses: buildSpeciesAbilityBonusMap(selectedSpecies, abilityBonusChoices),
     selectedAsiBonuses: buildAsiBonusMap(asiChoices),
+    selectedAsiChoices: asiChoices.flatMap((selection, slotIndex) => {
+      const bonusByAbility = selection.reduce<Partial<Record<SpeciesChoiceAbilityKey, number>>>((acc, ability) => {
+        acc[ability] = (acc[ability] ?? 0) + 1
+        return acc
+      }, {})
+      return Object.entries(bonusByAbility).map(([ability, bonus]) => ({
+        id: `draft-asi-${slotIndex}-${ability}`,
+        slotIndex,
+        ability: ability as SpeciesChoiceAbilityKey,
+        bonus: bonus ?? 0,
+        characterLevelId: null,
+        sourceFeatureKey: null,
+      }))
+    }),
+    equipmentItems: equipmentItems.map((item) => ({
+      itemId: item.item_id,
+      equipped: item.equipped ?? false,
+    })),
+    armorCatalog: armorCatalog.map((entry) => ({
+      itemId: entry.item_id,
+      name: entry.name,
+      armorCategory: entry.armor_category,
+      baseAc: entry.base_ac,
+      dexBonusCap: entry.dex_bonus_cap,
+    })),
+    shieldCatalog: shieldCatalog.map((entry) => ({
+      itemId: entry.item_id,
+      name: entry.name,
+      armorClassBonus: entry.armor_class_bonus,
+    })),
     asiChoiceSlots: asiChoices
       .map((selection, slotIndex) => ({
         slotIndex,
@@ -359,7 +397,27 @@ export function buildLocalCharacterContext({
         source: feat.source,
         prerequisites: feat.prerequisites,
       })),
+    selectedFeatChoices: featChoices.flatMap((featId, index) => {
+      const feat = featById.get(featId)
+      if (!feat) return []
+      return [{
+        id: `draft-feat-${index}-${feat.id}`,
+        featId: feat.id,
+        featName: feat.name,
+        choiceKind: 'asi_or_feat',
+        characterLevelId: null,
+        sourceFeatureKey: null,
+      }]
+    }),
+    classLevelAnchors: [],
     selectedFeatureOptions: featureOptionChoices,
+    featureOptions: featureOptionRows.map((option) => ({
+      group_key: option.group_key,
+      key: option.key,
+      name: option.name,
+      description: option.description,
+      effects: option.effects,
+    })),
     sourceCollections: {
       classSources: classes.map((cls) => cls.source),
       subclassSources: classes

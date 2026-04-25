@@ -243,6 +243,9 @@ test('resolveStartingEquipment expands helper bundles and choice groups into con
   )
   assert.equal(resolved.items.length, 6)
   assert.equal(resolved.items[0]?.source_category, 'starting_equipment')
+  assert.equal(resolved.items.find((item) => item.item_id === 'leather-armor-id')?.equipped, true)
+  assert.equal(resolved.items.find((item) => item.item_id === 'shield-id')?.equipped, true)
+  assert.equal(resolved.items.find((item) => item.item_id === 'longsword-id')?.equipped, false)
 })
 
 test('resolveStartingEquipment reports missing helper selections', () => {

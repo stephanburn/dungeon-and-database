@@ -38,6 +38,7 @@ export interface LoadedCharacterState {
   initialAbilityBonusChoices: Array<'str' | 'dex' | 'con' | 'int' | 'wis' | 'cha'>
   initialTypedAbilityBonusChoices: CharacterAbilityBonusChoice[]
   initialAsiChoices: AsiSelection[]
+  initialTypedAsiChoices: CharacterAsiChoice[]
   initialLanguageChoices: string[]
   initialTypedLanguageChoices: CharacterLanguageChoice[]
   initialToolChoices: string[]
@@ -46,6 +47,7 @@ export interface LoadedCharacterState {
   initialSpellSelections: CharacterSpellSelection[]
   initialSelectedSpells: SpellOption[]
   initialFeatChoices: string[]
+  initialTypedFeatChoices: CharacterFeatChoice[]
   initialFeatureOptionChoices: CharacterFeatureOptionChoice[]
   initialEquipmentItems: CharacterEquipmentItem[]
   initialStatRolls: CharacterStatRoll[]
@@ -282,6 +284,7 @@ export async function loadCharacterState(
     initialAbilityBonusChoices: typedAbilityBonusChoices,
     initialTypedAbilityBonusChoices: (abilityBonusChoicesResult.data ?? []) as CharacterAbilityBonusChoice[],
     initialAsiChoices: typedAsiChoices,
+    initialTypedAsiChoices: (asiChoicesResult.data ?? []) as CharacterAsiChoice[],
     initialLanguageChoices: typedLanguageChoices,
     initialTypedLanguageChoices: (languageChoicesResult.data ?? []) as CharacterLanguageChoice[],
     initialToolChoices: typedToolChoices,
@@ -290,6 +293,7 @@ export async function loadCharacterState(
     initialSpellSelections: typedSpellSelections,
     initialSelectedSpells,
     initialFeatChoices: typedFeatChoices,
+    initialTypedFeatChoices: (typedFeatChoicesResult.data ?? []) as CharacterFeatChoice[],
     initialFeatureOptionChoices: typedFeatureOptionChoices,
     initialEquipmentItems: typedEquipmentItems,
     initialStatRolls: (statRollsResult.data ?? []) as CharacterStatRoll[],

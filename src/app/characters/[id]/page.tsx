@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { CharacterSheet } from '@/components/character-sheet/CharacterSheet'
 import { DmReviewPanel } from '@/components/dm/DmReviewPanel'
+import { StaleProvenancePanel } from '@/components/dm/StaleProvenancePanel'
 import { DeleteCharacterButton } from './DeleteCharacterButton'
 import { loadCharacterState } from '@/lib/characters/load-character'
 
@@ -33,6 +34,14 @@ export default async function CharacterPage({ params }: { params: { id: string }
   }
 
   const isDm = hasDmAccess(profile?.role)
+
+  const staleProvenance = isDm
+    ? await supabase
+        .from('character_stale_provenance')
+        .select('*')
+        .eq('character_id', params.id)
+        .then(({ data }) => data ?? [])
+    : []
   const isOwner = character.user_id === user.id
   const backHref = isDm ? '/dm/dashboard' : '/'
   const canEditCharacter = character.status === 'draft' || character.status === 'changes_requested' || isDm
@@ -60,24 +69,33 @@ export default async function CharacterPage({ params }: { params: { id: string }
           character={state.character}
           campaignId={character.campaign_id}
           initialSkillProficiencies={state.initialSkillProficiencies}
+          initialTypedSkillProficiencies={state.initialTypedSkillProficiencies}
           initialAbilityBonusChoices={state.initialAbilityBonusChoices}
           initialAsiChoices={state.initialAsiChoices}
           initialLanguageChoices={state.initialLanguageChoices}
+          initialTypedLanguageChoices={state.initialTypedLanguageChoices}
           initialToolChoices={state.initialToolChoices}
+          initialTypedToolChoices={state.initialTypedToolChoices}
           initialSpellChoices={state.initialSpellChoices}
+          initialSpellSelections={state.initialSpellSelections}
           initialSelectedSpells={state.initialSelectedSpells}
           initialFeatChoices={state.initialFeatChoices}
+          initialTypedFeatChoices={state.initialTypedFeatChoices}
           initialFeatureOptionChoices={state.initialFeatureOptionChoices}
+          initialEquipmentItems={state.initialEquipmentItems}
           initialLegalityResult={state.legality}
           readOnly={false}
           isDm={isDm}
         />
 
         {isDm && (
-          <DmReviewPanel
-            characterId={character.id}
-            status={character.status}
-          />
+          <>
+            <StaleProvenancePanel entries={staleProvenance} />
+            <DmReviewPanel
+              characterId={character.id}
+              status={character.status}
+            />
+          </>
         )}
       </div>
     </div>

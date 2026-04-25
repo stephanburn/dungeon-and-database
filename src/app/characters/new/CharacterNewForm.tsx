@@ -131,6 +131,8 @@ import {
   hasCompletedStep,
 } from '@/lib/characters/wizard-step-helpers'
 import type {
+  ArmorCatalogEntry,
+  ShieldCatalogEntry,
   StartingEquipmentPackageEntry,
   WeaponCatalogEntry,
 } from '@/lib/content/equipment-content'
@@ -248,6 +250,8 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
   const [startingEquipmentPackages, setStartingEquipmentPackages] = useState<StartingEquipmentPackageEntry[]>([])
   const [equipmentItems, setEquipmentItems] = useState<EquipmentItem[]>([])
   const [weaponCatalog, setWeaponCatalog] = useState<WeaponCatalogEntry[]>([])
+  const [armorCatalog, setArmorCatalog] = useState<ArmorCatalogEntry[]>([])
+  const [shieldCatalog, setShieldCatalog] = useState<ShieldCatalogEntry[]>([])
   const [subclassMap, setSubclassMap] = useState<Record<string, Subclass[]>>({})
   const [classDetailMap, setClassDetailMap] = useState<Record<string, ClassDetail>>({})
   const [spellOptions, setSpellOptions] = useState<SpellOption[]>([])
@@ -482,7 +486,9 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
       fetch(`/api/content/starting-equipment-packages${qs}`).then((response) => response.json()),
       fetch(`/api/content/equipment-items${qs}`).then((response) => response.json()),
       fetch(`/api/content/weapons${qs}`).then((response) => response.json()),
-    ]).then(([species, backgrounds, classes, feats, languages, tools, featureOptions, packages, items, weapons]) => {
+      fetch(`/api/content/armor${qs}`).then((response) => response.json()),
+      fetch(`/api/content/shields${qs}`).then((response) => response.json()),
+    ]).then(([species, backgrounds, classes, feats, languages, tools, featureOptions, packages, items, weapons, armor, shields]) => {
       setSpeciesList(species)
       setBackgroundList(backgrounds)
       setClassList(classes)
@@ -493,6 +499,8 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
       setStartingEquipmentPackages(Array.isArray(packages) ? packages : [])
       setEquipmentItems(Array.isArray(items) ? items : [])
       setWeaponCatalog(Array.isArray(weapons) ? weapons : [])
+      setArmorCatalog(Array.isArray(armor) ? armor : [])
+      setShieldCatalog(Array.isArray(shields) ? shields : [])
       if (levels.length === 0 && Array.isArray(classes) && classes.length > 0) {
         setLevels([{ class_id: classes[0].id, level: 1, subclass_id: null }])
       }
@@ -1106,6 +1114,15 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
   const campaign = campaignContext?.campaign ?? campaigns.find((entry) => entry.id === campaignId) ?? null
   const creationHitDieRows = buildWizardHitDieRows(levels, classDetailMap)
   const creationHpMax = calculateCreationHpMax(creationHitDieRows, stats.con)
+  const resolvedStartingEquipment = useMemo(
+    () => resolveStartingEquipment(
+      activeStartingEquipmentPackages,
+      startingEquipmentSelections,
+      equipmentItems,
+      weaponCatalog
+    ),
+    [activeStartingEquipmentPackages, startingEquipmentSelections, equipmentItems, weaponCatalog]
+  )
   const localContext = buildLocalCharacterContext({
     campaign,
     allowedSources: campaignContext?.allowedSources ?? [],
@@ -1127,6 +1144,9 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
     asiChoices,
     skillProficiencies,
     typedSkillProficiencies,
+    equipmentItems: resolvedStartingEquipment.items,
+    armorCatalog,
+    shieldCatalog,
     abilityBonusChoices,
     languageChoices,
     toolChoices,
@@ -1333,21 +1353,15 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
 
     return cappedCantripChoiceCount >= requiredCantrips && cappedLeveledChoiceCount >= requiredLeveled
   }, [activeSpellcastingSource, cappedCantripChoiceCount, cappedLeveledChoiceCount])
-  const resolvedStartingEquipment = useMemo(
-    () => resolveStartingEquipment(
-      activeStartingEquipmentPackages,
-      startingEquipmentSelections,
-      equipmentItems,
-      weaponCatalog
-    ),
-    [activeStartingEquipmentPackages, startingEquipmentSelections, equipmentItems, weaponCatalog]
-  )
   const reviewSummaryItems = useMemo(() => {
     if (!derived) return []
 
     return [
       `Proficiency bonus: +${derived.proficiencyBonus}`,
       `Armor Class: ${derived.armorClass.value} (${derived.armorClass.formula})`,
+      ...((derived.armorClass.alternatives ?? []).map((alternative) => (
+        `Armor Class Option (${alternative.label}): ${alternative.value} (${alternative.formula})`
+      ))),
       `Initiative: ${derived.initiative >= 0 ? '+' : ''}${derived.initiative}`,
       `Passive Perception: ${derived.passivePerception}`,
       derived.languages.length > 0 ? `Languages: ${derived.languages.join(', ')}` : 'Languages: none selected',
@@ -2505,9 +2519,12 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
                   stats={stats}
                   totalLevel={derived?.totalLevel ?? 0}
                   selectedClass={selectedClass}
+                  classOptions={selectedClass ? [selectedClass] : []}
                   species={selectedSpecies}
                   background={selectedBackground}
+                  subclasses={selectedSubclass ? [selectedSubclass] : []}
                   derived={derived ? { savingThrows: derived.savingThrows, skills: derived.skills } : undefined}
+                  typedSkillRows={typedSkillProficiencies}
                   skillProficiencies={skillProficiencies}
                   canEdit={false}
                   onChange={() => {}}

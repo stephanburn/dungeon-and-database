@@ -568,6 +568,15 @@ export type CharacterEquipmentItem = {
   created_at: string
 }
 
+export type StaleProvenanceRow = {
+  character_id: string
+  choice_table: string
+  choice_key: string
+  source_category: string
+  source_entity_id: string
+  source_feature_key: string | null
+}
+
 export type AuditLog = {
   id: string
   actor_user_id: string | null
@@ -634,7 +643,9 @@ export type Database = {
       character_skill_proficiencies: { Row: CharacterSkillProficiency; Insert: CharacterSkillProficiency; Update: Partial<CharacterSkillProficiency>; Relationships: R }
       audit_logs: { Row: AuditLog; Insert: Omit<AuditLog, 'id' | 'created_at'> & { details?: Record<string, unknown>; succeeded?: boolean }; Update: Partial<Omit<AuditLog, 'id' | 'created_at'>>; Relationships: R }
     }
-    Views: Record<string, never>
+    Views: {
+      character_stale_provenance: { Row: StaleProvenanceRow; Relationships: [] }
+    }
     Functions: {
       is_admin: { Args: Record<string, never>; Returns: boolean }
       is_dm: { Args: Record<string, never>; Returns: boolean }

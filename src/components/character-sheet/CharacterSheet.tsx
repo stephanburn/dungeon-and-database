@@ -19,6 +19,7 @@ import { Separator } from '@/components/ui/separator'
 import { StatBlock } from './StatBlock'
 import { StatBlockView } from './StatBlockView'
 import { SkillsCard } from './SkillsCard'
+import { GrantedProficienciesCard } from './GrantedProficienciesCard'
 import { LanguagesToolsCard } from './LanguagesToolsCard'
 import { SpeciesAbilityBonusCard } from './SpeciesAbilityBonusCard'
 import { SpellsCard } from './SpellsCard'
@@ -31,6 +32,7 @@ import { LegalityBadge } from './LegalityBadge'
 import { SourceTag } from '@/components/shared/SourceTag'
 import { useToast } from '@/hooks/use-toast'
 import {
+  buildLocalCharacterContext,
   buildTypedAsiChoices,
   buildTypedSpellChoices,
   buildTypedFeatChoices,
@@ -38,8 +40,18 @@ import {
   buildTypedLanguageChoices,
   buildTypedSkillProficiencies,
   buildTypedToolChoices,
+  deriveLocalCharacter,
 } from '@/lib/characters/wizard-helpers'
-import { deriveCharacterCore, type DerivedCharacterCore } from '@/lib/characters/derived'
+import { getFixedBackgroundLanguages } from '@/lib/characters/language-tool-provenance'
+import {
+  abilityBonusMapToContributors,
+  deriveGrantedNonSkillProficiencies,
+  deriveCharacterCore,
+  formatModifier,
+  sumAbilityContributors,
+  type DerivedAbilityScoreContributor,
+  type DerivedCharacterCore,
+} from '@/lib/characters/derived'
 import {
   buildFeatureOptionChoicesFromDefinitionMap,
   buildMaverickFeatureOptionChoices,
@@ -63,11 +75,19 @@ import type { FeatureOptionChoiceInput } from '@/lib/characters/choice-persisten
 import type {
   Species, Background,
   CharacterFeatureOptionChoice,
+  CharacterFeatChoice,
+  CharacterEquipmentItem,
+  CharacterLanguageChoice,
+  CharacterSkillProficiency,
+  CharacterSpellSelection,
+  CharacterToolChoice,
   Class, Subclass, Feat, Alignment, StatMethod, AbilityScoreBonus,
+  Campaign,
   FeatureOption,
   Language,
   Tool,
 } from '@/lib/types/database'
+import type { ArmorCatalogEntry, ShieldCatalogEntry } from '@/lib/content/equipment-content'
 import type { LegalityResult } from '@/lib/legality/engine'
 import type { SpellOption } from '@/lib/characters/wizard-helpers'
 
@@ -93,20 +113,74 @@ interface CharacterSheetProps {
   character: CharacterWithRelations
   campaignId: string
   initialSkillProficiencies?: string[]
+  initialTypedSkillProficiencies?: CharacterSkillProficiency[]
   initialAbilityBonusChoices?: SpeciesChoiceAbilityKey[]
   initialAsiChoices?: AsiSelection[]
   initialLanguageChoices?: string[]
+  initialTypedLanguageChoices?: CharacterLanguageChoice[]
   initialToolChoices?: string[]
+  initialTypedToolChoices?: CharacterToolChoice[]
   initialSpellChoices?: string[]
+  initialSpellSelections?: CharacterSpellSelection[]
   initialSelectedSpells?: SpellOption[]
   initialFeatChoices?: string[]
+  initialTypedFeatChoices?: CharacterFeatChoice[]
   initialFeatureOptionChoices?: CharacterFeatureOptionChoice[]
+  initialEquipmentItems?: CharacterEquipmentItem[]
   initialLegalityResult?: LegalityResult | null
   readOnly?: boolean
   isDm?: boolean
 }
 
 type SectionId = 'identity-class' | 'stats-skills' | 'spells-feats' | 'hp-notes'
+
+type DmAuditContentSource = {
+  id: string
+  kind: string
+  label: string
+  source: string | null
+  amended: boolean
+  amendmentNote: string | null
+}
+
+type DmAuditProvenanceEntry = {
+  id: string
+  label: string
+  source: string
+  anchor: string
+  detail: string | null
+}
+
+type DmAuditProvenanceGroup = {
+  id: string
+  label: string
+  entries: DmAuditProvenanceEntry[]
+}
+
+function addAuditContentSource(
+  sources: DmAuditContentSource[],
+  entry: Omit<DmAuditContentSource, 'id'>
+) {
+  const id = `${entry.kind}:${entry.label}:${entry.source ?? 'unknown'}`
+  if (sources.some((source) => source.id === id)) return
+  sources.push({ ...entry, id })
+}
+
+function auditSourceLabel(category: string | null | undefined, entityId: string | null | undefined) {
+  const source = category && category.trim().length > 0 ? category.replace(/_/g, ' ') : 'unknown source'
+  return entityId ? `${source} ${entityId}` : source
+}
+
+function auditAnchorLabel(
+  characterLevelId: string | null | undefined,
+  anchors: Array<{ id: string; class_id: string; level_number: number }>,
+  classNamesById: Map<string, string>
+) {
+  if (!characterLevelId) return 'Unanchored'
+  const anchor = anchors.find((row) => row.id === characterLevelId)
+  if (!anchor) return `Missing anchor ${characterLevelId}`
+  return `${classNamesById.get(anchor.class_id) ?? anchor.class_id} ${anchor.level_number}`
+}
 
 function CollapsibleSection({
   id,
@@ -150,19 +224,404 @@ function CollapsibleSection({
   )
 }
 
+function canonicalizeFeatureOptionsForDerived(
+  choices: FeatureOptionChoiceInput[]
+) {
+  return choices.map((choice) => ({
+    option_group_key: choice.option_group_key,
+    selected_value: choice.selected_value ?? {},
+  }))
+}
+
+function abilityLabel(ability: string | null) {
+  return ability ? ability.toUpperCase() : 'None'
+}
+
+function spellLevelLabel(level: number) {
+  return level === 0 ? 'Cantrip' : `Level ${level}`
+}
+
+function SpellPillList({
+  spells,
+  empty,
+  granted = false,
+}: {
+  spells: Array<{
+    id: string
+    name: string
+    level: number
+    source: string
+    grantLabel: string | null
+  }>
+  empty: string
+  granted?: boolean
+}) {
+  if (spells.length === 0) {
+    return <p className="text-sm text-neutral-500">{empty}</p>
+  }
+
+  return (
+    <div className="flex flex-wrap gap-2">
+      {spells.map((spell) => (
+        <span
+          key={`${spell.id}-${spell.grantLabel ?? 'selected'}`}
+          className={`rounded-full border px-3 py-1 text-xs ${
+            granted
+              ? 'border-emerald-400/20 bg-emerald-400/10 text-emerald-100'
+              : 'border-white/10 bg-white/[0.03] text-neutral-300'
+          }`}
+        >
+          {spell.name} ({spellLevelLabel(spell.level)})
+          {granted && spell.grantLabel ? ` · ${spell.grantLabel}` : ''}
+        </span>
+      ))}
+    </div>
+  )
+}
+
+function FeatureList({
+  features,
+}: {
+  features: Array<{
+    classId: string
+    className: string
+    level: number
+    name: string
+    sourceLabel: string
+    sourceType: 'class' | 'subclass'
+    description: string | null
+  }>
+}) {
+  if (features.length === 0) {
+    return <p className="text-sm text-neutral-500">No class features unlocked yet.</p>
+  }
+
+  const grouped = features.reduce<Record<string, typeof features>>((acc, feature) => {
+    const key = `${feature.classId}:${feature.level}`
+    acc[key] = [...(acc[key] ?? []), feature]
+    return acc
+  }, {})
+
+  return (
+    <div className="space-y-3">
+      {Object.entries(grouped).map(([key, entries]) => {
+        const first = entries[0]
+        if (!first) return null
+        return (
+          <div key={key} className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-neutral-500">
+              {first.className} {first.level}
+            </p>
+            <div className="mt-2 space-y-3">
+              {entries.map((feature) => (
+                <div key={`${feature.classId}-${feature.level}-${feature.name}`}>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-sm font-medium text-neutral-100">{feature.name}</p>
+                    <span className="rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 text-[10px] text-neutral-400">
+                      {feature.sourceLabel}
+                    </span>
+                    <span className="rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 text-[10px] text-neutral-400">
+                      {feature.sourceType}
+                    </span>
+                  </div>
+                  {feature.description && (
+                    <p className="mt-1 text-sm leading-6 text-neutral-400">{feature.description}</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function ClassResourcesPanel({
+  resources,
+}: {
+  resources: Array<{
+    id: string
+    label: string
+    value: string
+    detail: string
+    recharge: string | null
+    sourceLabel: string
+  }>
+}) {
+  if (resources.length === 0) {
+    return <p className="text-sm text-neutral-500">No class resources are currently tracked.</p>
+  }
+
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      {resources.map((resource) => (
+        <div key={resource.id} className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-medium text-neutral-100">{resource.label}</p>
+              <p className="mt-1 text-xs text-neutral-500">{resource.sourceLabel}</p>
+            </div>
+            <p className="text-right text-sm font-semibold text-neutral-100">{resource.value}</p>
+          </div>
+          <p className="mt-2 text-sm leading-6 text-neutral-400">{resource.detail}</p>
+          {resource.recharge && (
+            <p className="mt-2 text-xs text-neutral-500">Refresh: {resource.recharge}</p>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function AsiFeatHistoryPanel({
+  entries,
+}: {
+  entries: Array<{
+    id: string
+    type: 'asi' | 'feat'
+    label: string
+    detail: string
+    className: string | null
+    levelNumber: number | null
+  }>
+}) {
+  if (entries.length === 0) {
+    return <p className="text-sm text-neutral-500">No ASI or feat choices have been recorded yet.</p>
+  }
+
+  return (
+    <div className="space-y-2">
+      {entries.map((entry) => (
+        <div key={entry.id} className="flex flex-col gap-2 rounded-xl border border-white/10 bg-white/[0.02] p-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-sm font-medium text-neutral-100">{entry.label}</p>
+              <span className={`rounded-full border px-2 py-0.5 text-[10px] ${
+                entry.type === 'feat'
+                  ? 'border-amber-300/20 bg-amber-300/10 text-amber-100'
+                  : 'border-blue-300/20 bg-blue-300/10 text-blue-100'
+              }`}>
+                {entry.type === 'feat' ? 'Feat' : 'ASI'}
+              </span>
+            </div>
+            <p className="mt-1 text-sm text-neutral-400">{entry.detail}</p>
+          </div>
+          <p className="shrink-0 text-left text-xs text-neutral-500 sm:text-right">
+            {entry.className && entry.levelNumber !== null
+              ? `${entry.className} ${entry.levelNumber}`
+              : 'Unanchored'}
+          </p>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function CombatOptionsPanel({
+  actions,
+}: {
+  actions: Array<{
+    id: string
+    name: string
+    category: 'maneuver' | 'hunter' | 'discipline' | 'trait'
+    sourceLabel: string
+    trigger: string | null
+    effect: string
+    cost: string | null
+    saveDc: number | null
+  }>
+}) {
+  if (actions.length === 0) {
+    return <p className="text-sm text-neutral-500">No combat options are currently surfaced from selected features.</p>
+  }
+
+  return (
+    <div className="grid gap-3 lg:grid-cols-2">
+      {actions.map((action) => (
+        <div key={action.id} className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-sm font-medium text-neutral-100">{action.name}</p>
+            <span className="rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 text-[10px] text-neutral-400">
+              {action.sourceLabel}
+            </span>
+          </div>
+          <p className="mt-2 text-sm leading-6 text-neutral-400">{action.effect}</p>
+          <div className="mt-3 flex flex-wrap gap-2 text-xs">
+            {action.trigger && (
+              <span className="rounded-full border border-white/10 bg-white/[0.03] px-2 py-1 text-neutral-300">
+                Trigger: {action.trigger}
+              </span>
+            )}
+            {action.cost && (
+              <span className="rounded-full border border-white/10 bg-white/[0.03] px-2 py-1 text-neutral-300">
+                Cost: {action.cost}
+              </span>
+            )}
+            {action.saveDc !== null && (
+              <span className="rounded-full border border-white/10 bg-white/[0.03] px-2 py-1 text-neutral-300">
+                Save DC {action.saveDc}
+              </span>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function DmAuditPanel({
+  sources,
+  checks,
+  groups,
+  onJumpToCheck,
+}: {
+  sources: DmAuditContentSource[]
+  checks: LegalityResult['checks']
+  groups: DmAuditProvenanceGroup[]
+  onJumpToCheck: (key: string) => void
+}) {
+  const failedChecks = checks.filter((check) => !check.passed)
+
+  return (
+    <div className="panel-subtle border-blue-400/20 bg-blue-400/[0.04]">
+      <CardHeader>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <CardTitle className="text-neutral-100">DM Audit</CardTitle>
+            <p className="mt-1 text-sm text-neutral-400">
+              Sources, legality, and persisted choice provenance for review.
+            </p>
+          </div>
+          <span className={`rounded-full border px-3 py-1 text-xs ${
+            failedChecks.some((check) => check.severity === 'error')
+              ? 'border-rose-300/20 bg-rose-300/10 text-rose-100'
+              : failedChecks.length > 0
+                ? 'border-amber-300/20 bg-amber-300/10 text-amber-100'
+                : 'border-emerald-300/20 bg-emerald-300/10 text-emerald-100'
+          }`}>
+            {failedChecks.length === 0 ? 'No active legality issues' : `${failedChecks.length} issue${failedChecks.length === 1 ? '' : 's'}`}
+          </span>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-neutral-500">Selected Sources</p>
+          {sources.length === 0 ? (
+            <p className="mt-2 text-sm text-neutral-500">No selected content sources are loaded yet.</p>
+          ) : (
+            <div className="mt-2 grid gap-2 sm:grid-cols-2">
+              {sources.map((source) => (
+                <div key={source.id} className="rounded-lg border border-white/10 bg-white/[0.02] p-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-sm font-medium text-neutral-100">{source.label}</p>
+                    <span className="rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 text-[10px] text-neutral-400">
+                      {source.kind}
+                    </span>
+                    {source.source && (
+                      <span className="rounded-full border border-blue-300/20 bg-blue-300/10 px-2 py-0.5 text-[10px] text-blue-100">
+                        {source.source}
+                      </span>
+                    )}
+                    {source.amended && (
+                      <span className="rounded-full border border-amber-300/20 bg-amber-300/10 px-2 py-0.5 text-[10px] text-amber-100">
+                        Amended
+                      </span>
+                    )}
+                  </div>
+                  {source.amendmentNote && (
+                    <p className="mt-2 text-xs leading-5 text-amber-100/80">{source.amendmentNote}</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-neutral-500">Legality and Open Issues</p>
+          {failedChecks.length === 0 ? (
+            <p className="mt-2 text-sm text-neutral-500">No unresolved legality warnings or blockers.</p>
+          ) : (
+            <div className="mt-2 space-y-2">
+              {failedChecks.map((check) => (
+                <button
+                  key={check.key}
+                  type="button"
+                  onClick={() => onJumpToCheck(check.key)}
+                  className="block w-full rounded-lg border border-white/10 bg-white/[0.02] p-3 text-left transition hover:border-blue-300/30 hover:bg-blue-300/10"
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className={`rounded-full border px-2 py-0.5 text-[10px] ${
+                      check.severity === 'error'
+                        ? 'border-rose-300/20 bg-rose-300/10 text-rose-100'
+                        : 'border-amber-300/20 bg-amber-300/10 text-amber-100'
+                    }`}>
+                      {check.severity}
+                    </span>
+                    <span className="font-mono text-[11px] text-neutral-500">{check.key}</span>
+                  </div>
+                  <p className="mt-2 text-sm leading-6 text-neutral-300">{check.message}</p>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-neutral-500">Provenance Tree</p>
+          <div className="mt-2 space-y-2">
+            {groups.map((group) => (
+              <details key={group.id} className="rounded-lg border border-white/10 bg-white/[0.02] p-3" open={group.entries.length > 0}>
+                <summary className="cursor-pointer text-sm font-medium text-neutral-100">
+                  {group.label} ({group.entries.length})
+                </summary>
+                {group.entries.length === 0 ? (
+                  <p className="mt-2 text-sm text-neutral-500">No persisted rows.</p>
+                ) : (
+                  <div className="mt-3 space-y-2">
+                    {group.entries.map((entry) => (
+                      <div key={entry.id} className="rounded-md border border-white/10 bg-neutral-950/40 p-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-sm text-neutral-100">{entry.label}</p>
+                          <span className="rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 text-[10px] text-neutral-400">
+                            {entry.anchor}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-xs text-neutral-500">{entry.source}</p>
+                        {entry.detail && <p className="mt-1 text-xs leading-5 text-neutral-400">{entry.detail}</p>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </details>
+            ))}
+          </div>
+        </div>
+      </CardContent>
+    </div>
+  )
+}
+
 // ── Component ─────────────────────────────────────────────
 
 export function CharacterSheet({
   character: initial,
   campaignId,
   initialSkillProficiencies = [],
+  initialTypedSkillProficiencies = [],
   initialAbilityBonusChoices = [],
   initialAsiChoices = [],
   initialLanguageChoices = [],
+  initialTypedLanguageChoices = [],
   initialToolChoices = [],
+  initialTypedToolChoices = [],
   initialSelectedSpells = [],
+  initialSpellSelections = [],
   initialFeatChoices = [],
+  initialTypedFeatChoices = [],
   initialFeatureOptionChoices = [],
+  initialEquipmentItems = [],
   initialLegalityResult = null,
   readOnly = false,
   isDm = false,
@@ -203,6 +662,8 @@ export function CharacterSheet({
   const [featList, setFeatList] = useState<Feat[]>([])
   const [languageList, setLanguageList] = useState<Language[]>([])
   const [toolList, setToolList] = useState<Tool[]>([])
+  const [armorCatalog, setArmorCatalog] = useState<ArmorCatalogEntry[]>([])
+  const [shieldCatalog, setShieldCatalog] = useState<ShieldCatalogEntry[]>([])
   const [featureOptionRows, setFeatureOptionRows] = useState<FeatureOption[]>([])
   const [spellOptions, setSpellOptions] = useState<SpellOption[]>(initialSelectedSpells)
 
@@ -287,14 +748,18 @@ export function CharacterSheet({
       fetch(`/api/content/feats${qs}`).then((r) => r.json()),
       fetch(`/api/content/languages${qs}`).then((r) => r.json()),
       fetch(`/api/content/tools${qs}`).then((r) => r.json()),
+      fetch(`/api/content/armor${qs}`).then((r) => r.json()),
+      fetch(`/api/content/shields${qs}`).then((r) => r.json()),
       fetch(`/api/content/feature-options${qs}`).then((r) => r.json()),
-    ]).then(([s, b, c, f, languages, tools, featureOptions]) => {
+    ]).then(([s, b, c, f, languages, tools, armor, shields, featureOptions]) => {
       setSpeciesList(s)
       setBackgroundList(b)
       setClassList(c)
       setFeatList(Array.isArray(f) ? f : [])
       setLanguageList(Array.isArray(languages) ? languages : [])
       setToolList(Array.isArray(tools) ? tools : [])
+      setArmorCatalog(Array.isArray(armor) ? armor : [])
+      setShieldCatalog(Array.isArray(shields) ? shields : [])
       setFeatureOptionRows(Array.isArray(featureOptions) ? featureOptions : [])
     })
   }, [campaignId])
@@ -576,11 +1041,43 @@ export function CharacterSheet({
   ;(Object.entries(chosenAsiBonuses) as Array<[string, number]>).forEach(([ability, bonus]) => {
     racialBonuses[ability] = (racialBonuses[ability] ?? 0) + bonus
   })
+  const abilityContributors: DerivedAbilityScoreContributor[] = [
+    ...abilityBonusMapToContributors(
+      (selectedSpecies?.ability_score_bonuses ?? []).reduce<Partial<Record<SpeciesChoiceAbilityKey, number>>>((acc, entry) => {
+        acc[entry.ability] = (acc[entry.ability] ?? 0) + entry.bonus
+        return acc
+      }, {}),
+      selectedSpecies ? `${selectedSpecies.name} ability bonus` : 'Species ability bonus',
+      'species'
+    ),
+    ...abilityBonusMapToContributors(
+      chosenSpeciesBonuses,
+      selectedSpecies ? `${selectedSpecies.name} flexible bonus` : 'Species flexible bonus',
+      'species_choice'
+    ),
+    ...asiChoices.flatMap((selection, slotIndex) => {
+      if ((featChoices[slotIndex] ?? '').length > 0) return []
+      const bonusByAbility = selection.reduce<Partial<Record<SpeciesChoiceAbilityKey, number>>>((acc, ability) => {
+        acc[ability] = (acc[ability] ?? 0) + 1
+        return acc
+      }, {})
+      const slotLabel = `slot ${slotIndex + 1}`
+      return abilityBonusMapToContributors(bonusByAbility, `ASI ${slotIndex + 1} (${slotLabel})`, 'asi')
+    }),
+  ]
   // First class (used for skill choices and saving throws)
   const selectedClass = classList.find((c) => c.id === firstClassId) ?? null
   const selectedBackgroundFeat = selectedBackground?.background_feat_id
     ? (featList.find((feat) => feat.id === selectedBackground.background_feat_id) ?? null)
     : null
+  const activeSubclasses = useMemo(
+    () => levels.flatMap((level) => {
+      if (!level.subclass_id) return []
+      const subclass = (subclassMap[level.class_id] ?? []).find((entry) => entry.id === level.subclass_id) ?? null
+      return subclass ? [subclass] : []
+    }),
+    [levels, subclassMap]
+  )
   const activeFeats = useMemo(() => {
     const selectedFeatRows = featChoices
       .map((featId) => featList.find((feat) => feat.id === featId))
@@ -724,21 +1221,354 @@ export function CharacterSheet({
   }, [featureSpellDefinitions])
 
   const failedChecks = legalityResult?.checks.filter((c) => !c.passed) ?? []
-  const derivedCharacter = legalityResult?.derived ?? null
-  const derivedProgression = legalityResult?.derived ?? null
+  const serverDerivedCharacter = legalityResult?.derived ?? null
+  const serverDerivedProgression = legalityResult?.derived ?? null
+  const localTypedSkillRows = useMemo(
+    () => buildTypedSkillProficiencies({
+      skillProficiencies,
+      background: selectedBackground,
+      selectedClass,
+      species: selectedSpecies,
+    }).flatMap((row) => typeof row === 'string' ? [] : [{
+      character_id: initial.id,
+      skill: row.skill,
+      expertise: row.expertise ?? false,
+      character_level_id: row.character_level_id ?? null,
+      source_category: row.source_category ?? 'manual',
+      source_entity_id: row.source_entity_id ?? null,
+      source_feature_key: row.source_feature_key ?? null,
+    }] satisfies CharacterSkillProficiency[]),
+    [initial.id, selectedBackground, selectedClass, selectedSpecies, skillProficiencies]
+  )
+  const useInitialTypedSkillRows = skillProficiencies.length === initialSkillProficiencies.length
+    && skillProficiencies.every((skill, index) => skill === initialSkillProficiencies[index])
+  const skillSourceRows = useInitialTypedSkillRows ? initialTypedSkillProficiencies : localTypedSkillRows
+  const localTypedLanguageRows = useMemo(
+    () => buildTypedLanguageChoices({
+      languageChoices,
+      background: selectedBackground,
+      species: selectedSpecies,
+    }).flatMap((row) => typeof row === 'string' ? [] : [{
+      character_id: initial.id,
+      language: row.language,
+      language_key: null,
+      character_level_id: row.character_level_id ?? null,
+      source_category: row.source_category ?? 'manual',
+      source_entity_id: row.source_entity_id ?? null,
+      source_feature_key: row.source_feature_key ?? null,
+      created_at: '',
+    }]),
+    [initial.id, languageChoices, selectedBackground, selectedSpecies]
+  )
+  const useInitialTypedLanguageRows = languageChoices.length === initialLanguageChoices.length
+    && languageChoices.every((language, index) => language === initialLanguageChoices[index])
+  const languageSourceRows = useInitialTypedLanguageRows ? initialTypedLanguageChoices : localTypedLanguageRows
+  const localTypedToolRows = useMemo(
+    () => buildTypedToolChoices({
+      toolChoices,
+      selectedClass,
+      species: selectedSpecies,
+    }).flatMap((row) => typeof row === 'string' ? [] : [{
+      character_id: initial.id,
+      tool: row.tool,
+      tool_key: null,
+      character_level_id: row.character_level_id ?? null,
+      source_category: row.source_category ?? 'manual',
+      source_entity_id: row.source_entity_id ?? null,
+      source_feature_key: row.source_feature_key ?? null,
+      created_at: '',
+    }]),
+    [initial.id, selectedClass, selectedSpecies, toolChoices]
+  )
+  const useInitialTypedToolRows = toolChoices.length === initialToolChoices.length
+    && toolChoices.every((tool, index) => tool === initialToolChoices[index])
+  const toolSourceRows = useInitialTypedToolRows ? initialTypedToolChoices : localTypedToolRows
+  const selectedSpellNames = useMemo(
+    () => Array.from(new Set([
+      ...initialSelectedSpells
+        .filter((spell) => spellChoices.includes(spell.id) || spell.source_feature_key?.startsWith('feature_spell:') || spell.source_feature_key?.startsWith('feat_spell:'))
+        .map((spell) => spell.name),
+      ...spellOptions
+        .filter((spell) => spellChoices.includes(spell.id))
+        .map((spell) => spell.name),
+    ])),
+    [initialSelectedSpells, spellChoices, spellOptions]
+  )
+  const sheetIsDirty = useMemo(() => {
+    const initialState = {
+      stats: {
+        str: initial.base_str,
+        dex: initial.base_dex,
+        con: initial.base_con,
+        int: initial.base_int,
+        wis: initial.base_wis,
+        cha: initial.base_cha,
+      },
+      hpMax: initial.hp_max,
+      speciesId: initial.species_id ?? '',
+      backgroundId: initial.background_id ?? '',
+      levels: initial.character_levels.map((level) => ({
+        class_id: level.class_id,
+        level: level.level,
+        subclass_id: level.subclass_id,
+        hp_roll: level.hp_roll,
+      })),
+      skillProficiencies: initialSkillProficiencies,
+      abilityBonusChoices: initialAbilityBonusChoices,
+      asiChoices: initialAsiChoices,
+      languageChoices: initialLanguageChoices,
+      toolChoices: initialToolChoices,
+      spellChoices: initialSelectedSpells
+        .filter((spell) => !isInteractiveFeatureSpellSourceFeatureKey(spell.source_feature_key))
+        .map((spell) => spell.id),
+      featChoices: initialFeatChoices,
+      featureOptionChoices: initialFeatureOptionChoices.map((choice) => ({
+        option_group_key: choice.option_group_key,
+        option_key: choice.option_key,
+        selected_value: choice.selected_value,
+        choice_order: choice.choice_order,
+        character_level_id: choice.character_level_id,
+        source_category: choice.source_category,
+        source_entity_id: choice.source_entity_id,
+        source_feature_key: choice.source_feature_key,
+      })),
+    }
+    const currentState = {
+      stats,
+      hpMax,
+      speciesId,
+      backgroundId,
+      levels,
+      skillProficiencies,
+      abilityBonusChoices,
+      asiChoices,
+      languageChoices,
+      toolChoices,
+      spellChoices,
+      featChoices,
+      featureOptionChoices,
+    }
+    return JSON.stringify(currentState) !== JSON.stringify(initialState)
+  }, [
+    abilityBonusChoices,
+    asiChoices,
+    backgroundId,
+    featChoices,
+    featureOptionChoices,
+    hpMax,
+    initial.base_cha,
+    initial.base_con,
+    initial.base_dex,
+    initial.base_int,
+    initial.base_str,
+    initial.base_wis,
+    initial.background_id,
+    initial.character_levels,
+    initial.hp_max,
+    initial.species_id,
+    initialAbilityBonusChoices,
+    initialAsiChoices,
+    initialFeatChoices,
+    initialFeatureOptionChoices,
+    initialLanguageChoices,
+    initialSelectedSpells,
+    initialSkillProficiencies,
+    initialToolChoices,
+    languageChoices,
+    levels,
+    skillProficiencies,
+    speciesId,
+    spellChoices,
+    stats,
+    toolChoices,
+  ])
+  const localFeatureOptionChoices = useMemo<CharacterFeatureOptionChoice[]>(
+    () => featureOptionChoices.map((choice) => ({
+      id: `${choice.option_group_key}:${choice.option_key}`,
+      character_id: initial.id,
+      character_level_id: choice.character_level_id ?? null,
+      option_group_key: choice.option_group_key,
+      option_key: choice.option_key,
+      selected_value: choice.selected_value ?? {},
+      choice_order: choice.choice_order ?? 0,
+      source_category: choice.source_category ?? 'feature',
+      source_entity_id: choice.source_entity_id ?? null,
+      source_feature_key: choice.source_feature_key ?? null,
+      created_at: '',
+    })),
+    [featureOptionChoices, initial.id]
+  )
+  const localDerivedCharacter = useMemo(() => {
+    const campaign: Campaign = {
+      id: campaignId,
+      name: 'Current campaign',
+      dm_id: '',
+      settings: {
+        stat_method: statMethod,
+        max_level: 20,
+        milestone_levelling: false,
+      },
+      rule_set: '2014',
+      created_at: '',
+    }
+    const classDetailMap = Object.fromEntries(
+      classList.map((cls) => [cls.id, { ...cls, progression: [], spell_slots: [] }])
+    )
+    const context = buildLocalCharacterContext({
+      campaign,
+      allowedSources: [],
+      allSourceRuleSets: {},
+      statMethod,
+      persistedHpMax: hpMax,
+      stats,
+      selectedSpecies,
+      selectedBackground,
+      levels,
+      classDetailMap,
+      subclassMap,
+      spellOptions,
+      spellChoices,
+      featList,
+      featChoices,
+      asiChoices,
+      skillProficiencies,
+      typedSkillProficiencies: skillSourceRows,
+      equipmentItems: initialEquipmentItems.map((item) => ({
+        item_id: item.item_id,
+        quantity: item.quantity,
+        equipped: item.equipped,
+        source_package_item_id: item.source_package_item_id,
+        source_category: item.source_category,
+        source_entity_id: item.source_entity_id,
+        notes: item.notes,
+      })),
+      armorCatalog,
+      shieldCatalog,
+      abilityBonusChoices,
+      languageChoices,
+      toolChoices,
+      featureOptionChoices: localFeatureOptionChoices,
+      featureOptionRows,
+    })
+    return deriveLocalCharacter(context)
+  }, [
+    abilityBonusChoices,
+    armorCatalog,
+    asiChoices,
+    campaignId,
+    classList,
+    featChoices,
+    featList,
+    featureOptionRows,
+    hpMax,
+    initialEquipmentItems,
+    languageChoices,
+    levels,
+    localFeatureOptionChoices,
+    selectedBackground,
+    selectedSpecies,
+    shieldCatalog,
+    skillProficiencies,
+    skillSourceRows,
+    spellChoices,
+    spellOptions,
+    statMethod,
+    stats,
+    subclassMap,
+    toolChoices,
+  ])
+  const derivedCharacter = sheetIsDirty ? localDerivedCharacter : serverDerivedCharacter
+  const derivedProgression = sheetIsDirty ? localDerivedCharacter : serverDerivedProgression
+  const grantedProficiencies = useMemo(
+    () => deriveGrantedNonSkillProficiencies({
+      classes: levels.map((level) => {
+        const classDetail = classList.find((cls) => cls.id === level.class_id)
+        return {
+          classId: level.class_id,
+          className: classDetail?.name ?? 'Class',
+          armorProficiencies: classDetail?.armor_proficiencies ?? [],
+          weaponProficiencies: classDetail?.weapon_proficiencies ?? [],
+        }
+      }),
+      background: selectedBackground
+        ? {
+            name: selectedBackground.name,
+            toolProficiencies: selectedBackground.tool_proficiencies,
+            fixedLanguages: getFixedBackgroundLanguages(selectedBackground),
+          }
+        : null,
+      species: selectedSpecies
+        ? {
+            name: selectedSpecies.name,
+            source: selectedSpecies.source,
+            languages: selectedSpecies.languages,
+          }
+        : null,
+      subclasses: activeSubclasses.map((subclass) => ({
+        id: subclass.id,
+        name: subclass.name,
+        source: subclass.source,
+      })),
+      feats: activeFeats,
+      languageChoiceRows: languageSourceRows,
+      toolChoiceRows: toolSourceRows,
+    }),
+    [activeFeats, activeSubclasses, classList, languageSourceRows, levels, selectedBackground, selectedSpecies, toolSourceRows]
+  )
   const derivedCore: DerivedCharacterCore = deriveCharacterCore({
     baseStats: stats,
-    speciesAbilityBonuses: racialBonuses as Partial<Record<'str' | 'dex' | 'con' | 'int' | 'wis' | 'cha', number>>,
+    speciesAbilityBonuses: sumAbilityContributors(abilityContributors),
+    abilityContributors,
     persistedHpMax: hpMax,
+    savingThrowProficiencies: selectedClass?.saving_throw_proficiencies ?? [],
+    skillProficiencies: [
+      ...(selectedBackground?.skill_proficiencies ?? []),
+      ...skillProficiencies,
+    ],
+    selectedFeatureOptions: canonicalizeFeatureOptionsForDerived(featureOptionChoices),
+    selectedSpellNames,
+    equippedItems: initialEquipmentItems.map((item) => ({
+      itemId: item.item_id,
+      equipped: item.equipped,
+    })),
+    armorCatalog: armorCatalog.map((entry) => ({
+      itemId: entry.item_id,
+      name: entry.name,
+      armorCategory: entry.armor_category,
+      baseAc: entry.base_ac,
+      dexBonusCap: entry.dex_bonus_cap,
+    })),
+    shieldCatalog: shieldCatalog.map((entry) => ({
+      itemId: entry.item_id,
+      name: entry.name,
+      armorClassBonus: entry.armor_class_bonus,
+    })),
+    species: selectedSpecies
+      ? {
+          name: selectedSpecies.name,
+          source: selectedSpecies.source,
+          speed: selectedSpecies.speed,
+          size: selectedSpecies.size,
+          languages: selectedSpecies.languages,
+          senses: selectedSpecies.senses,
+          damageResistances: selectedSpecies.damage_resistances,
+          conditionImmunities: selectedSpecies.condition_immunities,
+        }
+      : null,
     classes: levels.map((level) => {
       const classDetail = classList.find((cls) => cls.id === level.class_id)
+      const subclassDetail = level.subclass_id
+        ? (subclassMap[level.class_id] ?? []).find((entry) => entry.id === level.subclass_id) ?? null
+        : null
 
       return {
         classId: level.class_id,
         className: classDetail?.name ?? 'Class',
+        subclassName: subclassDetail?.name ?? null,
         level: level.level,
         hitDie: classDetail?.hit_die ?? null,
         hpRoll: level.hp_roll,
+        savingThrowProficiencies: classDetail?.saving_throw_proficiencies ?? [],
       }
     }),
   })
@@ -746,10 +1576,184 @@ export function CharacterSheet({
   const canSubmit = !readOnly && (status === 'draft' || status === 'changes_requested')
   const errorCount = derivedCharacter?.blockingIssues.length ?? failedChecks.filter((c) => c.severity === 'error').length
 
-  const perceptionProf = skillProficiencies.includes('perception')
-  const passivePerception = derivedCharacter?.passivePerception ?? (10 + derivedCore.abilities.wis.modifier + (perceptionProf ? derivedCore.proficiencyBonus : 0))
-  const speed = derivedCharacter?.speed ?? selectedSpecies?.speed ?? null
-  const fmt = (n: number) => (n >= 0 ? `+${n}` : `${n}`)
+  const sheetDerived = derivedCharacter ?? derivedCore
+  const speed = sheetDerived.speed
+  const classNamesById = useMemo(
+    () => new Map(classList.map((cls) => [cls.id, cls.name])),
+    [classList]
+  )
+  const dmAuditSources = useMemo(() => {
+    const sources: DmAuditContentSource[] = []
+    if (selectedSpecies) {
+      addAuditContentSource(sources, {
+        kind: 'Species',
+        label: selectedSpecies.name,
+        source: selectedSpecies.source,
+        amended: selectedSpecies.amended,
+        amendmentNote: selectedSpecies.amendment_note,
+      })
+    }
+    if (selectedBackground) {
+      addAuditContentSource(sources, {
+        kind: 'Background',
+        label: selectedBackground.name,
+        source: selectedBackground.source,
+        amended: selectedBackground.amended,
+        amendmentNote: selectedBackground.amendment_note,
+      })
+    }
+    for (const level of levels) {
+      const cls = classList.find((entry) => entry.id === level.class_id)
+      if (cls) {
+        addAuditContentSource(sources, {
+          kind: 'Class',
+          label: cls.name,
+          source: cls.source,
+          amended: cls.amended,
+          amendmentNote: cls.amendment_note,
+        })
+      }
+    }
+    for (const subclass of activeSubclasses) {
+      addAuditContentSource(sources, {
+        kind: 'Subclass',
+        label: subclass.name,
+        source: subclass.source,
+        amended: subclass.amended,
+        amendmentNote: subclass.amendment_note,
+      })
+    }
+    for (const feat of activeFeats) {
+      addAuditContentSource(sources, {
+        kind: 'Feat',
+        label: feat.name,
+        source: feat.source,
+        amended: feat.amended,
+        amendmentNote: feat.amendment_note,
+      })
+    }
+    for (const spell of initialSelectedSpells) {
+      addAuditContentSource(sources, {
+        kind: 'Spell',
+        label: spell.name,
+        source: spell.source,
+        amended: spell.amended,
+        amendmentNote: spell.amendment_note,
+      })
+    }
+    for (const choice of featureOptionChoices) {
+      const selectedKey = typeof choice.selected_value?.feature_option_key === 'string'
+        ? choice.selected_value.feature_option_key
+        : null
+      const option = featureOptionRows.find((row) => row.group_key === choice.option_group_key && row.key === selectedKey)
+      if (option) {
+        addAuditContentSource(sources, {
+          kind: 'Feature Option',
+          label: option.name,
+          source: option.source,
+          amended: option.amended,
+          amendmentNote: option.amendment_note,
+        })
+      }
+    }
+    return sources.sort((left, right) => `${left.kind}:${left.label}`.localeCompare(`${right.kind}:${right.label}`))
+  }, [activeFeats, activeSubclasses, classList, featureOptionChoices, featureOptionRows, initialSelectedSpells, levels, selectedBackground, selectedSpecies])
+  const dmAuditProvenanceGroups = useMemo<DmAuditProvenanceGroup[]>(() => {
+    const anchorFor = (characterLevelId: string | null | undefined) =>
+      auditAnchorLabel(characterLevelId, initial.character_class_levels, classNamesById)
+    const spellNameById = new Map([
+      ...initialSelectedSpells.map((spell) => [spell.id, spell.name] as const),
+      ...spellOptions.map((spell) => [spell.id, spell.name] as const),
+    ])
+    const featNameById = new Map([
+      ...activeFeats.map((feat) => [feat.id, feat.name] as const),
+      ...featList.map((feat) => [feat.id, feat.name] as const),
+    ])
+    const featureOptionName = (choice: FeatureOptionChoiceInput) => {
+      const selectedKey = typeof choice.selected_value?.feature_option_key === 'string'
+        ? choice.selected_value.feature_option_key
+        : null
+      return featureOptionRows.find((row) => row.group_key === choice.option_group_key && row.key === selectedKey)?.name
+        ?? selectedKey
+        ?? choice.option_key
+    }
+
+    return [
+      {
+        id: 'skills',
+        label: 'Skill Choices',
+        entries: skillSourceRows.map((row, index) => ({
+          id: `skill-${row.skill}-${index}`,
+          label: `${row.skill}${row.expertise ? ' (expertise)' : ''}`,
+          source: auditSourceLabel(row.source_category, row.source_entity_id),
+          anchor: anchorFor(row.character_level_id),
+          detail: row.source_feature_key ?? null,
+        })),
+      },
+      {
+        id: 'feats',
+        label: 'Feat Choices',
+        entries: initialTypedFeatChoices.map((row, index) => ({
+          id: row.id ?? `feat-${row.feat_id}-${index}`,
+          label: featNameById.get(row.feat_id) ?? row.feat_id,
+          source: row.choice_kind,
+          anchor: anchorFor(row.character_level_id),
+          detail: row.source_feature_key ?? null,
+        })),
+      },
+      {
+        id: 'spells',
+        label: 'Spell Choices',
+        entries: initialSpellSelections.map((row, index) => ({
+          id: row.id ?? `spell-${row.spell_id}-${index}`,
+          label: spellNameById.get(row.spell_id) ?? row.spell_id,
+          source: row.acquisition_mode,
+          anchor: anchorFor(row.character_level_id),
+          detail: [
+            row.owning_class_id ? `class ${row.owning_class_id}` : null,
+            row.granting_subclass_id ? `subclass ${row.granting_subclass_id}` : null,
+            row.source_feature_key,
+            row.counts_against_selection_limit ? null : 'free/granted',
+          ].filter(Boolean).join(' · ') || null,
+        })),
+      },
+      {
+        id: 'feature-options',
+        label: 'Feature Option Choices',
+        entries: featureOptionChoices.map((choice, index) => ({
+          id: `${choice.option_group_key}-${choice.option_key}-${index}`,
+          label: `${choice.option_group_key}: ${featureOptionName(choice)}`,
+          source: auditSourceLabel(choice.source_category, choice.source_entity_id),
+          anchor: anchorFor(choice.character_level_id),
+          detail: choice.source_feature_key ?? null,
+        })),
+      },
+      {
+        id: 'equipment',
+        label: 'Equipment Choices',
+        entries: initialEquipmentItems.map((item, index) => ({
+          id: item.id ?? `equipment-${item.item_id}-${index}`,
+          label: `${item.item_id} x${item.quantity}${item.equipped ? ' (equipped)' : ''}`,
+          source: auditSourceLabel(item.source_category, item.source_entity_id),
+          anchor: 'Starting equipment',
+          detail: item.notes ?? null,
+        })),
+      },
+    ]
+  }, [
+    activeFeats,
+    classNamesById,
+    featList,
+    featureOptionChoices,
+    featureOptionRows,
+    initial.character_class_levels,
+    initialEquipmentItems,
+    initialSelectedSpells,
+    initialSpellSelections,
+    initialTypedFeatChoices,
+    skillSourceRows,
+    spellOptions,
+  ])
 
   const checkSectionMap: Record<string, SectionId> = {
     source_allowlist: 'identity-class',
@@ -809,9 +1813,9 @@ export function CharacterSheet({
         legalityPassed={legalityResult?.passed ?? null}
         legalityErrorCount={errorCount}
         hpMax={derivedCore.hitPoints.max}
-        initiative={fmt(derivedCharacter?.initiative ?? derivedCore.abilities.dex.modifier)}
+        initiative={formatModifier(sheetDerived.initiative)}
         speed={speed !== null ? `${speed} ft` : '—'}
-        passivePerception={passivePerception}
+        passivePerception={sheetDerived.passivePerception}
         canEdit={canEdit}
         canSubmit={canSubmit}
         saving={saving}
@@ -851,6 +1855,15 @@ export function CharacterSheet({
           })}
         </CardContent>
       </Card>
+      )}
+
+      {isDm && legalityResult && (
+        <DmAuditPanel
+          sources={dmAuditSources}
+          checks={legalityResult.checks}
+          groups={dmAuditProvenanceGroups}
+          onJumpToCheck={jumpToCheck}
+        />
       )}
 
       <CollapsibleSection
@@ -1120,6 +2133,7 @@ export function CharacterSheet({
             readOnly={!canEdit}
             statMethod={statMethod}
             racialBonuses={racialBonuses}
+            derivedAbilities={sheetDerived.abilities}
           />
         </CardContent>
       </div>
@@ -1136,13 +2150,19 @@ export function CharacterSheet({
         stats={stats}
         totalLevel={derivedCore.totalLevel}
         selectedClass={selectedClass}
+        classOptions={classList}
         species={selectedSpecies}
         background={backgroundList.find((b) => b.id === backgroundId) ?? initial.background}
-        derived={derivedCharacter ? { savingThrows: derivedCharacter.savingThrows, skills: derivedCharacter.skills } : undefined}
+        subclasses={activeSubclasses}
+        feats={activeFeats}
+        derived={{ savingThrows: sheetDerived.savingThrows, skills: sheetDerived.skills }}
+        typedSkillRows={skillSourceRows}
         skillProficiencies={skillProficiencies}
         canEdit={canEdit}
         onChange={setSkillProficiencies}
       />
+
+      <GrantedProficienciesCard proficiencies={grantedProficiencies} />
 
       <LanguagesToolsCard
         species={selectedSpecies}
@@ -1184,19 +2204,38 @@ export function CharacterSheet({
               </div>
             </div>
             <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-              <p className="text-sm font-medium text-neutral-200">Unlocked Features</p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {derivedCharacter.features.length > 0 ? derivedCharacter.features.map((feature) => (
-                  <span
-                    key={`${feature.classId}-${feature.level}-${feature.name}`}
-                    className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs text-neutral-300"
-                  >
-                    {feature.className} {feature.level}: {feature.name}
-                  </span>
-                )) : (
-                  <span className="text-sm text-neutral-500">No class features unlocked yet.</span>
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-medium text-neutral-200">Class Resources</p>
+                {derivedCharacter.classResources.length > 0 && (
+                  <span className="text-xs text-neutral-500">{derivedCharacter.classResources.length} tracked</span>
                 )}
               </div>
+              <div className="mt-3">
+                <ClassResourcesPanel resources={derivedCharacter.classResources} />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {derivedCharacter && (
+          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+            <p className="text-sm font-medium text-neutral-200">Unlocked Features</p>
+            <div className="mt-3">
+              <FeatureList features={derivedCharacter.features} />
+            </div>
+          </div>
+        )}
+
+        {derivedCharacter && (
+          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm font-medium text-neutral-200">Combat Options</p>
+              {derivedCharacter.combatActions.length > 0 && (
+                <span className="text-xs text-neutral-500">{derivedCharacter.combatActions.length} surfaced</span>
+              )}
+            </div>
+            <div className="mt-3">
+              <CombatOptionsPanel actions={derivedCharacter.combatActions} />
             </div>
           </div>
         )}
@@ -1210,21 +2249,33 @@ export function CharacterSheet({
           </Alert>
         )}
 
-        {derivedCharacter?.spellcasting.selectionSummary && derivedCharacter.spellcasting.sources.length <= 1 && (
-          <Alert className="border-white/10 bg-white/[0.03]">
-            <AlertDescription className="text-neutral-300">
-              {derivedCharacter.spellcasting.selectionSummary}
-            </AlertDescription>
-          </Alert>
-        )}
-
-        {derivedCharacter && derivedCharacter.spellcasting.sources.length > 1 && (
+        {derivedCharacter && derivedCharacter.spellcasting.sources.length > 0 && (
           <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-            <p className="text-sm font-medium text-neutral-200">Spellcasting Sources</p>
+            <p className="text-sm font-medium text-neutral-200">Spellcasting</p>
             <div className="mt-3 space-y-3">
               {derivedCharacter.spellcasting.sources.map((source) => (
                 <div key={source.classId} className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
-                  <p className="text-sm text-neutral-100">{source.className} {source.classLevel}</p>
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <p className="text-sm text-neutral-100">{source.className} {source.classLevel}</p>
+                      <p className="mt-1 text-xs text-neutral-500">
+                        {abilityLabel(source.spellcastingAbility)} caster
+                        {source.spellcastingAbilityModifier !== null ? ` · ${formatModifier(source.spellcastingAbilityModifier)} ability mod` : ''}
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-right text-xs">
+                      <div className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2">
+                        <p className="text-neutral-500">Save DC</p>
+                        <p className="text-base font-semibold text-neutral-100">{source.spellSaveDc ?? '—'}</p>
+                      </div>
+                      <div className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2">
+                        <p className="text-neutral-500">Attack</p>
+                        <p className="text-base font-semibold text-neutral-100">
+                          {source.spellAttackModifier !== null ? formatModifier(source.spellAttackModifier) : '—'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
                   {source.selectionSummary && (
                     <p className="mt-1 text-sm text-neutral-400">{source.selectionSummary}</p>
                   )}
@@ -1241,38 +2292,53 @@ export function CharacterSheet({
                       <span className="text-xs text-neutral-500">No currently selected spells from this source.</span>
                     )}
                   </div>
+                  <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-neutral-500">Prepared</p>
+                      <SpellPillList spells={source.preparedSpells} empty="No prepared spells from this source." />
+                    </div>
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-neutral-500">Known</p>
+                      <SpellPillList spells={source.knownSpells} empty="No known spells from this source." />
+                    </div>
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-neutral-500">Spellbook</p>
+                      <SpellPillList spells={source.spellbookSpells} empty="No spellbook entries from this source." />
+                    </div>
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-neutral-500">Granted</p>
+                      <SpellPillList spells={source.grantedSpells} empty="No granted spells from this source." granted />
+                    </div>
+                  </div>
                 </div>
               ))}
             </div>
           </div>
         )}
 
+        {derivedCharacter && derivedCharacter.spellcasting.grantedSpells.length > 0 && (
+          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+            <p className="text-sm font-medium text-neutral-200">Granted Spells</p>
+            <div className="mt-3">
+              <SpellPillList
+                spells={derivedCharacter.spellcasting.grantedSpells}
+                empty="No granted spells."
+                granted
+              />
+            </div>
+          </div>
+        )}
+
         {derivedCharacter && derivedCharacter.spellcasting.selectedSpells.length > 0 && (
           <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-            <p className="text-sm font-medium text-neutral-200">Current Spellcasting Summary</p>
-            <div className="mt-2 flex flex-wrap gap-2">
+            <p className="text-sm font-medium text-neutral-200">Spell Counts</p>
+            <div className="mt-3 flex flex-wrap gap-2">
               {Object.entries(derivedCharacter.spellcasting.selectedSpellCountsByLevel).map(([level, count]) => (
                 <span
                   key={level}
                   className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs text-neutral-300"
                 >
                   {level === '0' ? `${count} cantrip${count === 1 ? '' : 's'}` : `${count} level ${level} spell${count === 1 ? '' : 's'}`}
-                </span>
-              ))}
-            </div>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {derivedCharacter.spellcasting.selectedSpells.map((spell) => (
-                <span
-                  key={spell.id}
-                  className={`rounded-full border px-3 py-1 text-xs ${
-                    spell.granted
-                      ? 'border-emerald-400/20 bg-emerald-400/10 text-emerald-100'
-                      : 'border-white/10 bg-white/[0.03] text-neutral-300'
-                  }`}
-                >
-                  {spell.name}
-                  {spell.level === 0 ? ' (cantrip)' : ` (L${spell.level})`}
-                  {spell.granted ? ' free' : ''}
                 </span>
               ))}
             </div>
@@ -1352,6 +2418,15 @@ export function CharacterSheet({
           onOptionsLoaded={mergeSpellOptions}
         />
 
+        {derivedCharacter && (
+          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+            <p className="text-sm font-medium text-neutral-200">ASI and Feat History</p>
+            <div className="mt-3">
+              <AsiFeatHistoryPanel entries={derivedCharacter.asiFeatHistory} />
+            </div>
+          </div>
+        )}
+
         <FeatsCard
           background={selectedBackground ?? null}
           backgroundFeat={selectedBackgroundFeat}
@@ -1412,7 +2487,7 @@ export function CharacterSheet({
             <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
               <p className="text-[11px] uppercase tracking-[0.12em] text-neutral-500">CON Per Level</p>
               <p className="mt-2 text-lg font-semibold text-neutral-100">
-                {fmt(derivedCore.hitPoints.constitutionModifier)}
+                {formatModifier(derivedCore.hitPoints.constitutionModifier)}
               </p>
             </div>
           </div>
@@ -1455,7 +2530,7 @@ export function CharacterSheet({
       {/* Stat Block — DM only, built from live form state */}
       {isDm && (
         <StatBlockView
-          derived={derivedCharacter ?? derivedCore}
+          derived={sheetDerived}
           character={{
             ...initial,
             name,
@@ -1467,9 +2542,6 @@ export function CharacterSheet({
             background: backgroundList.find((b) => b.id === backgroundId) ?? initial.background,
             character_levels: levels.map((l) => ({ ...l, id: '', character_id: initial.id, hp_roll: l.hp_roll, taken_at: '' })),
           }}
-          classNames={levels.map((l) => classList.find((c) => c.id === l.class_id)?.name ?? '')}
-          selectedClass={selectedClass}
-          skillProficiencies={skillProficiencies}
           feats={[
             ...featChoices.map((id) => featList.find((f) => f.id === id)).filter(Boolean) as Feat[],
             ...(() => {

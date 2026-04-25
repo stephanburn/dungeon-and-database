@@ -1,4 +1,4 @@
-import type { Background, Class, Species, Subclass } from '@/lib/types/database'
+import type { Background, CharacterSkillProficiency, Class, Feat, Species, Subclass } from '@/lib/types/database'
 import type { SkillProficiencyInput } from '@/lib/characters/choice-persistence'
 import { SKILLS, normalizeSkillKey, type SkillKey } from '@/lib/skills'
 
@@ -34,6 +34,22 @@ export type SkillChoiceBuckets = {
   classChosen: Set<SkillKey>
   speciesChosen: Set<SkillKey>
   manualChosen: Set<SkillKey>
+}
+
+export type SkillSourceRowLike = Pick<
+  CharacterSkillProficiency,
+  'skill' | 'expertise' | 'source_category' | 'source_entity_id' | 'source_feature_key'
+>
+
+export type SkillDisplaySource = {
+  label: string
+  category: string
+  expertise: boolean
+}
+
+export type SkillDisplaySummary = {
+  sources: SkillDisplaySource[]
+  expertise: boolean
 }
 
 type SkillPoolName = 'class' | 'background' | 'species'
@@ -308,4 +324,88 @@ export function buildTypedSkillProficiencies(args: SkillChoiceBucketsArgs): Skil
       source_feature_key: null,
     }
   })
+}
+
+export function buildSkillDisplaySummaries(args: {
+  rows: SkillSourceRowLike[]
+  background: Background | null
+  species: Species | null
+  classes?: Array<Pick<Class, 'id' | 'name'>>
+  subclasses?: Array<Pick<Subclass, 'id' | 'name'>>
+  feats?: Array<Pick<Feat, 'id' | 'name'>>
+}): Map<SkillKey, SkillDisplaySummary> {
+  const summaries = new Map<SkillKey, SkillDisplaySummary>()
+  const classNameById = new Map((args.classes ?? []).map((entry) => [entry.id, entry.name]))
+  const subclassNameById = new Map((args.subclasses ?? []).map((entry) => [entry.id, entry.name]))
+  const featNameById = new Map((args.feats ?? []).map((entry) => [entry.id, entry.name]))
+
+  function addSource(skill: SkillKey, source: SkillDisplaySource) {
+    const existing = summaries.get(skill) ?? { sources: [], expertise: false }
+    const match = existing.sources.find((entry) => entry.label === source.label && entry.category === source.category)
+    if (match) {
+      match.expertise = match.expertise || source.expertise
+    } else {
+      existing.sources.push(source)
+    }
+    existing.expertise = existing.expertise || source.expertise
+    summaries.set(skill, existing)
+  }
+
+  for (const skill of (args.background?.skill_proficiencies ?? []).map((entry) => normalizeSkillKey(entry))) {
+    addSource(skill, {
+      label: args.background?.name ?? 'Background',
+      category: 'background_auto',
+      expertise: false,
+    })
+  }
+
+  for (const row of args.rows) {
+    const skill = normalizeSkillKey(row.skill)
+    addSource(skill, {
+      label: resolveSkillSourceLabel({
+        row,
+        background: args.background,
+        species: args.species,
+        classNameById,
+        subclassNameById,
+        featNameById,
+      }),
+      category: row.source_category,
+      expertise: row.expertise,
+    })
+  }
+
+  return summaries
+}
+
+function resolveSkillSourceLabel(args: {
+  row: SkillSourceRowLike
+  background: Background | null
+  species: Species | null
+  classNameById: Map<string, string>
+  subclassNameById: Map<string, string>
+  featNameById: Map<string, string>
+}) {
+  const { row } = args
+  const sourceEntityId = row.source_entity_id ?? ''
+
+  switch (row.source_category) {
+    case 'class_choice':
+    case 'class_feature':
+      return args.classNameById.get(sourceEntityId) ?? 'Class'
+    case 'background_choice':
+    case 'background_feature':
+      return args.background?.name ?? 'Background'
+    case 'species_choice':
+    case 'species_feature':
+      return args.species?.name ?? 'Species'
+    case 'subclass_choice':
+    case 'subclass_feature':
+      return args.subclassNameById.get(sourceEntityId) ?? 'Subclass'
+    case 'feat':
+    case 'feat_choice':
+      return args.featNameById.get(sourceEntityId) ?? 'Feat'
+    default:
+      return 'Manual'
+  }
 }

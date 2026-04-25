@@ -10,7 +10,8 @@ This roadmap now has meaningful implementation behind it.
 - Batch 2 is effectively complete.
 - Batch 3 is now effectively complete and closed out by Slice `3l` on 2026-04-18.
 - Batch 4 is now effectively complete and closed out by Slice `4o` on 2026-04-23.
-- Batch 4.5 is now effectively complete and closed out by Slice `4.5h` on 2026-04-24; Batch 5 is unblocked, with live data-copy migration smoke for migrations `067`/`068` retained as a deployment gate.
+- Batch 4.5 is now effectively complete and closed out by Slice `4.5h` on 2026-04-24.
+- Batch 5 is now effectively complete and closed out by Slice `5n` on 2026-04-25. The live data-copy migration smoke (Slice `5m`) was completed before Batch 5 closed; the Batch 4.5 deployment gate is formally closed. The one architectural gap carried into Batch 6 is consolidating the spellcasting derivation from `build-context.ts` into `derived.ts`.
 - A post-Batch-4 production hotfix shipped on 2026-04-23 to stop the character sheet from entering a React update loop when loading class-scoped spell options for newly created characters.
 - A Batch 4 senior-review pass on 2026-04-23 found several level-up data-integrity bugs that the additive save path makes reachable in normal play (silent spell/feat swap loss, skill PK collision on multiclass overlap, feature-option value-change collision, preserved-spell level misattribution, and a concurrency window in the per-level sync trigger). Batch 4.5 is scheduled before Batch 5 to close these.
 - Batch 4 delivered the end-to-end guided builder workflows that were blocking real character creation:
@@ -808,6 +809,105 @@ The current stat block is closer to a summary card than a correct character shee
   - provenance for selected features and choices
 - Add a `source_entity_id` integrity view that surfaces character rows whose `(source_category, source_entity_id)` pair no longer resolves to a live content row (carried from the Slice 3m/3n review — item #8). Wire it into the DM audit panel so stale provenance is visible before it confuses review.
 
+### Execution Slices
+
+Each slice should fit in one Codex session and land derivation/helpers + at least one consuming sheet surface + tests, with schema only where presentation needs force it. Presentation slices (5a–5i) come first so the sheet itself becomes trustworthy, audit/integrity slices (5j–5k) follow once presentation is stable, and slices 5l–5m cover regression and deployment safety before Slice 5n closes the batch.
+
+**Slice 5a — Sheet derivation seam: make every sheet card read from `derived.ts`** (delivered 2026-04-25)
+
+- audit `CharacterSheet.tsx`, `StatBlockView.tsx`, `StatBlock.tsx`, and the per-card components under `src/components/character-sheet/` for any remaining ad-hoc math (ability mods, initiative, passive Perception, proficiency bonus, save/skill totals)
+- route every one of those surfaces through `src/lib/characters/derived.ts`, extending the derived shape where a field is not yet exposed but keeping persistence unchanged
+- pin the contract with per-field regression tests so future slices cannot drift back into local recomputation
+- acceptance: no sheet component computes a mechanical value locally; `derived.ts` exposes every number the current sheet shows, and a fixture test asserts parity with the prior UI values
+
+**Slice 5b — Adjusted ability scores and save bonuses with per-source breakdown** (delivered 2026-04-25)
+
+- render base and adjusted scores side-by-side, with contributors listed (species bonus, species flex, ASI, feat, amendment note where present)
+- render save rows as `mod + prof (if proficient) = total` with the proficiency source (class at first level, multiclass first level, feat) surfaced
+- consume existing provenance from `asi-provenance.ts` and `species-ability-bonus-provenance.ts`; do not add new tables here
+- acceptance: a Variant Human Fighter with a background-granted feat shows base/adjusted scores with each contributor, and save totals on a multiclass build attribute proficiency to the correct first-level class
+
+**Slice 5c — Skill proficiency breakdown with source attribution** (delivered 2026-04-25)
+
+- render the skill list with per-skill provenance (class, background, species, feat), expertise badges, and the bonus formula
+- consume `skill-provenance.ts` directly; Path B decision confirmed: the multi-source overlap case is expressible from current rows plus per-level anchors without a `character_skill_proficiency_sources` table; decision recorded in `output/batch-5-closeout-audit.md`
+- acceptance: an overlap archetype (background + Fighter multiclass sharing Athletics) shows a single row with both sources; a Knowledge Domain / Rogue expertise promotion displays correctly; a screenshot-equivalent test fixture pins the rendering contract
+
+**Slice 5d — Granted non-skill proficiencies panel: armor, weapons, tools, languages** (delivered 2026-04-25)
+
+- new `GrantedProficienciesCard.tsx` panel listing armor, weapon, tool, and language proficiencies, each with source tags (class, subclass, background, species, feat)
+- languages/tools come from the Batch 3 typed choice tables via `language-tool-provenance.ts`; armor/weapon proficiencies come from `classes.armor_profs` / `weapon_profs`, subclass grants, and feat grants
+- acceptance: a multiclass Fighter/Wizard correctly shows Heavy/Medium/Light armor and all martial weapons from Fighter plus daggers/darts/slings/quarterstaffs/light crossbows from Wizard, each tagged to its source; tool grants from background render with provenance
+
+**Slice 5e — AC derivation from equipped armor, shield, and class rules** (delivered 2026-04-25)
+
+- replaced the unarmored fallback with AC derived from `character_equipment_items` plus the armor/shield catalog, honoring the DEX cap, armor type, and shield bonus
+- supports all standard class-rule variants: Barbarian Unarmored Defense (CON), Monk Unarmored Defense (WIS), Draconic Resilience, Mage Armor as a conditional alternative, Defense fighting style, Warforged Integrated Protection (+1)
+- every AC display exposes its formula (base + mod + shield + misc) on the sheet and in the audit panel seam
+
+**Slice 5f — Spell presentation: DC / attack mod per caster, prepared vs known vs spellbook, granted spells** (partial — Batch 6 carry-in)
+
+- per-source spell DC and spell attack modifier render correctly in `CharacterSheet.tsx` for multiclass casters; caster mode (Prepared/Known/Spellbook) and granted spells are separated and tagged
+- **architectural gap**: `DerivedSpellcastingSourceSummary` lives in `src/lib/characters/build-context.ts` rather than `src/lib/characters/derived.ts`; the sheet reads spellcasting off `BuildContext` instead of the canonical derived shape
+- Batch 6 entry task: consolidate spellcasting derivation into `derived.ts` so the sheet has a single derivation seam for all mechanical values (no behavior change required)
+
+**Slice 5g — Feature list by level and source + class resource summaries** (delivered 2026-04-24)
+
+- render unlocked features grouped by `(class, level)` with the source label (class, subclass, species, feat, background) and a short description pulled from content
+- add a class-resource panel showing per-rest counters with current usage semantics: Rage uses, Channel Divinity, Ki points, Sorcery Points, Superiority Dice, Bardic Inspiration, Spell Slots (by spellcaster table row)
+- acceptance: a Battle Master 5 shows Second Wind (Fighter 1), Action Surge (Fighter 2), Martial Archetype + maneuvers (Fighter 3), Ability Score Improvement (Fighter 4), Extra Attack (Fighter 5) with a resource panel for superiority dice; a Cleric 5 shows spell slots and Channel Divinity uses
+
+**Slice 5h — ASI and feat history panel** (delivered 2026-04-24)
+
+- chronological panel listing every ASI increment and feat with the class/level at which it was chosen, joining `character_asi_choices` and `character_feat_choices` to `character_class_levels`
+- show `+2 to X` vs `+1/+1` rows explicitly and name the feat / half-feat bonus where applicable
+- acceptance: a level 12 character with two ASIs and one feat shows all three events in order, each tagged to the class and level at which it was taken, matching the raw rows
+
+**Slice 5i — Combat-time surfacing for lightly-displayed feature systems** (delivered 2026-04-24)
+
+- render the selected Battle Master maneuvers with save DC, effect, and superiority-die cost; Ranger favored terrains/enemies with the mechanical effect; Monk disciplines (for subclasses that expose them) with ki cost; reactive species traits (Silver Lining, Fury of the Small, etc.) with their trigger and effect
+- everything here is already modeled but only minimally displayed; this slice is presentation on top of existing `character_feature_option_choices` rows, not new persistence
+- acceptance: a Battle Master shows each selected maneuver inline with trigger/effect/cost; a Stout Halfling shows Fury of the Small with its trigger; no DB inspection is needed to understand what a player can do in combat
+
+**Slice 5j — DM audit panel: selected sources, legality, and provenance tree** (delivered 2026-04-24)
+
+- new DM-only section on the character page (gated on DM-of-this-campaign) that summarizes:
+  - selected content sources with amendment tags
+  - current legality warnings linked back to their originating wizard step
+  - unresolved issues (missing required choices, incomplete level-up)
+  - a collapsible provenance tree for skill / feat / spell / feature-option / equipment choices
+- reuse the legality engine output rather than reimplementing the summary; link each provenance row to the per-level anchor from Slice 4i
+- acceptance: a DM viewing a representative multiclass build sees each warning with a step link, every major choice with its source row, and amendment tags visible at a glance without raw-row inspection
+
+**Slice 5k — Stale `(source_category, source_entity_id)` integrity view wired into the audit panel** (delivered 2026-04-25)
+
+- migration `069` (`character_stale_provenance`) creates a SQL view enumerating orphaned references across 6 choice tables plus equipment against classes, backgrounds, species, subclasses, feats, and starting-equipment packages
+- `detectStaleProvenance()` in `src/lib/characters/stale-provenance.ts` provides the TypeScript equivalent for client-side use; `StaleProvenancePanel` renders amber warning cards in the DM view, wired into the character page
+- `test/stale-provenance.test.ts` covers all valid/retired/null/manual/unknown-category cases
+
+**Slice 5l — Sheet regression smoke harness across representative archetypes** (delivered 2026-04-24)
+
+- extend the Batch 4/4.5 archetype matrix into a sheet-level regression harness that walks representative creation + level-up payloads (single-class caster, multiclass caster/martial, feat-heavy, species/background-heavy, 4.5 overlap regression) through save → load → `derived.ts` → rendered sheet fields
+- assert concrete presentation contracts per archetype: AC formula, spell DC / attack mod per caster, proficiency provenance, ASI/feat history, resource counters, combat-time feature display
+- `test/sheet-5l-regression-matrix.test.ts` (7 tests) covers all five archetypes with concrete value assertions and pins the component seams (ClassResourcesPanel, AsiFeatHistoryPanel, CombatOptionsPanel, GrantedProficienciesCard, SkillsCard, SpellsCard) that consume each contract
+- acceptance: `npm test` runs the matrix and fails loudly on any regression against the Batch 5 sheet contract; the harness is callable from `test/` without a live Supabase round-trip
+
+**Slice 5m — Live data-copy migration smoke for migrations `067` / `068`** (delivered 2026-04-25)
+
+- verified against live production database (`cqpyvaynpzgyjerfesmz`); both migrations already applied
+- `sync_character_class_levels_for_class` confirmed idempotent: 26 rows before = 26 after, 0 changed, 0 inserted across 12 character-class pairs
+- `FOR UPDATE` lock and optimistic-lock token checks confirmed present in deployed function bodies
+- zero orphan `character_level_id` anchors across all six choice tables; spell selection null anchors are expected (all have `owning_class_id = NULL`, pre-Batch-4 rows correctly not backfillable)
+- HP roll integrity confirmed; both triggers enabled
+- Batch 4.5 deployment gate formally closed; verification documented in `output/batch-4-closeout-audit.md`
+
+**Slice 5n — Batch 5 closeout: archetype verification, DM-review walkthrough, Batch 6 entry notes** (delivered 2026-04-25)
+
+- 218 tests, 0 failures; all five regression archetypes pass; DM-review walkthrough on Warforged Artificer 5 confirms audit panel meets review needs without DB inspection
+- Batch 5 deployment is unblocked: Batch 4.5 migration gate closed (5m), sheet derivation seam confirmed (5l), no orphan provenance
+- Batch 6 entry tasks documented in `output/batch-5-closeout-audit.md` and in the Batch 6 section of this roadmap
+- one architectural carry-in: spellcasting derivation consolidation into `derived.ts` (from 5f partial)
+
 ### Risks
 
 - AC and equipment presentation depend on Batch 3 and Batch 4 support.
@@ -818,22 +918,38 @@ The current stat block is closer to a summary card than a correct character shee
 - The sheet reflects derived rules accurately enough to use in play.
 - DM review can rely on the sheet and audit summary rather than manual DB inspection.
 
+## Do this next!
 ## Batch 6: Content Ingestion and Admin Tooling
 
 ### Objective
 
-Make content expansion sustainable instead of relying on ad hoc patches and narrow seed scripts.
+Make content expansion sustainable instead of relying on ad hoc patches and narrow seed scripts, and close the architectural gaps identified during Batch 5.
 
 ### Why
 
-The seed pipeline currently imports only a subset of content types, and the admin UI is not yet shaped for the broader content model needed by the builder.
+The seed pipeline currently imports only a subset of content types, and the admin UI is not yet shaped for the broader content model needed by the builder. Several structural carry-ins from Batches 3–5 have accumulated and are cheapest to close before the content surface grows further.
+
+### Batch 5 Carry-ins (priority entry tasks)
+
+These items were explicitly deferred from Batch 5 and are the first work to address in Batch 6:
+
+1. **Consolidate spellcasting derivation into `derived.ts`** (from Slice 5f). Move `DerivedSpellcastingSourceSummary` and the per-source spellcasting aggregate out of `src/lib/characters/build-context.ts` into `src/lib/characters/derived.ts`. No behavior change — architectural alignment only. After this change the sheet has a single derivation seam for all mechanical values.
+
+2. **Migrate hardcoded spell-grant rules off spell-name lookups** (from Slice 3m/3n review item #5). Replace the ~33 `{ spellName, spellSource }` entries in `src/lib/characters/feature-grants.ts` with a `feature_spell_grants` content table keyed on `spell_id`. Backfill from current rules, delete the hardcoded tables once parity is verified. Minimum viable gate: ship a test-time assertion that every hardcoded entry resolves to exactly one spell row so admin renames fail loudly.
+
+3. **Finish languages/tools catalog cutover** (from Slice 3m/3n review item #6). Switch the primary key on `character_language_choices` / `character_tool_choices` from free-text columns to FK-based `language_key` / `tool_key` columns, backfill remaining nulls, drop the free-text columns, and update `load-character.ts` and persistence helpers to read/write keys only.
+
+4. **Consolidate character-ownership checks** (from Slice 3m/3n review item #9). Replace inlined `user_id !== profile.id` comparisons across `src/app/api/characters/[id]/route.ts`, `submit/route.ts`, and peer routes (`approve`, `request-changes`, `snapshots`) with a single `assertCharacterManageableByUser` helper. Add tests covering owner / DM / unrelated-user behavior on every mutating route.
+
+5. **Split load-bearing modules past safe edit size** (from Slice 3m/3n review item #10). `src/lib/characters/feature-grants.ts` (~880 lines), `src/lib/characters/build-context.ts` (~1000 lines), `src/lib/legality/engine.ts` (~810 lines), and `src/components/character-sheet/CharacterSheet.tsx` should be segmented by concern. No behavior changes.
+
+6. **Null `owning_class_id` spell selection cleanup**. The 14 production rows written before Batch 4's class-scoped spell path have no `owning_class_id`. They load and display, but carry no class provenance in the DM audit panel. A targeted data migration or content-admin repair flow should attribute or mark them as pre-Batch-4 legacy rows.
 
 ### Scope
 
-- Import pipeline
-- Admin UI
-- Content validation
-- Source/version handling
+- Import pipeline and content integrity checks
+- Admin UI CRUD for Batch 3 content types
+- Source/version handling and bulk import tools
 
 ### Tasks
 
@@ -845,7 +961,7 @@ The seed pipeline currently imports only a subset of content types, and the admi
   - orphaned option groups
   - spell list mismatches
   - duplicate option records
-  - unresolvable spell-name references in feature-grant tables (see below)
+  - unresolvable spell-name references in feature-grant tables (resolved by carry-in #2 above)
 - Expand admin UI to manage:
   - option groups
   - feature options
@@ -857,18 +973,20 @@ The seed pipeline currently imports only a subset of content types, and the admi
   - starting packages
 - Add preview and validation before publishing content changes.
 - Add bulk source import and amendment tools.
-- Migrate hardcoded spell-grant rules off spell-name lookups (carried from the Slice 3m/3n review — item #5). Replace the ~33 `spellName: '...'` entries in `src/lib/characters/feature-grants.ts` with a `feature_spell_grants` content table keyed on `spell_id`, backfill from current rules, and delete the hardcoded tables once parity is verified. If the full migration is deferred, at minimum ship a test-time assertion that every hardcoded `{ spellName, spellSource }` resolves to exactly one spell row, so admin renames fail loudly.
+- Add `character_skill_proficiency_sources` audit table if Batch 6 audit UI work demonstrates a need to show multi-source overlap provenance beyond what Path B's single-row model provides (deferred from Slice 5c — add only if a concrete UI need emerges).
 
 ### Risks
 
 - Weak content validation will surface as builder bugs.
 - Importing more source content before the model is ready will increase data debt.
+- The spellcasting derivation consolidation (carry-in #1) touches both `build-context.ts` and `derived.ts`; it should land as its own narrow slice rather than being bundled with content work.
 
 ### Exit Criteria
 
 - New content families can be imported and maintained without one-off SQL work.
 - Admin UI supports all rules-significant content categories.
 - Validation catches structural content issues early.
+- All Batch 5 carry-ins are closed.
 
 ## Batch 7: Hardening, Tests, and Usability
 

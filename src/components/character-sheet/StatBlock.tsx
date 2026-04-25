@@ -7,6 +7,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { abilityModifier, formatModifier, type DerivedAbilityScore } from '@/lib/characters/derived'
 import type { StatMethod } from '@/lib/types/database'
 
 const ABILITY_LABELS: Record<string, string> = {
@@ -23,11 +24,6 @@ const POINT_COST: Record<number, number> = {
   8: 0, 9: 1, 10: 2, 11: 3, 12: 4, 13: 5, 14: 7, 15: 9,
 }
 
-function modifier(score: number): string {
-  const mod = Math.floor((score - 10) / 2)
-  return mod >= 0 ? `+${mod}` : `${mod}`
-}
-
 function totalPointsSpent(values: Record<string, number>): number {
   return STATS.reduce((sum, s) => sum + (POINT_COST[values[s]] ?? 0), 0)
 }
@@ -38,6 +34,7 @@ interface StatBlockProps {
   readOnly?: boolean
   statMethod?: StatMethod
   racialBonuses?: Partial<Record<string, number>>
+  derivedAbilities?: Record<'str' | 'dex' | 'con' | 'int' | 'wis' | 'cha', DerivedAbilityScore>
 }
 
 export function StatBlock({
@@ -46,6 +43,7 @@ export function StatBlock({
   readOnly = false,
   statMethod = 'point_buy',
   racialBonuses = {},
+  derivedAbilities,
 }: StatBlockProps) {
   const spent = totalPointsSpent(values)
   const remaining = 27 - spent
@@ -74,9 +72,12 @@ export function StatBlock({
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
         {STATS.map((stat) => {
           const base = values[stat]
-          const racial = racialBonuses[stat] ?? 0
-          const effective = base + racial
+          const derivedAbility = derivedAbilities?.[stat]
+          const racial = derivedAbility?.bonus ?? racialBonuses[stat] ?? 0
+          const effective = derivedAbility?.adjusted ?? base + racial
+          const effectiveModifier = derivedAbility?.modifier ?? abilityModifier(effective)
           const outOfRange = statMethod === 'point_buy' && !(base in POINT_COST)
+          const contributors = derivedAbility?.contributors ?? []
 
           return (
             <div
@@ -93,11 +94,11 @@ export function StatBlock({
 
               {/* Modifier based on effective score */}
               <span className="text-2xl font-bold text-neutral-100">
-                {modifier(effective)}
+                {formatModifier(effectiveModifier)}
               </span>
 
               {/* Effective score */}
-              <div className="flex items-center gap-1.5">
+              <div className="flex flex-wrap items-center justify-center gap-1.5">
                 <span className="text-sm font-medium text-neutral-200">{effective}</span>
                 {racial !== 0 && (
                   <span className="rounded-full border border-blue-400/20 bg-blue-400/10 px-2 py-0.5 text-[10px] font-medium text-blue-100">
@@ -108,11 +109,9 @@ export function StatBlock({
 
               {/* Base score input / display */}
               {readOnly ? (
-                racial !== 0 && (
-                  <span className="text-xs text-neutral-500">
-                    {base} {racial > 0 ? `+${racial}` : racial}
-                  </span>
-                )
+                <span className="text-xs text-neutral-500">
+                  Base {base}
+                </span>
               ) : statMethod === 'standard_array' ? (
                 <Select
                   value={String(base)}
@@ -151,8 +150,21 @@ export function StatBlock({
               {/* Racial bonus indicator */}
               {!readOnly && racial !== 0 && (
                 <span className="text-xs text-neutral-500">
-                  species bonus
+                  Base {base}
                 </span>
+              )}
+
+              {contributors.length > 0 && (
+                <div className="mt-1 flex flex-col items-center gap-1">
+                  {contributors.map((contributor, index) => (
+                    <span
+                      key={`${stat}-${contributor.label}-${index}`}
+                      className="rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 text-center text-[10px] leading-4 text-neutral-400"
+                    >
+                      {contributor.label}: {formatModifier(contributor.bonus)}
+                    </span>
+                  ))}
+                </div>
               )}
             </div>
           )

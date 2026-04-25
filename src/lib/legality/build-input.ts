@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type {
+  Armor,
   Background,
   Class,
   ClassFeature,
@@ -8,13 +9,17 @@ import type {
   CharacterAbilityBonusChoice,
   CharacterAsiChoice,
   CharacterClassLevel,
+  CharacterEquipmentItem,
   CharacterFeatChoice,
   CharacterFeatureOptionChoice,
   CharacterLanguageChoice,
   CharacterSpellSelection,
   CharacterToolChoice,
+  EquipmentItem,
   Feat,
+  FeatureOption,
   MulticlassSpellSlotTable,
+  Shield,
   Species,
   SpeciesTrait,
   Spell,
@@ -33,6 +38,7 @@ import {
   type AbilityKey,
   type BuildClassSummary,
   type BuildFeatSummary,
+  type BuildFeatureUnlockSummary,
   type BuildSpellSummary,
   type CharacterBuildContext,
 } from '@/lib/characters/build-context'
@@ -107,6 +113,8 @@ export async function buildCharacterBuildContext(
     languageChoicesResult,
     toolChoicesResult,
     featureOptionChoicesResult,
+    featureOptionsResult,
+    equipmentItemsResult,
     speciesResult,
     backgroundResult,
     spellSelectionsResult,
@@ -123,6 +131,8 @@ export async function buildCharacterBuildContext(
     supabase.from('character_language_choices').select('*').eq('character_id', characterId),
     supabase.from('character_tool_choices').select('*').eq('character_id', characterId),
     supabase.from('character_feature_option_choices').select('*').eq('character_id', characterId),
+    supabase.from('feature_options').select('*'),
+    supabase.from('character_equipment_items').select('*').eq('character_id', characterId),
     character.species_id
       ? supabase.from('species').select('*').eq('id', character.species_id).single()
       : Promise.resolve({ data: null }),
@@ -149,6 +159,8 @@ export async function buildCharacterBuildContext(
   const typedSpellSelections = (spellSelectionsResult.data ?? []) as CharacterSpellSelection[]
   const typedFeatSelections = (featSelectionsResult.data ?? []) as CharacterFeatChoice[]
   const typedFeatureOptionChoices = (featureOptionChoicesResult.data ?? []) as CharacterFeatureOptionChoice[]
+  const featureOptions = (featureOptionsResult.data ?? []) as FeatureOption[]
+  const typedEquipmentItems = (equipmentItemsResult.data ?? []) as CharacterEquipmentItem[]
   spellIds.push(...typedSpellSelections.map((row) => row.spell_id))
   featIds.push(...typedFeatSelections.map((row) => row.feat_id))
 
@@ -169,6 +181,9 @@ export async function buildCharacterBuildContext(
     speciesTraitsResult,
     spellsResult,
     featsResult,
+    equipmentCatalogResult,
+    armorResult,
+    shieldsResult,
   ] = await Promise.all([
     classIds.length > 0
       ? supabase.from('classes').select('*').in('id', classIds)
@@ -203,6 +218,15 @@ export async function buildCharacterBuildContext(
       : Promise.resolve({ data: [] }),
     featIds.length > 0
       ? supabase.from('feats').select('*').in('id', Array.from(new Set(featIds)))
+      : Promise.resolve({ data: [] }),
+    typedEquipmentItems.length > 0
+      ? supabase.from('equipment_items').select('*').in('id', Array.from(new Set(typedEquipmentItems.map((row) => row.item_id))))
+      : Promise.resolve({ data: [] }),
+    typedEquipmentItems.length > 0
+      ? supabase.from('armor').select('*').in('item_id', Array.from(new Set(typedEquipmentItems.map((row) => row.item_id))))
+      : Promise.resolve({ data: [] }),
+    typedEquipmentItems.length > 0
+      ? supabase.from('shields').select('*').in('item_id', Array.from(new Set(typedEquipmentItems.map((row) => row.item_id))))
       : Promise.resolve({ data: [] }),
   ])
 
@@ -266,34 +290,77 @@ export async function buildCharacterBuildContext(
       .map((traitId) => speciesTraitsById.get(traitId))
       .filter((trait): trait is SpeciesTrait => Boolean(trait))
   )
+  const equipmentById = new Map<string, EquipmentItem>(
+    ((equipmentCatalogResult.data ?? []) as EquipmentItem[]).map((row) => [row.id, row])
+  )
+  const armorCatalog = ((armorResult.data ?? []) as Armor[]).flatMap((row) => {
+    const item = equipmentById.get(row.item_id)
+    if (!item) return []
+    return [{
+      itemId: row.item_id,
+      name: item.name,
+      armorCategory: row.armor_category,
+      baseAc: row.base_ac,
+      dexBonusCap: row.dex_bonus_cap,
+    }]
+  })
+  const shieldCatalog = ((shieldsResult.data ?? []) as Shield[]).flatMap((row) => {
+    const item = equipmentById.get(row.item_id)
+    if (!item) return []
+    return [{
+      itemId: row.item_id,
+      name: item.name,
+      armorClassBonus: row.armor_class_bonus,
+    }]
+  })
 
   const buildClasses: BuildClassSummary[] = levels.flatMap((level) => {
     const cls = classesById.get(level.class_id)
     if (!cls) return []
 
     const subclass = level.subclass_id ? subclassesById.get(level.subclass_id) ?? null : null
-    const subclassFeaturesByLevel = new Map<number, string[]>()
+    const subclassFeaturesByLevel = new Map<number, BuildFeatureUnlockSummary[]>()
     if (subclass) {
       for (const feature of (subclassFeaturesBySubclassId.get(subclass.id) ?? []).filter((row) => row.level <= level.level)) {
         const existing = subclassFeaturesByLevel.get(feature.level) ?? []
-        existing.push(feature.name)
+        existing.push({
+          name: feature.name,
+          description: feature.description,
+          sourceType: 'subclass',
+          sourceLabel: subclass.name,
+          source: feature.source,
+          amended: feature.amended,
+          amendmentNote: feature.amendment_note,
+        })
         subclassFeaturesByLevel.set(feature.level, existing)
       }
     }
     const availableProgression = (progressionByClassId.get(cls.id) ?? [])
       .filter((row) => row.level <= level.level)
       .sort((left, right) => left.level - right.level)
-      .map((row) =>
-        progressionRowToSummary(
+      .map((row) => {
+        const featureDetails: BuildFeatureUnlockSummary[] = [
+          ...row.features
+            .map((featureId) => featuresById.get(featureId))
+            .filter((feature): feature is ClassFeature => Boolean(feature))
+            .map((feature) => ({
+              name: feature.name,
+              description: feature.description,
+              sourceType: 'class' as const,
+              sourceLabel: cls.name,
+              source: feature.source,
+              amended: feature.amended,
+              amendmentNote: feature.amendment_note,
+            })),
+          ...(subclassFeaturesByLevel.get(row.level) ?? []),
+        ]
+
+        return progressionRowToSummary(
           row,
-          [
-            ...row.features
-              .map((featureId) => featuresById.get(featureId)?.name)
-              .filter((name): name is string => Boolean(name)),
-            ...(subclassFeaturesByLevel.get(row.level) ?? []),
-          ]
+          featureDetails.map((feature) => feature.name),
+          featureDetails
         )
-      )
+      })
 
     const spellSlotRow = (spellSlotsByClassId.get(cls.id) ?? []).find((row) => row.level === level.level)
 
@@ -411,6 +478,21 @@ export async function buildCharacterBuildContext(
   const multiclassSpellSlotsByCasterLevel = Object.fromEntries(
     ((multiclassSlotsResult.data ?? []) as MulticlassSpellSlotTable[]).map((row) => [row.caster_level, row.slots_by_spell_level])
   )
+  const classLabelById = new Map(
+    levels.map((level) => [level.class_id, classesById.get(level.class_id)?.name ?? 'Unknown Class'])
+  )
+  const selectedFeatChoiceRows = typedFeatSelections.flatMap((row) => {
+    const feat = featById.get(row.feat_id)
+    if (!feat) return []
+    return [{
+      id: row.id,
+      featId: row.feat_id,
+      featName: feat.name,
+      choiceKind: row.choice_kind,
+      characterLevelId: row.character_level_id,
+      sourceFeatureKey: row.source_feature_key,
+    }]
+  })
 
   return {
     allowedSources: resolveAllowedSources(allowlistResult.data ?? [], allSourceRows),
@@ -435,7 +517,28 @@ export async function buildCharacterBuildContext(
     skillExpertise: (skillsResult.data ?? []).filter((row) => row.expertise).map((row) => row.skill),
     selectedAbilityBonuses: toSelectedAbilityBonusMap((abilityBonusChoicesResult.data ?? []) as CharacterAbilityBonusChoice[]),
     selectedAsiBonuses: toSelectedAsiBonusMap((asiChoicesResult.data ?? []) as CharacterAsiChoice[]),
+    selectedAsiChoices: ((asiChoicesResult.data ?? []) as CharacterAsiChoice[]).map((row) => ({
+      id: row.id,
+      slotIndex: row.slot_index,
+      ability: row.ability,
+      bonus: row.bonus,
+      characterLevelId: row.character_level_id,
+      sourceFeatureKey: row.source_feature_key,
+    })),
     selectedFeatureOptions: typedFeatureOptionChoices,
+    featureOptions: featureOptions.map((option) => ({
+      group_key: option.group_key,
+      key: option.key,
+      name: option.name,
+      description: option.description,
+      effects: option.effects,
+    })),
+    equipmentItems: typedEquipmentItems.map((row) => ({
+      itemId: row.item_id,
+      equipped: row.equipped,
+    })),
+    armorCatalog,
+    shieldCatalog,
     asiChoiceSlots: toAsiChoiceSlots((asiChoicesResult.data ?? []) as CharacterAsiChoice[]),
     speciesName: species?.name ?? null,
     selectedLanguages: ((languageChoicesResult.data ?? []) as CharacterLanguageChoice[]).map((row) => row.language),
@@ -461,6 +564,14 @@ export async function buildCharacterBuildContext(
     classes: buildClasses,
     selectedSpells,
     selectedFeats,
+    selectedFeatChoices: selectedFeatChoiceRows,
+    classLevelAnchors: classLevels.map((row) => ({
+      id: row.id,
+      classId: row.class_id,
+      className: classLabelById.get(row.class_id) ?? 'Unknown Class',
+      levelNumber: row.level_number,
+      takenAt: row.taken_at,
+    })),
     sourceCollections,
     grantedSpellIds: Array.from(new Set([
       ...activeSubclassBonusSpells.map((row) => row.spell_id),

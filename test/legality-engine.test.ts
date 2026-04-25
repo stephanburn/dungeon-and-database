@@ -28,7 +28,12 @@ function createContext(overrides: Partial<CharacterBuildContext> = {}): Characte
     selectedTools: [],
     selectedAbilityBonuses: {},
     selectedAsiBonuses: {},
+    selectedAsiChoices: [],
     selectedFeatureOptions: [],
+    featureOptions: [],
+    equipmentItems: [],
+    armorCatalog: [],
+    shieldCatalog: [],
     asiChoiceSlots: [],
     speciesName: 'Human',
     speciesSource: 'SRD',
@@ -79,8 +84,36 @@ function createContext(overrides: Partial<CharacterBuildContext> = {}): Characte
         toolProficiencies: [],
         subclass: { id: 'evoker', name: 'Evoker', source: 'SRD', choiceLevel: 2 },
         progression: [
-          { level: 1, asiAvailable: false, proficiencyBonus: 2, featureNames: ['Spellcasting'] },
-          { level: 2, asiAvailable: false, proficiencyBonus: 2, featureNames: ['Arcane Tradition'] },
+          {
+            level: 1,
+            asiAvailable: false,
+            proficiencyBonus: 2,
+            featureNames: ['Spellcasting'],
+            features: [{
+              name: 'Spellcasting',
+              description: 'Cast wizard spells from a spellbook.',
+              sourceType: 'class',
+              sourceLabel: 'Wizard',
+              source: 'SRD',
+              amended: false,
+              amendmentNote: null,
+            }],
+          },
+          {
+            level: 2,
+            asiAvailable: false,
+            proficiencyBonus: 2,
+            featureNames: ['Arcane Tradition'],
+            features: [{
+              name: 'Arcane Tradition',
+              description: 'Choose a wizard school.',
+              sourceType: 'class',
+              sourceLabel: 'Wizard',
+              source: 'SRD',
+              amended: false,
+              amendmentNote: null,
+            }],
+          },
           { level: 3, asiAvailable: false, proficiencyBonus: 2, featureNames: [] },
           { level: 4, asiAvailable: true, proficiencyBonus: 2, featureNames: [] },
         ],
@@ -100,6 +133,8 @@ function createContext(overrides: Partial<CharacterBuildContext> = {}): Characte
       },
     ],
     selectedFeats: [],
+    selectedFeatChoices: [],
+    classLevelAnchors: [],
     sourceCollections: {
       classSources: ['SRD'],
       subclassSources: ['SRD'],
@@ -152,8 +187,16 @@ test('deriveCharacter exposes milestone 1A core sheet values', () => {
   assert.equal(derived.proficiencyBonus, 2)
   assert.deepEqual(derived.abilities.int, {
     base: 12,
+    bonus: 1,
     adjusted: 13,
     modifier: 1,
+    contributors: [{
+      ability: 'int',
+      bonus: 1,
+      label: 'Human ability bonus',
+      sourceFeatureKey: null,
+      sourceType: 'species',
+    }],
   })
   assert.equal(derived.hitPoints.max, 26)
   assert.equal(derived.hitPoints.constitutionModifier, 1)
@@ -185,6 +228,13 @@ test('deriveCharacter exposes milestone 1A core sheet values', () => {
   assert.deepEqual(
     derived.features.map((feature) => `${feature.className} ${feature.level}: ${feature.name}`),
     ['Wizard 1: Spellcasting', 'Wizard 2: Arcane Tradition']
+  )
+  assert.deepEqual(
+    derived.features.map((feature) => [feature.name, feature.sourceLabel, feature.description]),
+    [
+      ['Spellcasting', 'Wizard', 'Cast wizard spells from a spellbook.'],
+      ['Arcane Tradition', 'Wizard', 'Choose a wizard school.'],
+    ]
   )
   assert.equal(derived.spellcasting.className, 'Wizard')
   assert.equal(derived.spellcasting.mode, 'spellbook')
@@ -1020,6 +1070,306 @@ test('deriveCharacter applies selected species ability bonuses and warforged int
   assert.equal(derived.armorClass.formula, '10 + DEX + 1 (Unarmored, Integrated Protection)')
 })
 
+test('deriveCharacter computes armor class from equipped armor, shield, and defense style', () => {
+  const derived = deriveCharacter(createContext({
+    classes: [{
+      classId: 'fighter',
+      name: 'Fighter',
+      level: 1,
+      hitDie: 10,
+      hpRoll: 10,
+      source: 'PHB',
+      spellcastingType: null,
+      spellcastingProgression: null,
+      subclassChoiceLevel: 3,
+      multiclassPrereqs: [{ ability: 'str', min: 13 }],
+      skillChoices: { count: 2, from: ['athletics', 'history'] },
+      savingThrowProficiencies: ['str', 'con'],
+      armorProficiencies: ['All armor', 'Shields'],
+      weaponProficiencies: ['Simple', 'Martial'],
+      toolProficiencies: [],
+      subclass: null,
+      progression: [{ level: 1, asiAvailable: false, proficiencyBonus: 2, featureNames: ['Fighting Style'] }],
+      spellSlots: [],
+    }],
+    selectedFeatureOptions: [{
+      id: 'fighter-style',
+      character_id: 'character',
+      character_level_id: null,
+      option_group_key: 'fighting_style:fighter:2014',
+      option_key: 'fighter:style',
+      selected_value: { feature_option_key: 'defense' },
+      choice_order: 0,
+      source_category: 'class_feature',
+      source_entity_id: 'fighter',
+      source_feature_key: 'class_feature:fighting_style:fighter',
+      created_at: '',
+    }],
+    featureOptions: [{
+      group_key: 'fighting_style:fighter:2014',
+      key: 'defense',
+      name: 'Defense',
+      description: 'Gain +1 AC while wearing armor.',
+      effects: {},
+    }],
+    equipmentItems: [
+      { itemId: 'plate', equipped: true },
+      { itemId: 'shield', equipped: true },
+    ],
+    armorCatalog: [{
+      itemId: 'plate',
+      name: 'Plate',
+      armorCategory: 'heavy',
+      baseAc: 18,
+      dexBonusCap: 0,
+    }],
+    shieldCatalog: [{
+      itemId: 'shield',
+      name: 'Shield',
+      armorClassBonus: 2,
+    }],
+  }))
+
+  assert.equal(derived.armorClass.value, 21)
+  assert.equal(derived.armorClass.formula, '18 (Plate) +2 (Shield) +1 (Defense)')
+})
+
+test('deriveCharacter groups feature details and class resources for sheet presentation', () => {
+  const derived = deriveCharacter(createContext({
+    classes: [{
+      classId: 'fighter',
+      name: 'Fighter',
+      level: 5,
+      hitDie: 10,
+      hpRoll: 8,
+      source: 'PHB',
+      spellcastingType: null,
+      spellcastingProgression: null,
+      subclassChoiceLevel: 3,
+      multiclassPrereqs: [{ ability: 'str', min: 13 }],
+      skillChoices: { count: 2, from: ['athletics', 'history'] },
+      savingThrowProficiencies: ['str', 'con'],
+      armorProficiencies: ['All armor', 'Shields'],
+      weaponProficiencies: ['Simple', 'Martial'],
+      toolProficiencies: [],
+      subclass: { id: 'battle-master', name: 'Battle Master', source: 'PHB', choiceLevel: 3 },
+      progression: [
+        {
+          level: 1,
+          asiAvailable: false,
+          proficiencyBonus: 2,
+          featureNames: ['Second Wind'],
+          features: [{
+            name: 'Second Wind',
+            description: 'Regain a burst of stamina in combat.',
+            sourceType: 'class',
+            sourceLabel: 'Fighter',
+            source: 'PHB',
+            amended: false,
+            amendmentNote: null,
+          }],
+        },
+        {
+          level: 2,
+          asiAvailable: false,
+          proficiencyBonus: 2,
+          featureNames: ['Action Surge'],
+          features: [{
+            name: 'Action Surge',
+            description: 'Push beyond normal limits for one additional action.',
+            sourceType: 'class',
+            sourceLabel: 'Fighter',
+            source: 'PHB',
+            amended: false,
+            amendmentNote: null,
+          }],
+        },
+        {
+          level: 3,
+          asiAvailable: false,
+          proficiencyBonus: 2,
+          featureNames: ['Martial Archetype', 'Combat Superiority'],
+          features: [
+            {
+              name: 'Martial Archetype',
+              description: 'Choose a fighter archetype.',
+              sourceType: 'class',
+              sourceLabel: 'Fighter',
+              source: 'PHB',
+              amended: false,
+              amendmentNote: null,
+            },
+            {
+              name: 'Combat Superiority',
+              description: 'Learn maneuvers fueled by superiority dice.',
+              sourceType: 'subclass',
+              sourceLabel: 'Battle Master',
+              source: 'PHB',
+              amended: false,
+              amendmentNote: null,
+            },
+          ],
+        },
+        { level: 4, asiAvailable: true, proficiencyBonus: 2, featureNames: ['Ability Score Improvement'] },
+        { level: 5, asiAvailable: false, proficiencyBonus: 3, featureNames: ['Extra Attack'] },
+      ],
+      spellSlots: [],
+    }],
+    selectedFeatureOptions: [
+      {
+        id: 'maneuver-1',
+        character_id: 'character',
+        character_level_id: null,
+        option_group_key: 'maneuver:battle_master:2014',
+        option_key: 'fighter:maneuver_1',
+        selected_value: { feature_option_key: 'trip_attack' },
+        choice_order: 0,
+        source_category: 'subclass_feature',
+        source_entity_id: 'battle-master',
+        source_feature_key: 'subclass_feature:battle_master:combat_superiority',
+        created_at: '',
+      },
+      {
+        id: 'maneuver-2',
+        character_id: 'character',
+        character_level_id: null,
+        option_group_key: 'maneuver:battle_master:2014',
+        option_key: 'fighter:maneuver_2',
+        selected_value: { feature_option_key: 'riposte' },
+        choice_order: 1,
+        source_category: 'subclass_feature',
+        source_entity_id: 'battle-master',
+        source_feature_key: 'subclass_feature:battle_master:combat_superiority',
+        created_at: '',
+      },
+    ],
+    featureOptions: [
+      {
+        group_key: 'maneuver:battle_master:2014',
+        key: 'trip_attack',
+        name: 'Trip Attack',
+        description: 'Knock a target prone with a superiority-enhanced strike.',
+        effects: {},
+      },
+      {
+        group_key: 'maneuver:battle_master:2014',
+        key: 'riposte',
+        name: 'Riposte',
+        description: 'Punish a missed melee attack with a reaction strike and superiority damage.',
+        effects: {},
+      },
+    ],
+  }))
+
+  assert.deepEqual(
+    derived.features.map((feature) => [feature.className, feature.level, feature.name, feature.sourceLabel, feature.description]),
+    [
+      ['Fighter', 1, 'Second Wind', 'Fighter', 'Regain a burst of stamina in combat.'],
+      ['Fighter', 2, 'Action Surge', 'Fighter', 'Push beyond normal limits for one additional action.'],
+      ['Fighter', 3, 'Martial Archetype', 'Fighter', 'Choose a fighter archetype.'],
+      ['Fighter', 3, 'Combat Superiority', 'Battle Master', 'Learn maneuvers fueled by superiority dice.'],
+      ['Fighter', 4, 'Ability Score Improvement', 'Fighter', null],
+      ['Fighter', 5, 'Extra Attack', 'Fighter', null],
+    ]
+  )
+  assert.deepEqual(
+    derived.classResources.map((resource) => [resource.label, resource.value, resource.recharge]),
+    [
+      ['Second Wind', '1 use', 'Short or long rest'],
+      ['Action Surge', '1 use', 'Short or long rest'],
+      ['Superiority Dice', '4d8', 'Short or long rest'],
+    ]
+  )
+  assert.deepEqual(
+    derived.combatActions.map((action) => [action.name, action.cost, action.trigger, action.saveDc, action.effect]),
+    [
+      ['Trip Attack', '1 superiority die', 'When you hit with a weapon attack', 13, 'Knock a target prone with a superiority-enhanced strike.'],
+      ['Riposte', '1 superiority die', 'Reaction', 13, 'Punish a missed melee attack with a reaction strike and superiority damage.'],
+    ]
+  )
+})
+
+test('deriveCharacter exposes chronological ASI and feat history with class-level anchors', () => {
+  const derived = deriveCharacter(createContext({
+    classLevelAnchors: [
+      { id: 'wizard-4-level', classId: 'wizard', className: 'Wizard', levelNumber: 4, takenAt: '2026-01-01T00:00:00.000Z' },
+      { id: 'wizard-8-level', classId: 'wizard', className: 'Wizard', levelNumber: 8, takenAt: '2026-02-01T00:00:00.000Z' },
+      { id: 'fighter-4-level', classId: 'fighter', className: 'Fighter', levelNumber: 4, takenAt: '2026-03-01T00:00:00.000Z' },
+    ],
+    selectedAsiChoices: [
+      {
+        id: 'asi-1',
+        slotIndex: 0,
+        ability: 'int',
+        bonus: 2,
+        characterLevelId: 'wizard-4-level',
+        sourceFeatureKey: 'asi_slot:Wizard 4',
+      },
+      {
+        id: 'asi-2',
+        slotIndex: 2,
+        ability: 'dex',
+        bonus: 1,
+        characterLevelId: 'fighter-4-level',
+        sourceFeatureKey: 'asi_slot:Fighter 4',
+      },
+      {
+        id: 'asi-3',
+        slotIndex: 2,
+        ability: 'con',
+        bonus: 1,
+        characterLevelId: 'fighter-4-level',
+        sourceFeatureKey: 'asi_slot:Fighter 4',
+      },
+    ],
+    selectedFeatChoices: [{
+      id: 'feat-choice-1',
+      featId: 'war-caster',
+      featName: 'War Caster',
+      choiceKind: 'asi_or_feat',
+      characterLevelId: 'wizard-8-level',
+      sourceFeatureKey: 'asi_slot:Wizard 8',
+    }],
+  }))
+
+  assert.deepEqual(
+    derived.asiFeatHistory.map((entry) => [
+      entry.type,
+      entry.label,
+      entry.detail,
+      entry.className,
+      entry.levelNumber,
+    ]),
+    [
+      ['asi', 'Ability Score Improvement', '+2 Intelligence', 'Wizard', 4],
+      ['feat', 'War Caster', 'Feat selected instead of ASI', 'Wizard', 8],
+      ['asi', 'Ability Score Improvement', '+1 Constitution / +1 Dexterity', 'Fighter', 4],
+    ]
+  )
+})
+
+test('deriveCharacter surfaces reactive species traits as combat options', () => {
+  const derived = deriveCharacter(createContext({
+    speciesTraits: [{
+      id: 'fury',
+      name: 'Fury of the Small',
+      description: 'When you damage a larger creature, add extra damage.',
+      source: 'VGtM',
+    }],
+  }))
+
+  assert.deepEqual(
+    derived.combatActions.map((action) => [action.name, action.sourceLabel, action.trigger, action.cost, action.effect]),
+    [[
+      'Fury of the Small',
+      'Species Trait',
+      'When you damage a larger creature',
+      'Once per short or long rest',
+      'When you damage a larger creature, add extra damage.',
+    ]]
+  )
+})
+
 test('deriveCharacter surfaces species traits like Vigilant Guardian', () => {
   const derived = deriveCharacter(createContext({
     speciesName: 'Human (Mark of Sentinel)',
@@ -1716,14 +2066,15 @@ test('deriveCharacter exposes per-source spellcasting summaries for multiclass c
       { id: 'magic-missile', name: 'Magic Missile', level: 1, classes: ['wizard'], source: 'SRD', grantedBySubclassIds: [], countsAgainstSelectionLimit: true, sourceFeatureKey: null },
       { id: 'mage-hand', name: 'Mage Hand', level: 0, classes: ['wizard'], source: 'SRD', grantedBySubclassIds: [], countsAgainstSelectionLimit: true, sourceFeatureKey: null },
       { id: 'bless', name: 'Bless', level: 1, classes: ['cleric'], source: 'SRD', grantedBySubclassIds: [], countsAgainstSelectionLimit: true, sourceFeatureKey: null },
+      { id: 'cure-wounds', name: 'Cure Wounds', level: 1, classes: [], source: 'SRD', grantedBySubclassIds: ['life'], countsAgainstSelectionLimit: false, sourceFeatureKey: 'subclass_feature:life_domain:domain_spells' },
     ],
     sourceCollections: {
       classSources: ['SRD', 'SRD'],
       subclassSources: ['SRD', 'SRD'],
-      spellSources: ['SRD', 'SRD', 'SRD'],
+      spellSources: ['SRD', 'SRD', 'SRD', 'SRD'],
       featSources: [],
     },
-    grantedSpellIds: [],
+    grantedSpellIds: ['cure-wounds'],
     freePreparedSpellIds: [],
   }))
 
@@ -1731,9 +2082,22 @@ test('deriveCharacter exposes per-source spellcasting summaries for multiclass c
   assert.equal(derived.spellcasting.sources[0]?.className, 'Wizard')
   assert.equal(derived.spellcasting.sources[0]?.selectionSummary, 'Wizard has 10 leveled spells in its spellbook and can prepare 6 of them.')
   assert.deepEqual(derived.spellcasting.sources[0]?.selectedSpellCountsByLevel, { 0: 1, 1: 1 })
+  assert.equal(derived.spellcasting.sources[0]?.spellSaveDc, 13)
+  assert.equal(derived.spellcasting.sources[0]?.spellAttackModifier, 5)
+  assert.deepEqual(derived.spellcasting.sources[0]?.knownSpells.map((spell) => spell.name), ['Mage Hand'])
+  assert.deepEqual(derived.spellcasting.sources[0]?.spellbookSpells.map((spell) => spell.name), ['Magic Missile'])
   assert.equal(derived.spellcasting.sources[1]?.className, 'Cleric')
   assert.equal(derived.spellcasting.sources[1]?.selectionSummary, 'Cleric can prepare 3 spells.')
   assert.deepEqual(derived.spellcasting.sources[1]?.selectedSpellCountsByLevel, { 1: 1 })
+  assert.equal(derived.spellcasting.sources[1]?.spellSaveDc, 12)
+  assert.equal(derived.spellcasting.sources[1]?.spellAttackModifier, 4)
+  assert.deepEqual(derived.spellcasting.sources[1]?.preparedSpells.map((spell) => spell.name), ['Bless'])
+  assert.deepEqual(derived.spellcasting.sources[1]?.grantedSpells.map((spell) => [spell.name, spell.grantLabel]), [
+    ['Cure Wounds', 'Subclass feature: Domain Spells'],
+  ])
+  assert.deepEqual(derived.spellcasting.grantedSpells.map((spell) => [spell.name, spell.grantLabel]), [
+    ['Cure Wounds', 'Subclass feature: Domain Spells'],
+  ])
 })
 
 test('legality enforces spell selection caps per spellcasting source', () => {

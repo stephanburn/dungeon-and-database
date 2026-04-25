@@ -24,6 +24,7 @@ function createContext(overrides: Partial<CharacterBuildContext> = {}): Characte
     selectedTools: [],
     selectedAbilityBonuses: {},
     selectedAsiBonuses: {},
+    selectedAsiChoices: [],
     asiChoiceSlots: [],
     speciesName: 'Human',
     speciesSource: 'SRD',
@@ -70,7 +71,10 @@ function createContext(overrides: Partial<CharacterBuildContext> = {}): Characte
     }],
     selectedSpells: [],
     selectedFeats: [],
+    selectedFeatChoices: [],
+    classLevelAnchors: [],
     selectedFeatureOptions: [],
+    featureOptions: [],
     sourceCollections: {
       classSources: ['SRD'],
       subclassSources: [],
@@ -186,13 +190,27 @@ test('feat-granted off-list spells stay legal and out of class selection caps', 
 
   assert.equal(legality.checks.find((check) => check.key === 'spell_legality')?.passed, true)
   assert.equal(legality.checks.find((check) => check.key === 'spell_selection_count')?.passed, true)
-  assert.deepEqual(derived.spellcasting.sources[0]?.selectedSpells, [{
-    id: 'chaos-bolt',
-    name: 'Chaos Bolt',
-    level: 1,
-    source: 'EE',
-    granted: true,
-    countsAgainstSelectionLimit: false,
-  }])
+  assert.deepEqual(
+    derived.spellcasting.sources[0]?.selectedSpells.map((spell) => ({
+      id: spell.id,
+      name: spell.name,
+      level: spell.level,
+      source: spell.source,
+      granted: spell.granted,
+      countsAgainstSelectionLimit: spell.countsAgainstSelectionLimit,
+      category: spell.category,
+      grantLabel: spell.grantLabel,
+    })),
+    [{
+      id: 'chaos-bolt',
+      name: 'Chaos Bolt',
+      level: 1,
+      source: 'EE',
+      granted: true,
+      countsAgainstSelectionLimit: false,
+      category: 'granted',
+      grantLabel: 'Feat spell: Level 1 Spell',
+    }]
+  )
   assert.equal(derived.spellcasting.selectedSpells[0]?.granted, true)
 })
