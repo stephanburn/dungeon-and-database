@@ -89,7 +89,7 @@ export function LanguagesToolsCard({
       <div>
         <h3 className="text-base font-semibold text-neutral-100">Languages and Tools</h3>
         <p className="mt-1 text-sm text-neutral-400">
-          Fixed grants come from species and background data. Choice-driven rows are persisted separately with provenance.
+          Your species and background grant some picks automatically. Choose any remaining options here.
         </p>
       </div>
 

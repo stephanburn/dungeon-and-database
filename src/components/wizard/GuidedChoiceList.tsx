@@ -1,6 +1,6 @@
 'use client'
 
-import { Check, ChevronRight, Lock, RefreshCcw } from 'lucide-react'
+import { Check, Lock, RefreshCcw } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
@@ -56,13 +56,24 @@ function GuidedChoiceCard({
   disabled: boolean
   onSelect: () => void
 }) {
+  const hasRichDetail = Boolean(
+    option.description ||
+    option.detail ||
+    option.disabledReason ||
+    option.prerequisiteLabel ||
+    option.replacesLabel
+  )
+
   return (
     <button
       type="button"
       disabled={disabled}
       onClick={onSelect}
       className={cn(
-        'w-full rounded-2xl border px-4 py-4 text-left transition-colors',
+        'focus-ring w-full border text-left transition-colors',
+        hasRichDetail
+          ? 'rounded-xl px-4 py-4'
+          : 'surface-row px-3 py-2.5',
         selected
           ? 'border-blue-400/35 bg-blue-400/10'
           : 'border-white/10 bg-white/[0.02]',
@@ -79,10 +90,10 @@ function GuidedChoiceCard({
               : 'border-white/15 text-neutral-500'
           )}
         >
-          {selected ? <Check className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+          {selected && <Check className="h-3.5 w-3.5" />}
         </div>
 
-        <div className="min-w-0 flex-1 space-y-2">
+        <div className={cn('min-w-0 flex-1', hasRichDetail ? 'space-y-2' : 'space-y-1')}>
           <div className="flex flex-wrap items-center gap-2">
             <p className={cn('font-medium', selected ? 'text-blue-50' : 'text-neutral-100')}>{option.label}</p>
             {option.prerequisiteLabel && (

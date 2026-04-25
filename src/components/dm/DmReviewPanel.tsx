@@ -66,9 +66,9 @@ export function DmReviewPanel({ characterId, status }: DmReviewPanelProps) {
   }
 
   return (
-    <Card className="bg-neutral-900 border-blue-800">
+    <Card className="surface-section">
       <CardHeader>
-        <CardTitle className="text-blue-300 text-sm">DM Review</CardTitle>
+        <CardTitle className="text-sm text-neutral-100">DM Review</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-2">
@@ -88,13 +88,13 @@ export function DmReviewPanel({ characterId, status }: DmReviewPanelProps) {
             confirmLabel="Approve"
             pendingLabel="Approving…"
             onConfirm={handleApprove}
-            className="bg-green-700 hover:bg-green-600 text-white"
+            className="bg-emerald-500/90 text-neutral-950 hover:bg-emerald-400"
           />
           <Button
             variant="outline"
             onClick={handleRequestChanges}
             disabled={loading !== null}
-            className="border-amber-700 text-amber-300 hover:bg-amber-900/30"
+            className="border-amber-400/20 bg-amber-400/10 text-amber-100 hover:bg-amber-400/15"
           >
             {loading === 'changes' ? 'Sending…' : 'Request changes'}
           </Button>

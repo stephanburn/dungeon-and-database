@@ -12,7 +12,11 @@
 # next.js
 /.next/
 /out/
-/output/
+/output/*
+!/output/batch-4-closeout-audit.md
+!/output/batch-5-closeout-audit.md
+!/output/batch-5-5-ui-polish-closeout.md
+!/output/character-creator-roadmap.md
 
 # production
 /build

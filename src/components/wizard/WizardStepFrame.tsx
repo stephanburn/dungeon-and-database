@@ -1,12 +1,11 @@
 'use client'
 
 import type { ReactNode } from 'react'
-import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
 type WizardStepFrameProps = {
   title: string
   description?: string
+  guidance?: string | null
   summaryTitle?: string
   summaryItems?: string[]
   children: ReactNode
@@ -15,6 +14,7 @@ type WizardStepFrameProps = {
 export function WizardStepFrame({
   title,
   description,
+  guidance,
   summaryTitle = 'Step summary',
   summaryItems = [],
   children,
@@ -28,31 +28,36 @@ export function WizardStepFrame({
         )}
       </div>
 
+      {guidance && (
+        <div className="surface-row px-3 py-2.5 text-sm text-neutral-300">
+          <span className="font-medium text-neutral-100">Next:</span> {guidance}
+        </div>
+      )}
+
       {children}
 
-      <Card className="border-white/10 bg-white/[0.03]">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base text-neutral-100">{summaryTitle}</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          {summaryItems.length > 0 ? (
-            summaryItems.map((item) => (
-              <div
+      {summaryItems.length > 0 && (
+        <details className="surface-row group px-3 py-2.5">
+          <summary className="cursor-pointer list-none text-sm font-medium text-neutral-300 marker:hidden">
+            <span className="inline-flex items-center gap-2">
+              <span>{summaryTitle}</span>
+              <span className="text-xs font-normal text-neutral-500">
+                {summaryItems.length} item{summaryItems.length === 1 ? '' : 's'}
+              </span>
+            </span>
+          </summary>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {summaryItems.map((item) => (
+              <span
                 key={item}
-                className="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2 text-sm text-neutral-300"
+                className="surface-row px-2.5 py-1 text-xs text-neutral-300"
               >
                 {item}
-              </div>
-            ))
-          ) : (
-            <Alert className="border-white/10 bg-white/[0.02]">
-              <AlertDescription className="text-neutral-400">
-                Nothing selected for this step yet.
-              </AlertDescription>
-            </Alert>
-          )}
-        </CardContent>
-      </Card>
+              </span>
+            ))}
+          </div>
+        </details>
+      )}
     </div>
   )
 }

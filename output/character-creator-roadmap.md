@@ -12,6 +12,7 @@ This roadmap now has meaningful implementation behind it.
 - Batch 4 is now effectively complete and closed out by Slice `4o` on 2026-04-23.
 - Batch 4.5 is now effectively complete and closed out by Slice `4.5h` on 2026-04-24.
 - Batch 5 is now effectively complete and closed out by Slice `5n` on 2026-04-25. The live data-copy migration smoke (Slice `5m`) was completed before Batch 5 closed; the Batch 4.5 deployment gate is formally closed. The one architectural gap carried into Batch 6 is consolidating the spellcasting derivation from `build-context.ts` into `derived.ts`.
+- Batch 5.5 is now effectively complete and closed out by Slice `5.5h` on 2026-04-25. Slice `5.5a` landed the shared UI hierarchy, surface, radius, and focus conventions. Slice `5.5b` shortened high-traffic player-facing copy and removed implementation language. Slice `5.5c` reduced wizard summary weight and made simple guided choices render as compact rows. Slice `5.5d` refined login and dashboard entry states. Slice `5.5e` made guided creation more momentum-oriented. Slice `5.5f` compacted the character sheet header and simplified section toggles. Slice `5.5g` made validation, DM audit, and stale-provenance states more repair-oriented and calmer by default. Slice `5.5h` closed the polish pass with visual/accessibility QA notes and a Batch 6 handoff.
 - A post-Batch-4 production hotfix shipped on 2026-04-23 to stop the character sheet from entering a React update loop when loading class-scoped spell options for newly created characters.
 - A Batch 4 senior-review pass on 2026-04-23 found several level-up data-integrity bugs that the additive save path makes reachable in normal play (silent spell/feat swap loss, skill PK collision on multiclass overlap, feature-option value-change collision, preserved-spell level misattribution, and a concurrency window in the per-level sync trigger). Batch 4.5 is scheduled before Batch 5 to close these.
 - Batch 4 delivered the end-to-end guided builder workflows that were blocking real character creation:
@@ -918,28 +919,180 @@ Each slice should fit in one Codex session and land derivation/helpers + at leas
 - The sheet reflects derived rules accurately enough to use in play.
 - DM review can rely on the sheet and audit summary rather than manual DB inspection.
 
-## Do this next!
+## Batch 5.5: UI Polish
+
+### Objective
+
+Make the existing product feel calmer, clearer, and more refined before the content/admin surface expands. This is a subtraction-and-polish batch: preserve the current workflows, but reduce visual noise, shorten copy, clarify hierarchy, and make the app feel easier to trust on a laptop browser.
+
+### Why
+
+Batch 5 made the sheet mechanically useful, but the UI now carries a lot of equal-weight cards, borders, badges, helper text, and derived/audit detail. The app is coherent, but it often asks users to parse too much at once. Batch 6 will add content ingestion and admin tooling; if UI hierarchy is not tightened first, those larger surfaces will inherit the same density and become harder to use.
+
+### Design Principles
+
+1. **Prefer subtraction over addition.** Remove redundant explanatory text, repeated empty states, and unnecessary containers before introducing new components.
+2. **One primary focus per screen.** Login focuses on sign-in, dashboard on choosing or creating a character, wizard on the current decision, sheet on current character state and next action.
+3. **Keep advanced detail available, not dominant.** DM audit/provenance, rules details, and derived explanations should be easy to reach but visually quieter than the player task.
+4. **Use consistent visual weight.** Reserve strong cards, badges, alerts, and accent colors for moments that need them.
+5. **Polish must improve accessibility.** Better contrast, focus states, keyboard flow, and simpler layouts are part of the polish, not follow-up work.
+
+### Scope
+
+- Login, player dashboard, guided character creation, character sheet, and DM review/audit surfaces.
+- Visual hierarchy, spacing, copy, component consistency, focus states, empty states, and validation presentation.
+- No new rules systems, schema changes, sourcebook content, combat automation, or broad mobile redesign.
+- Primary viewport: laptop browser. Mobile should not regress, but it is not the optimization target.
+
+### Non-Goals
+
+- Rebranding or a decorative visual redesign.
+- New onboarding, tutorials, or feature tours.
+- Replacing the dark theme.
+- Adding new character-builder capabilities.
+- Rewriting shadcn/Radix primitives unless a small local variant removes repeated friction.
+
+### Execution Slices
+
+Each slice should fit in one Codex session and leave the app coherent. Slices 5.5a-5.5c establish the product-wide visual and copy rules. Slices 5.5d-5.5g apply them to the highest-traffic surfaces. Slice 5.5h verifies the polish pass before Batch 6 begins.
+
+**Slice 5.5a — UI hierarchy inventory and polish tokens** (delivered 2026-04-25)
+
+- Goal: define a small product-wide hierarchy system so surfaces stop competing visually.
+- Added shared utilities in `src/app/globals.css`: `surface-primary`, `surface-section`, `surface-row`, `text-metadata`, and `focus-ring`.
+- Updated shared card, alert, form, button, select, checkbox, tabs, dialog, and guided-choice primitives to use the shared focus/radius conventions.
+- Added `test/ui-polish-conventions.test.ts` to pin these conventions before the surface-specific polish slices continue.
+- Documented usage rules in `output/batch-5-5-ui-polish-notes.md`.
+- acceptance: common UI treatments now have clear reusable rules; dense shared controls use crisper radii; keyboard focus is visible and consistent across core primitives.
+
+**Slice 5.5b — UX writing and terminology simplification** (delivered 2026-04-25)
+
+- Goal: replace implementation-language copy with short user-facing task language.
+- Simplified dashboard empty-state and return-copy language around starting/continuing characters.
+- Shortened login mode-switch and reset labels: `Use password`, `Use magic link`, `Reset password`.
+- Rewrote guided-creation descriptions to focus on the user's next choice instead of persistence, ownership, derivation, and rules-engine mechanics.
+- Standardized key action labels: `Create character`, `Submit`, and `Open sheet`.
+- Updated the language/tool helper copy and DM audit subtitle to avoid exposing implementation details.
+- Extended `test/ui-polish-conventions.test.ts` with player-facing copy guardrails for internal terminology and verbose action labels.
+- acceptance: high-traffic player-facing copy avoids the known internal terms; primary actions are shorter; remaining destructive/blocking states still keep their explanatory text.
+
+**Slice 5.5c — Component restraint pass** (delivered 2026-04-25)
+
+- Goal: reduce the repeated "card inside card inside card" feeling without changing workflows.
+- Replaced the wizard frame's always-visible summary card with a quiet `details` summary that only appears when there are selected items.
+- Removed the "Nothing selected" empty alert from wizard steps so undecided states do not read as warnings.
+- Added compact guided-choice rows for simple options, while retaining roomier card spacing for options with descriptions, requirements, replacement labels, or disabled reasons.
+- Removed the unselected chevron from guided choices so unchosen rows are quieter and selected rows carry the primary mark.
+- Extended `test/ui-polish-conventions.test.ts` to guard against nested summary cards/alerts and to keep simple guided choices compact.
+- acceptance: simple wizard steps now have less competing surface weight; summaries appear only when useful; selected/disabled/rich-option states remain visible without making every option feel like a large card.
+
+**Slice 5.5d — Login and dashboard refinement** (delivered 2026-04-25)
+
+- Goal: make first entry and character selection feel warm, direct, and trustworthy.
+- Reduced login title scale and tightened the login panel rhythm around one obvious sign-in path.
+- Converted magic-link and password-reset success feedback from alert blocks into calm `role="status"` messages with polite live-region announcements.
+- Replaced raw secondary sign-in links with ghost buttons so alternate actions stay legible, keyboard-friendly, and clearly secondary.
+- Simplified the dashboard empty state onto the shared primary surface treatment.
+- Converted character cards into compact clickable rows showing only name, campaign, and status; removed the redundant `Open` label and added explicit accessible labels to the row links.
+- Extended `test/ui-polish-conventions.test.ts` to guard the calmer login feedback and row-based dashboard affordance.
+- acceptance: unauthenticated users see one obvious sign-in path and quiet alternatives; returning players can scan characters by name, campaign, and status without extra visual clutter; dashboard primary and secondary actions have distinct hierarchy.
+
+**Slice 5.5e — Guided creation flow refinement** (delivered 2026-04-25)
+
+- Goal: make the 10-step wizard feel lighter and more momentum-oriented.
+- Replaced the boxed 10-button step grid with a quieter ordered progress treatment that keeps direct navigation but makes it secondary to the current step.
+- Added explicit `Current`, `Done`, `Available`, and `Locked` state labels through accessible labels and visible shape/text treatment so progress is not color-only.
+- Added inline `Next:` guidance to `WizardStepFrame` for incomplete required choices, making missing picks feel like direction instead of a warning state.
+- Moved Back/Continue/Open Sheet actions into the wizard card footer so navigation is attached to the current decision.
+- Wrapped equipment and spells/feats in the same step frame pattern so the high-level wizard rhythm is consistent across every step.
+- Changed incomplete-step and locked-step toasts from destructive alerts to neutral guidance.
+- Extended `test/ui-polish-conventions.test.ts` to guard the quieter progress treatment and in-frame guidance/footer navigation.
+- acceptance: first-time character creation presents one obvious next decision at a time; completed/current/locked/reachable states are distinguishable without relying on color alone; resumable draft-save and reachable-step logic remain unchanged.
+
+**Slice 5.5f — Character sheet hierarchy and sticky header polish** (delivered 2026-04-25)
+
+- Goal: make the sheet feel like a usable character surface, not a dense rules dashboard.
+- Reduced the sticky sheet header from a large rounded chrome block to the shared `surface-primary` treatment with tighter spacing.
+- Kept character name, level/campaign, status, legality, Save, and Submit as the main header priorities.
+- Replaced four heavy stat tiles in the sticky header with an inline quick-stat definition list for HP, initiative, speed, and passive perception.
+- Simplified collapsible section headers from large rounded panels with `Hide`/`Show` pills to quieter `surface-section` headers with a chevron affordance.
+- Added `aria-expanded` to section toggles and retained visible focus via the shared `focus-ring`.
+- Extended `test/ui-polish-conventions.test.ts` to guard the compact header and icon-based section affordance.
+- acceptance: the sheet first viewport has less chrome; save/submit state remains prominent; section scanning is faster because headers and content now carry distinct visual weight.
+
+**Slice 5.5g — Validation, DM audit, and review-state calmness** (delivered 2026-04-25)
+
+- Goal: make correctness support feel helpful rather than administrative.
+- Reworked legality badges to use icons and short repair labels (`Fix needed`, `Review`, `Clear`) so severity is not communicated by color alone.
+- Renamed the sheet issue panel to `Repair checklist` and removed raw legality keys from player-facing issue chips.
+- Made DM audit a quiet disclosure panel; detailed sources, open issues, and provenance are still available when expanded.
+- Changed provenance groups from always-open detail blocks to compact `surface-row` disclosures.
+- Converted stale-provenance content integrity from a heavy amber card to a quiet expandable `surface-section`.
+- Refined DM review panel styling onto the shared section surface while keeping approve/request-changes actions clear.
+- Improved jump-to-issue behavior by focusing the destination section after smooth scroll.
+- Extended `test/ui-polish-conventions.test.ts` to guard repair-oriented validation, quiet audit disclosure, and focusable jump targets.
+- acceptance: players see what to fix next without raw legality keys; DMs can still inspect provenance and stale references; neutral audit data no longer reads as an alert.
+
+**Slice 5.5h — Visual QA, accessibility, and closeout** (delivered 2026-04-25)
+
+- `output/batch-5-5-ui-polish-closeout.md` records the final visual QA notes for login, dashboard, guided creation, character sheet, and DM review/audit.
+- Browser and keyboard checks covered the locally reachable laptop-browser surfaces; auth-gated surfaces that could not be reached without a live session are called out explicitly instead of being hidden.
+- The closeout confirms the app now has fewer competing containers, shorter copy, clearer primary actions, visible focus treatment, and non-color-only severity communication.
+- Remaining polish debt is assigned to Batch 7, keeping Batch 6 focused on content/admin tooling rather than another broad UI refinement pass.
+
+### Suggested Order
+
+1. 5.5a: UI hierarchy inventory and polish tokens.
+2. 5.5b: UX writing and terminology simplification.
+3. 5.5c: component restraint pass.
+4. 5.5d: login and dashboard refinement.
+5. 5.5e: guided creation flow refinement.
+6. 5.5f: character sheet hierarchy and sticky header polish.
+7. 5.5g: validation, DM audit, and review-state calmness.
+8. 5.5h: visual QA, accessibility, and closeout.
+
+### Risks
+
+- Cosmetic-only changes could miss the real problem: hierarchy and cognitive load. Every slice should remove friction, not just restyle it.
+- Over-simplifying DM audit/provenance could hide review-critical detail. Keep the detail available, but make it progressively disclosed.
+- Component changes may affect many surfaces. Keep each pass small and verify the core creation/sheet paths after each slice.
+- The dark theme can become too low-contrast if muted text is pushed too far. Accessibility checks are part of the batch, not optional polish.
+
+### Exit Criteria
+
+- The app feels calmer and more intentional across login, dashboard, wizard, sheet, and DM review.
+- Primary actions and current task are obvious on each surface.
+- Repeated explanatory copy, empty alerts, neutral badges, and nested heavy cards are materially reduced.
+- Keyboard focus, contrast, and non-color state communication are improved.
+- Batch 6 can add content/admin tooling without inheriting avoidable UI noise.
+
 ## Batch 6: Content Ingestion and Admin Tooling
 
 ### Objective
 
-Make content expansion sustainable instead of relying on ad hoc patches and narrow seed scripts, and close the architectural gaps identified during Batch 5.
+Make content expansion sustainable instead of relying on ad hoc patches and narrow seed scripts, while closing the small architectural and data-shape debts that would make a larger content/admin surface brittle.
+
+### Batch 5.5 handoff
+
+The Batch 5.5 closeout on 2026-04-25 confirms content/admin work can begin on the polished UI foundation. Batch 6 should reuse the shared surface, focus, copy, and progressive-disclosure conventions from the polish pass rather than inventing new admin chrome. Any remaining broad visual polish belongs in Batch 7, not inside the Batch 6 content/admin scope.
 
 ### Why
 
 The seed pipeline currently imports only a subset of content types, and the admin UI is not yet shaped for the broader content model needed by the builder. Several structural carry-ins from Batches 3–5 have accumulated and are cheapest to close before the content surface grows further.
 
-### Batch 5 Carry-ins (priority entry tasks)
+Batch 6 should be treated as a stabilization-and-tooling batch, not as "add lots more rules content." The immediate win is to make future content changes repeatable, validated, and maintainable.
 
-These items were explicitly deferred from Batch 5 and are the first work to address in Batch 6:
+### Batch 5 Carry-ins (resolved by Slices 6a-6d)
+
+These items were explicitly deferred from Batch 5 or earlier review passes. They are not prerequisites before Slice 6a; they are the priority work that opens Batch 6. Slices 6a-6d are the planned resolution path before the batch expands into importer/admin tooling:
 
 1. **Consolidate spellcasting derivation into `derived.ts`** (from Slice 5f). Move `DerivedSpellcastingSourceSummary` and the per-source spellcasting aggregate out of `src/lib/characters/build-context.ts` into `src/lib/characters/derived.ts`. No behavior change — architectural alignment only. After this change the sheet has a single derivation seam for all mechanical values.
 
 2. **Migrate hardcoded spell-grant rules off spell-name lookups** (from Slice 3m/3n review item #5). Replace the ~33 `{ spellName, spellSource }` entries in `src/lib/characters/feature-grants.ts` with a `feature_spell_grants` content table keyed on `spell_id`. Backfill from current rules, delete the hardcoded tables once parity is verified. Minimum viable gate: ship a test-time assertion that every hardcoded entry resolves to exactly one spell row so admin renames fail loudly.
 
-3. **Finish languages/tools catalog cutover** (from Slice 3m/3n review item #6). Switch the primary key on `character_language_choices` / `character_tool_choices` from free-text columns to FK-based `language_key` / `tool_key` columns, backfill remaining nulls, drop the free-text columns, and update `load-character.ts` and persistence helpers to read/write keys only.
+3. **Finish languages/tools catalog cutover** (from Slice 3m/3n review item #6). `language_key` and `tool_key` columns already exist; Batch 6 should make them authoritative. Backfill remaining nulls, add uniqueness / not-null constraints where live data allows, update loaders and persistence helpers to read/write keys as the source of truth, and only then drop or retire the free-text `language` / `tool` columns.
 
-4. **Consolidate character-ownership checks** (from Slice 3m/3n review item #9). Replace inlined `user_id !== profile.id` comparisons across `src/app/api/characters/[id]/route.ts`, `submit/route.ts`, and peer routes (`approve`, `request-changes`, `snapshots`) with a single `assertCharacterManageableByUser` helper. Add tests covering owner / DM / unrelated-user behavior on every mutating route.
+4. **Finish character-access consolidation** (from Slice 3m/3n review item #9). `assertCharacterManageableByUser` now exists in `src/lib/auth/ownership.ts` and is already used by several peer routes. Batch 6 should finish the remaining route audit, especially `src/app/api/characters/[id]/route.ts` and `submit/route.ts`, and add focused tests for player-owner, campaign DM, admin, and unrelated-user behavior.
 
 5. **Split load-bearing modules past safe edit size** (from Slice 3m/3n review item #10). `src/lib/characters/feature-grants.ts` (~880 lines), `src/lib/characters/build-context.ts` (~1000 lines), `src/lib/legality/engine.ts` (~810 lines), and `src/components/character-sheet/CharacterSheet.tsx` should be segmented by concern. No behavior changes.
 
@@ -947,39 +1100,217 @@ These items were explicitly deferred from Batch 5 and are the first work to addr
 
 ### Scope
 
-- Import pipeline and content integrity checks
-- Admin UI CRUD for Batch 3 content types
-- Source/version handling and bulk import tools
+- Architectural cleanup that keeps Batch 5 sheet behavior unchanged.
+- Data-shape migrations needed before content import/admin tooling grows.
+- Import pipeline and content integrity checks for Batch 3 content families.
+- Admin CRUD for rules-significant content categories that are currently SQL-only or read-mostly.
+- Source/version handling, amendment metadata, preview, and validation before publishing content changes.
 
-### Tasks
+### Non-Goals
 
-- Split content import into modular importers by entity type.
-- Extend import support for the new content categories from Batch 3.
-- Add content integrity checks:
+- Broad new sourcebook ingestion before the validator exists.
+- Combat automation for rules that Batch 5 only surfaces descriptively.
+- A generic CMS abstraction. Build the minimum admin/import tooling needed for this rules model.
+- Adding `character_skill_proficiency_sources` by default. Keep the Slice 5c Path B decision unless a concrete Batch 6 audit UI needs a separate overlap-source table.
+
+### Execution Slices
+
+Each slice should fit in one Codex session and leave the repo coherent. Slices 6a–6d close carry-ins that would otherwise make import/admin work unstable. Slices 6e–6h build the content tooling. Slice 6i is the closeout gate.
+
+**Slice 6a — Spellcasting derivation seam**
+
+- Goal: move spellcasting mechanical output onto the canonical derived character shape with no behavior change.
+- Modify:
+  - `src/lib/characters/derived.ts`
+  - `src/lib/characters/build-context.ts`
+  - `src/components/character-sheet/SpellsCard.tsx`
+  - any sheet/page loader that still passes spellcasting from build context directly
+- Tests:
+  - update `test/sheet-derived-seam.test.ts` so `spellcasting` is asserted on `DerivedCharacter`
+  - keep the Slice 5l multiclass caster assertions passing
+  - add a guard that `SpellsCard` reads `derived.spellcasting` rather than `buildContext.spellcasting`
+- Acceptance:
+  - `DerivedSpellcastingSourceSummary` and the aggregate spellcasting summary are exported from `derived.ts`
+  - the sheet has one derivation seam for AC, saves, skills, features, ASI/feat history, and spellcasting
+  - no spell DC, attack modifier, prepared/known count, or granted-spell behavior changes
+
+**Slice 6b — Feature spell grants as content**
+
+- Goal: replace spell-name feature-grant lookups with content rows keyed to `spells.id`.
+- Modify/create:
+  - new migration: `feature_spell_grants` table with stable feature key, source category/entity metadata, acquisition mode, optional owning class/subclass constraints, and `spell_id uuid not null references spells(id)`
+  - `src/lib/characters/feature-grants.ts`
+  - database types in `src/lib/types/database.ts`
+  - tests around granted spells in `test/feature-grants.test.ts`
+- Suggested sequence:
+  - first add a parity test proving every current hardcoded `{ spellName, spellSource }` resolves to exactly one spell row
+  - add the table and seed/backfill rows from current hardcoded definitions
+  - switch derivation to consume rows through a small loader/normalizer
+  - remove the hardcoded spell-name table once parity and feature-grant tests pass
+- Acceptance:
+  - admin renaming or duplicate spell seeding cannot silently break feature grants
+  - domain/oath/species/feat-granted spells still render as granted, not player-selected
+  - all current feature-grant tests pass against content-backed grants
+
+**Slice 6c — Language/tool key cutover**
+
+- Goal: make language/tool catalog keys authoritative for character choices.
+- Modify:
+  - new migration to backfill remaining null `language_key` / `tool_key`, tighten constraints, and retire free-text uniqueness
+  - `src/lib/characters/load-character.ts`
+  - `src/lib/characters/choice-persistence.ts`
+  - `src/lib/characters/atomic-save.ts`
+  - `src/lib/characters/language-tool-provenance.ts`
+  - stale provenance view / detector if the retired text fields are referenced
+- Tests:
+  - add migration-text tests for not-null/unique/index behavior
+  - update `test/load-character.test.ts` and `test/atomic-save.test.ts` to assert key-first behavior
+  - keep creation and level-up language/tool persistence tests passing
+- Acceptance:
+  - new saves write catalog keys
+  - loaders derive display names from catalogs or typed rows, not from free-text primary identity
+  - existing rows are backfilled or explicitly quarantined before constraints tighten
+
+**Slice 6d — Access helper closeout and legacy spell attribution**
+
+- Goal: close small data/access carry-ins before admin write surfaces expand.
+- Modify:
+  - `src/lib/auth/ownership.ts`
+  - `src/app/api/characters/[id]/route.ts`
+  - `src/app/api/characters/[id]/submit/route.ts`
+  - `approve`, `request-changes`, `snapshots`, `stat-rolls`, and legality routes only if the audit finds gaps
+  - migration or admin repair helper for pre-Batch-4 spell selections with `owning_class_id is null`
+- Tests:
+  - route-source tests that every mutating character route uses the shared access helper or a deliberately stricter owner-only helper
+  - owner / campaign-DM / admin / unrelated-user tests for update, submit, approve/request-changes, snapshots, and stat rolls
+  - migration test documenting the chosen handling for the 14 legacy spell rows
+- Acceptance:
+  - no inlined character-management permission logic remains in mutating character routes, except submit if intentionally owner-only and covered by a named helper
+  - legacy null `owning_class_id` rows are either attributed or marked as pre-Batch-4 legacy so DM audit output is explicit
+
+**Slice 6e — Importer modularization and dry-run validator**
+
+- Goal: turn `scripts/seed-srd.ts` into a reusable import/validation harness before adding more content families.
+- Modify/create:
+  - split importer modules under `scripts/content-import/` or `src/lib/content/import/`
+  - keep `scripts/seed-srd.ts` as a thin orchestration entrypoint
+  - add a validation command that can run without mutating the database
+- Validation checks:
   - missing foreign keys
   - invalid progression arrays
-  - orphaned option groups
-  - spell list mismatches
+  - orphaned option groups / options
   - duplicate option records
-  - unresolvable spell-name references in feature-grant tables (resolved by carry-in #2 above)
-- Expand admin UI to manage:
-  - option groups
-  - feature options
-  - tools
-  - languages
-  - items
-  - armor
-  - weapons
-  - starting packages
-- Add preview and validation before publishing content changes.
-- Add bulk source import and amendment tools.
-- Add `character_skill_proficiency_sources` audit table if Batch 6 audit UI work demonstrates a need to show multi-source overlap provenance beyond what Path B's single-row model provides (deferred from Slice 5c — add only if a concrete UI need emerges).
+  - spell-list mismatches
+  - feature spell grants that do not resolve to exactly one spell row
+  - language/tool/equipment references that do not resolve to catalog keys
+- Tests:
+  - fixture-based validator tests for each failure class
+  - one happy-path fixture that covers classes, subclasses, spells, languages, tools, option groups, equipment, and starting packages
+- Acceptance:
+  - content can be validated in dry-run mode before any insert/update
+  - validator errors name the table/entity/key and suggested owner slice
+
+**Slice 6f — Admin CRUD for option groups, languages, and tools**
+
+- Goal: make non-equipment Batch 3 content maintainable without SQL.
+- Modify:
+  - `src/components/dm/ContentAdmin.tsx`
+  - `src/app/api/content/feature-option-groups/route.ts`
+  - `src/app/api/content/feature-options/route.ts`
+  - `src/app/api/content/languages/route.ts`
+  - `src/app/api/content/tools/route.ts`
+  - `src/lib/content/admin-schemas.ts`
+  - `src/lib/content/feature-option-content.ts`, `language-content.ts`, `tool-content.ts`
+- UI requirements:
+  - list, create, edit, retire/delete where safe
+  - source tag / ruleset fields
+  - validation preview before save
+  - blocked delete/retire messaging when character rows reference the content
+- Tests:
+  - API schema tests for create/update/delete validation
+  - source-code guard tests that admin panels call validation before publishing
+- Acceptance:
+  - a DM/admin can maintain feature option groups/options, languages, and tools through the admin UI
+  - invalid keys, duplicate keys, and dangling group references are blocked before write
+
+**Slice 6g — Admin CRUD for equipment and starting packages**
+
+- Goal: make item/armor/weapon/shield/starting-equipment content maintainable without SQL.
+- Modify:
+  - `src/components/dm/ContentAdmin.tsx`
+  - `src/app/api/content/equipment-items/route.ts`
+  - `src/app/api/content/armor/route.ts`
+  - `src/app/api/content/weapons/route.ts`
+  - `src/app/api/content/shields/route.ts`
+  - `src/app/api/content/starting-equipment-packages/route.ts`
+  - `src/lib/content/equipment-content.ts`
+  - `src/lib/content/admin-schemas.ts`
+- UI requirements:
+  - stable item keys and source/ruleset fields
+  - armor/shield AC fields with validation against `deriveArmorClass()`
+  - weapon damage/proficiency fields
+  - starting package preview showing resolved items and quantities
+- Tests:
+  - API/schema tests for each equipment family
+  - a fixture test proving a starting package resolves to concrete equipment rows
+  - an AC regression that still passes after editing armor/shield content shape
+- Acceptance:
+  - admin UI can maintain all Batch 3 equipment families
+  - starting packages can be previewed and validated before publish
+
+**Slice 6h — Bulk source import and amendment workflow**
+
+- Goal: support repeatable source/amendment import without hidden SQL patches.
+- Modify/create:
+  - bulk import command using the Slice 6e validator
+  - source/amendment metadata handling in content APIs
+  - admin preview surface for import diff: create/update/retire/no-op
+  - import documentation in `SETUP.md` or `docs/architecture.md`
+- Tests:
+  - fixture import with create/update/no-op rows
+  - duplicate source/key conflict test
+  - rejected import leaves no partial writes
+- Acceptance:
+  - importer can dry-run and then apply the same validated payload
+  - import output is stable enough to paste into closeout notes
+  - source amendments remain visible to campaign allowlisting and DM review
+
+**Slice 6i — Batch 6 closeout gate**
+
+- Goal: prove Batch 6 made content/admin work safer and identify the next batch cleanly.
+- Deliver:
+  - `output/batch-6-closeout-audit.md`
+  - updated `Current Status` and Batch 7 entry notes in this roadmap
+  - one representative import dry run and one representative admin maintenance walkthrough
+- Verification:
+  - `npm test -- --runInBand`
+  - content validator happy-path and failure fixtures
+  - regression matrix covering a caster with feature-granted spells, a language/tool-heavy build, and an equipment-starting-package build
+- Acceptance:
+  - all Batch 5 carry-ins are closed or explicitly deferred with owner/date/reason
+  - content families added in Batch 3 can be maintained through admin UI or importer
+  - future content additions no longer require one-off SQL for normal cases
+
+### Suggested Order
+
+1. 6a: spellcasting derivation seam.
+2. 6b: feature spell grants as content.
+3. 6c: language/tool key cutover.
+4. 6d: access helper closeout and legacy spell attribution.
+5. 6e: importer modularization and dry-run validator.
+6. 6f: admin CRUD for option groups, languages, and tools.
+7. 6g: admin CRUD for equipment and starting packages.
+8. 6h: bulk source import and amendment workflow.
+9. 6i: closeout audit.
 
 ### Risks
 
 - Weak content validation will surface as builder bugs.
 - Importing more source content before the model is ready will increase data debt.
-- The spellcasting derivation consolidation (carry-in #1) touches both `build-context.ts` and `derived.ts`; it should land as its own narrow slice rather than being bundled with content work.
+- The spellcasting derivation consolidation touches both `build-context.ts` and `derived.ts`; keep it isolated in Slice 6a.
+- The language/tool cutover changes persistence identity; do not drop free-text columns until a migration/test proves every live row has a key or an explicit quarantine path.
+- Admin CRUD can sprawl. Keep the first pass boring: validated forms, preview, create/edit/retire, and clear blocked-delete messaging.
+- Module splitting is easy to overdo. Use it only where it directly supports the current slice or removes risk from an already-touched load-bearing file.
 
 ### Exit Criteria
 
@@ -987,6 +1318,7 @@ These items were explicitly deferred from Batch 5 and are the first work to addr
 - Admin UI supports all rules-significant content categories.
 - Validation catches structural content issues early.
 - All Batch 5 carry-ins are closed.
+- Batch 7 can focus on hardening/usability rather than hidden content-data cleanup.
 
 ## Batch 7: Hardening, Tests, and Usability
 
@@ -1029,9 +1361,7 @@ A sophisticated builder that is hard to trust is not useful. The repo already ha
   - save state indicators
   - clear blocked-state explanations
 - Add `.env.example` and setup documentation.
-- Finish the languages/tools catalog cutover (carried from the Slice 3m/3n review — item #6). Switch the primary key on `character_language_choices` / `character_tool_choices` from `(character_id, language|tool)` free text to `(character_id, language_key|tool_key)`, backfill remaining NULL keys, drop the free-text columns, and update `load-character.ts` and the persistence helpers to read/write keys only.
-- Consolidate character-ownership checks behind a single helper (carried from the Slice 3m/3n review — item #9). Replace inlined `user_id !== profile.id` comparisons in `src/app/api/characters/[id]/route.ts`, `.../submit/route.ts`, and peer routes (`approve`, `request-changes`, `snapshots`) with `assertCharacterManageableByUser`, and add tests covering owner / DM / unrelated-user behavior on every mutating route.
-- Split load-bearing modules that have grown past safe edit size (carried from the Slice 3m/3n review — item #10): break `src/lib/characters/feature-grants.ts` (~880 lines) into per-source modules, carve species-trait expansion out of `src/lib/characters/build-context.ts` (~1000 lines) into a `species-traits/` directory, and consider segmenting `src/lib/legality/engine.ts` (~810 lines) and `src/components/character-sheet/CharacterSheet.tsx` by concern. No behavior changes — only structure.
+- Treat language/tool key cutover, character-access consolidation, feature-grant content migration, and module splitting as Batch 6 prerequisites. Batch 7 should only revisit them if the Batch 6 closeout audit explicitly defers a residual with rationale.
 
 ### Exit Criteria
 

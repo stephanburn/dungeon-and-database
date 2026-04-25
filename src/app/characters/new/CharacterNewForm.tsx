@@ -12,7 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { useToast } from '@/hooks/use-toast'
 import type {
@@ -1974,7 +1974,7 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
 
     const validationError = validateCurrentStep()
     if (validationError) {
-      toast({ title: 'Cannot continue', description: validationError, variant: 'destructive' })
+      toast({ title: 'Next choice needed', description: validationError })
       return
     }
 
@@ -2021,7 +2021,6 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
     toast({
       title: 'Step locked',
       description: 'Finish the current required steps before jumping ahead.',
-      variant: 'destructive',
     })
   }
 
@@ -2048,6 +2047,8 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
     }
   }
 
+  const currentStepGuidance = validateCurrentStep()
+
   return (
     <div className="page-shell">
       <div className="mx-auto max-w-5xl space-y-6">
@@ -2064,7 +2065,7 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
               <div>
                 <CardTitle className="text-2xl text-neutral-50">Guided Character Creation</CardTitle>
                 <p className="mt-2 max-w-2xl text-sm leading-6 text-neutral-400">
-                  Build the mechanical core here, then continue into the full character sheet for advanced edits and review.
+                  Make the main choices now, then finish details on the character sheet.
                 </p>
               </div>
               <p className="text-sm text-neutral-500">
@@ -2072,41 +2073,65 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
               </p>
             </div>
 
-            <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-10">
+            <ol aria-label="Creation progress" className="flex flex-wrap gap-2">
               {STEPS.map((step, index) => {
                 const locked = index > maxReachableStepIndex
+                const done = index < completedSteps.length
+                const stepStateLabel = index === stepIndex
+                  ? 'Current'
+                  : done
+                    ? 'Done'
+                    : locked
+                      ? 'Locked'
+                      : 'Available'
                 return (
-                <button
-                  type="button"
-                  key={step.id}
-                  disabled={locked || working}
-                  onClick={() => goToStep(step.id)}
-                  className={`rounded-xl border px-3 py-2 text-left text-xs transition ${
-                    index === stepIndex
-                      ? 'border-blue-400/30 bg-blue-400/10 text-blue-50'
-                      : index < stepIndex
-                        ? 'border-emerald-400/20 bg-emerald-400/10 text-emerald-100'
-                        : locked
-                          ? 'border-white/10 bg-white/[0.01] text-neutral-600'
-                          : 'border-white/10 bg-white/[0.02] text-neutral-500 hover:border-white/20 hover:text-neutral-300'
-                  } disabled:cursor-not-allowed`}
-                >
-                  {step.label}
-                </button>
+                  <li key={step.id}>
+                    <button
+                      type="button"
+                      disabled={locked || working}
+                      onClick={() => goToStep(step.id)}
+                      aria-current={index === stepIndex ? 'step' : undefined}
+                      aria-label={`${step.label}: ${stepStateLabel}`}
+                      className={`focus-ring group inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs transition ${
+                        index === stepIndex
+                          ? 'border-blue-400/30 bg-blue-400/10 text-blue-50'
+                          : done
+                            ? 'border-emerald-400/20 bg-transparent text-emerald-100'
+                            : locked
+                              ? 'border-white/10 bg-transparent text-neutral-600'
+                              : 'border-white/10 bg-transparent text-neutral-500 hover:border-white/20 hover:text-neutral-300'
+                      } disabled:cursor-not-allowed`}
+                    >
+                      <span className={`flex h-5 w-5 items-center justify-center rounded-full border text-[11px] ${
+                        index === stepIndex
+                          ? 'border-blue-300 bg-blue-300 text-neutral-950'
+                          : done
+                            ? 'border-emerald-300/50 text-emerald-100'
+                            : locked
+                              ? 'border-white/10 text-neutral-600'
+                              : 'border-white/15 text-neutral-500'
+                      }`}>
+                        {done ? '✓' : locked ? '–' : index + 1}
+                      </span>
+                      <span>{step.label}</span>
+                      <span className="sr-only">{stepStateLabel}</span>
+                    </button>
+                  </li>
               )})}
-            </div>
+            </ol>
           </CardHeader>
           <CardContent className="space-y-6">
             {currentStep.id === 'identity' && (
               <WizardStepFrame
                 title="Character identity"
-                description="Choose the campaign context first, then set the basic identity fields the rest of the builder will inherit."
-                summaryTitle="Change summary"
+                description="Choose a campaign and name the character."
+                guidance={currentStepGuidance}
+                summaryTitle="Current picks"
                 summaryItems={identityStepSummaryItems}
               >
                 <GuidedChooseOne
                   title="Campaign"
-                  description="This drives allowlisted content, ruleset validation, and campaign defaults."
+                  description="This sets the available sources and campaign defaults."
                   options={campaignChoiceOptions}
                   selectedId={campaignId || null}
                   onChange={(value) => setCampaignId(value ?? '')}
@@ -2141,8 +2166,9 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
             {currentStep.id === 'species' && (
               <WizardStepFrame
                 title="Choose a species"
-                description="Species-owned choices live here now: flexible ability bonuses, flexible languages/tools, ancestry-style options, and any species-granted feat slot."
-                summaryTitle="Change summary"
+                description="Pick ancestry traits, flexible bonuses, languages, tools, and any species feat."
+                guidance={currentStepGuidance}
+                summaryTitle="Current picks"
                 summaryItems={speciesStepSummaryItems}
               >
                 <GuidedChooseOne
@@ -2229,8 +2255,9 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
             {currentStep.id === 'background' && (
               <WizardStepFrame
                 title="Choose a background"
-                description="Background-owned skills, languages, and fixed feat grants are now handled here so the whole background package persists together."
-                summaryTitle="Change summary"
+                description="Pick the training, languages, tools, and feat that come from the character's past."
+                guidance={currentStepGuidance}
+                summaryTitle="Current picks"
                 summaryItems={backgroundStepSummaryItems}
               >
                 <GuidedChooseOne
@@ -2265,7 +2292,7 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
                 {backgroundFeat && (
                   <Alert className="border-blue-400/20 bg-blue-400/10">
                     <AlertDescription className="text-blue-50">
-                      This background grants the feat <span className="font-medium">{backgroundFeat.name}</span>. It will flow into derived state automatically when the background is saved.
+                      This background grants <span className="font-medium">{backgroundFeat.name}</span>.
                     </AlertDescription>
                   </Alert>
                 )}
@@ -2276,7 +2303,8 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
               <WizardStepFrame
                 title="Choose a class"
                 description="Creation is single-class and starts at level 1. Multiclassing will be handled later in the level-up flow."
-                summaryTitle="Change summary"
+                guidance={currentStepGuidance}
+                summaryTitle="Current picks"
                 summaryItems={classStepSummaryItems}
               >
                 <GuidedChooseOne
@@ -2312,7 +2340,8 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
               <WizardStepFrame
                 title="Choose a subclass"
                 description="This step handles level-gated class identities like Cleric domains, Sorcerous Origins, and Warlock patrons once the class unlocks them."
-                summaryTitle="Change summary"
+                guidance={currentStepGuidance}
+                summaryTitle="Current picks"
                 summaryItems={subclassStepSummaryItems}
               >
                 {levels.map((level, index) => {
@@ -2364,8 +2393,9 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
             {currentStep.id === 'stats' && (
               <WizardStepFrame
                 title="Generate ability scores"
-                description="Choose a generation method here. Point buy, standard array, and rolled scores all persist through the normal draft save path now."
-                summaryTitle="Change summary"
+                description="Choose how to set the character's base ability scores."
+                guidance={currentStepGuidance}
+                summaryTitle="Current picks"
                 summaryItems={statsStepSummaryItems}
               >
                 <GuidedChooseOne
@@ -2468,8 +2498,9 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
             {currentStep.id === 'skills' && (
               <WizardStepFrame
                 title="Class training and level-1 picks"
-                description="Handle the class-owned proficiencies and subclass-granted language or expertise picks here. These choices now persist with provenance instead of hiding in the raw sheet."
-                summaryTitle="Change summary"
+                description="Choose class skills, tools, languages, and any level-1 expertise picks."
+                guidance={currentStepGuidance}
+                summaryTitle="Current picks"
                 summaryItems={skillsStepSummaryItems}
               >
                 <GuidedChooseMany
@@ -2544,18 +2575,28 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
             )}
 
             {currentStep.id === 'equipment' && (
-              <StartingEquipmentCard
-                packages={activeStartingEquipmentPackages}
-                equipmentItems={equipmentItems}
-                weapons={weaponCatalog}
-                selections={startingEquipmentSelections}
-                canEdit
-                onChange={setStartingEquipmentSelections}
-              />
+              <WizardStepFrame
+                title="Choose starting equipment"
+                description="Pick the class and background gear this character starts with."
+                guidance={currentStepGuidance}
+              >
+                <StartingEquipmentCard
+                  packages={activeStartingEquipmentPackages}
+                  equipmentItems={equipmentItems}
+                  weapons={weaponCatalog}
+                  selections={startingEquipmentSelections}
+                  canEdit
+                  onChange={setStartingEquipmentSelections}
+                />
+              </WizardStepFrame>
             )}
 
             {currentStep.id === 'spells-feats' && (
-              <div className="space-y-4">
+              <WizardStepFrame
+                title="Choose spells and feats"
+                description="Resolve any level-1 spell, feat, and ASI choices before review."
+                guidance={currentStepGuidance}
+              >
                 {selectedClass?.spellcasting_type && selectedClass.spellcasting_type !== 'none' && (
                   <SpellsCard
                     classId={firstClassId}
@@ -2609,14 +2650,15 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
                   onChange={setFeatSpellChoices}
                   onOptionsLoaded={setFeatSpellOptions}
                 />
-              </div>
+              </WizardStepFrame>
             )}
 
             {currentStep.id === 'review' && (
               <WizardStepFrame
-                title="Review the derived character"
-                description="This final step reads the shared derived character state and groups any remaining legality issues by the step that owns them. You can leave and resume later without losing completed steps."
-                summaryTitle="Derived Snapshot"
+                title="Review character"
+                description="Check the character, fix any remaining issues, then open the sheet."
+                guidance={currentStepGuidance}
+                summaryTitle="Character snapshot"
                 summaryItems={reviewSummaryItems}
               >
                 <div className="grid gap-4 sm:grid-cols-2">
@@ -2712,7 +2754,7 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
                       <div>
                         <p className="text-sm font-medium text-neutral-100">Review your build</p>
                         <p className="mt-1 text-sm text-neutral-400">
-                          Every issue below is grouped by the step that owns it, so you can jump straight back to the right place.
+                          Jump straight back to the step that needs attention.
                         </p>
                       </div>
                       <LegalitySummaryBadge
@@ -2803,22 +2845,21 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
               </WizardStepFrame>
             )}
           </CardContent>
+          <CardFooter className="flex items-center justify-between border-t border-white/10 px-6 py-4">
+            <Button type="button" variant="ghost" onClick={goBack} disabled={stepIndex === 0 || working}>
+              Back
+            </Button>
+            {currentStep.id === 'review' ? (
+              <Button type="button" onClick={finishWizard} disabled={working}>
+                {working ? 'Saving…' : 'Open sheet'}
+              </Button>
+            ) : (
+              <Button type="button" onClick={goNext} disabled={working}>
+                {working ? 'Saving…' : 'Continue'}
+              </Button>
+            )}
+          </CardFooter>
         </Card>
-
-        <div className="flex items-center justify-between">
-          <Button type="button" variant="ghost" onClick={goBack} disabled={stepIndex === 0 || working}>
-            Back
-          </Button>
-          {currentStep.id === 'review' ? (
-            <Button type="button" onClick={finishWizard} disabled={working}>
-              {working ? 'Saving…' : 'Open full character sheet'}
-            </Button>
-          ) : (
-            <Button type="button" onClick={goNext} disabled={working}>
-              {working ? 'Saving…' : 'Continue'}
-            </Button>
-          )}
-        </div>
       </div>
     </div>
   )

@@ -1,4 +1,3 @@
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import type { StaleProvenanceRow } from '@/lib/types/database'
 import { choiceTableLabel, sourceCategoryLabel } from '@/lib/characters/stale-provenance'
 
@@ -18,14 +17,12 @@ export function StaleProvenancePanel({ entries }: StaleProvenancePanelProps) {
   }
 
   return (
-    <Card className="bg-neutral-900 border-amber-700">
-      <CardHeader>
-        <CardTitle className="text-amber-300 text-sm">
-          Content Integrity — {entries.length} stale {entries.length === 1 ? 'reference' : 'references'}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <p className="text-neutral-400 text-xs">
+    <details className="surface-section px-4 py-3">
+      <summary className="cursor-pointer list-none text-sm font-medium text-amber-100 marker:hidden">
+        Content Integrity: {entries.length} stale {entries.length === 1 ? 'reference' : 'references'}
+      </summary>
+      <div className="mt-4 space-y-4">
+        <p className="text-xs leading-5 text-neutral-400">
           These character rows reference content that no longer exists. The build may display
           incorrectly until the underlying content is restored or the choices are re-made.
         </p>
@@ -52,7 +49,7 @@ export function StaleProvenancePanel({ entries }: StaleProvenancePanelProps) {
             </ul>
           </div>
         ))}
-      </CardContent>
-    </Card>
+      </div>
+    </details>
   )
 }

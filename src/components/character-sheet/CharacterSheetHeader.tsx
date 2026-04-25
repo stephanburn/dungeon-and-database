@@ -43,16 +43,23 @@ export function CharacterSheetHeader({
   onSave,
   onSubmit,
 }: CharacterSheetHeaderProps) {
+  const sheetStatSummary = [
+    { label: 'HP', value: hpMax },
+    { label: 'Init', value: initiative },
+    { label: 'Speed', value: speed },
+    { label: 'Passive', value: passivePerception },
+  ]
+
   return (
-    <div className="sticky top-4 z-20 rounded-3xl border border-white/10 bg-neutral-950/88 backdrop-blur-xl">
-      <div className="flex flex-col gap-5 p-5">
-        <div className="flex items-start justify-between gap-4 flex-wrap">
-          <div>
-            <p className="text-xs font-medium uppercase tracking-[0.14em] text-neutral-500">Character Sheet</p>
-            <h1 className="mt-2 text-3xl font-semibold text-neutral-50">{name || 'Unnamed Character'}</h1>
+    <div className="surface-primary sticky top-4 z-20 bg-neutral-950/88 backdrop-blur-xl">
+      <div className="flex flex-col gap-4 p-4">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0">
+            <p className="text-metadata">Character Sheet</p>
+            <h1 className="mt-1 truncate text-2xl font-semibold text-neutral-50">{name || 'Unnamed Character'}</h1>
             <p className="mt-1 text-sm text-neutral-400">Level {totalLevel} in {campaignId}</p>
           </div>
-          <div className="flex items-center gap-2.5 flex-wrap">
+          <div className="flex flex-wrap items-center gap-2.5">
             <Badge className={`${statusClassName} border-0 text-sm`}>{statusLabel}</Badge>
             {legalityPassed !== null && (
               <LegalitySummaryBadge passed={legalityPassed} errorCount={legalityErrorCount} />
@@ -69,30 +76,20 @@ export function CharacterSheetHeader({
                 disabled={submitting}
                 className="border-blue-400/20 bg-blue-400/10 text-blue-50 hover:bg-blue-400/15"
               >
-                {submitting ? 'Submitting…' : 'Submit for review'}
+                {submitting ? 'Submitting…' : 'Submit'}
               </Button>
             )}
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-3.5">
-            <p className="text-[11px] uppercase tracking-[0.12em] text-neutral-500">HP</p>
-            <p className="mt-2 text-xl font-semibold text-neutral-100">{hpMax}</p>
-          </div>
-          <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-3.5">
-            <p className="text-[11px] uppercase tracking-[0.12em] text-neutral-500">Initiative</p>
-            <p className="mt-2 text-xl font-semibold text-neutral-100">{initiative}</p>
-          </div>
-          <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-3.5">
-            <p className="text-[11px] uppercase tracking-[0.12em] text-neutral-500">Speed</p>
-            <p className="mt-2 text-xl font-semibold text-neutral-100">{speed}</p>
-          </div>
-          <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-3.5">
-            <p className="text-[11px] uppercase tracking-[0.12em] text-neutral-500">Passive Perception</p>
-            <p className="mt-2 text-xl font-semibold text-neutral-100">{passivePerception}</p>
-          </div>
-        </div>
+        <dl aria-label="Character quick stats" className="flex flex-wrap gap-x-4 gap-y-1 border-t border-white/8 pt-3 text-sm">
+          {sheetStatSummary.map((item) => (
+            <div key={item.label} className="inline-flex items-baseline gap-1.5">
+              <dt className="text-neutral-500">{item.label}</dt>
+              <dd className="font-medium text-neutral-100">{item.value}</dd>
+            </div>
+          ))}
+        </dl>
       </div>
     </div>
   )

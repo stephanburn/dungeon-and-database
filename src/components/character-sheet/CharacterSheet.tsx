@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
+import { ChevronDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -202,7 +203,7 @@ function CollapsibleSection({
   return (
     <section
       id={id}
-      className={`rounded-3xl border transition-all ${
+      className={`surface-section transition-all ${
         highlighted
           ? 'border-blue-400/30 ring-2 ring-blue-400/20'
           : 'border-white/10'
@@ -211,13 +212,17 @@ function CollapsibleSection({
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
-        className="flex w-full items-center justify-between gap-4 rounded-3xl bg-white/[0.03] px-6 py-5 text-left"
+        aria-expanded={open}
+        className="focus-ring flex w-full items-center justify-between gap-4 rounded-xl px-4 py-4 text-left"
       >
         <div>
-          <h2 className="text-xl font-semibold text-neutral-100">{title}</h2>
+          <h2 className="text-lg font-semibold text-neutral-100">{title}</h2>
           {subtitle && <p className="mt-1 text-sm leading-6 text-neutral-400">{subtitle}</p>}
         </div>
-        <span className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-sm text-neutral-400">{open ? 'Hide' : 'Show'}</span>
+        <ChevronDown
+          aria-hidden="true"
+          className={`h-4 w-4 shrink-0 text-neutral-500 transition-transform ${open ? 'rotate-180' : ''}`}
+        />
       </button>
       {open && <div className="space-y-4 border-t border-white/8 bg-neutral-950/40 p-4 sm:p-5">{children}</div>}
     </section>
@@ -484,13 +489,13 @@ function DmAuditPanel({
   const failedChecks = checks.filter((check) => !check.passed)
 
   return (
-    <div className="panel-subtle border-blue-400/20 bg-blue-400/[0.04]">
-      <CardHeader>
+    <details className="surface-section px-4 py-3">
+      <summary className="cursor-pointer list-none marker:hidden">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <CardTitle className="text-neutral-100">DM Audit</CardTitle>
+            <p className="text-sm font-medium text-neutral-100">DM Audit</p>
             <p className="mt-1 text-sm text-neutral-400">
-              Sources, legality, and persisted choice provenance for review.
+              Sources, legality, and choice history for review.
             </p>
           </div>
           <span className={`rounded-full border px-3 py-1 text-xs ${
@@ -500,9 +505,12 @@ function DmAuditPanel({
                 ? 'border-amber-300/20 bg-amber-300/10 text-amber-100'
                 : 'border-emerald-300/20 bg-emerald-300/10 text-emerald-100'
           }`}>
-            {failedChecks.length === 0 ? 'No active legality issues' : `${failedChecks.length} issue${failedChecks.length === 1 ? '' : 's'}`}
+            {failedChecks.length === 0 ? 'No active issues' : `${failedChecks.length} to review`}
           </span>
         </div>
+      </summary>
+      <CardHeader>
+        <CardTitle className="text-sm text-neutral-100">Review detail</CardTitle>
       </CardHeader>
       <CardContent className="space-y-5">
         <div>
@@ -559,7 +567,6 @@ function DmAuditPanel({
                     }`}>
                       {check.severity}
                     </span>
-                    <span className="font-mono text-[11px] text-neutral-500">{check.key}</span>
                   </div>
                   <p className="mt-2 text-sm leading-6 text-neutral-300">{check.message}</p>
                 </button>
@@ -572,7 +579,7 @@ function DmAuditPanel({
           <p className="text-xs font-semibold uppercase tracking-[0.12em] text-neutral-500">Provenance Tree</p>
           <div className="mt-2 space-y-2">
             {groups.map((group) => (
-              <details key={group.id} className="rounded-lg border border-white/10 bg-white/[0.02] p-3" open={group.entries.length > 0}>
+              <details className="surface-row px-3 py-2.5" key={group.id}>
                 <summary className="cursor-pointer text-sm font-medium text-neutral-100">
                   {group.label} ({group.entries.length})
                 </summary>
@@ -599,7 +606,7 @@ function DmAuditPanel({
           </div>
         </div>
       </CardContent>
-    </div>
+    </details>
   )
 }
 
@@ -1790,6 +1797,8 @@ export function CharacterSheet({
     if (!element) return
 
     element.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    element.setAttribute('tabindex', '-1')
+    element.focus({ preventScroll: true })
     setHighlightedSection(sectionId)
 
     if (highlightTimerRef.current) {
@@ -1837,7 +1846,7 @@ export function CharacterSheet({
       {legalityResult && ((derivedCharacter?.blockingIssues.length ?? 0) > 0 || (derivedCharacter?.warnings.length ?? 0) > 0) && (
         <Card className="border-rose-500/20 bg-rose-500/10">
           <CardHeader className="pb-2">
-          <CardTitle className="text-sm text-rose-100">What needs attention</CardTitle>
+          <CardTitle className="text-sm text-rose-100">Repair checklist</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
           {[...(derivedCharacter?.blockingIssues ?? []), ...(derivedCharacter?.warnings ?? [])].map((issue) => {

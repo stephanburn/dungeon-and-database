@@ -6,7 +6,6 @@ import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 
 type Mode = 'magic' | 'password'
@@ -63,30 +62,30 @@ export default function LoginPage() {
 
   return (
     <div className="page-shell flex items-center justify-center">
-      <Card className="w-full max-w-md border-white/10 bg-white/[0.04]">
-        <CardHeader className="space-y-2">
-          <CardTitle className="text-[2rem] text-neutral-50">Dungeon &amp; Database</CardTitle>
-          <CardDescription className="max-w-sm text-sm leading-6 text-neutral-400">
+      <section className="surface-primary w-full max-w-sm px-6 py-7">
+        <div className="space-y-2">
+          <h1 className="text-2xl font-semibold tracking-normal text-neutral-50">Dungeon &amp; Database</h1>
+          <p className="max-w-sm text-sm leading-6 text-neutral-400">
             {mode === 'magic'
               ? 'Sign in with a one-time link sent to your email.'
               : 'Sign in with your email and password.'}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-5">
+          </p>
+        </div>
+        <div className="mt-6 space-y-5">
           {state === 'sent' && (
-            <Alert>
-              <AlertDescription className="text-neutral-200">
+            <div role="status" aria-live="polite" className="surface-section px-4 py-3">
+              <p className="text-sm leading-6 text-neutral-200">
                 Magic link sent to <strong>{email}</strong>. Check your inbox to continue.
-              </AlertDescription>
-            </Alert>
+              </p>
+            </div>
           )}
 
           {state === 'reset-sent' && (
-            <Alert>
-              <AlertDescription className="text-neutral-200">
+            <div role="status" aria-live="polite" className="surface-section px-4 py-3">
+              <p className="text-sm leading-6 text-neutral-200">
                 Password reset email sent to <strong>{email}</strong>.
-              </AlertDescription>
-            </Alert>
+              </p>
+            </div>
           )}
 
           {state !== 'sent' && state !== 'reset-sent' && mode === 'magic' && (
@@ -108,14 +107,15 @@ export default function LoginPage() {
               <Button type="submit" size="lg" className="w-full" disabled={state === 'loading'}>
                 {state === 'loading' ? 'Sending…' : 'Send magic link'}
               </Button>
-              <button
+              <Button
                 type="button"
+                variant="ghost"
                 onClick={() => switchMode('password')}
                 disabled={state === 'loading'}
-                className="w-full text-sm text-neutral-500 transition-colors hover:text-neutral-200"
+                className="w-full text-neutral-400"
               >
-                Use password instead
-              </button>
+                Use password
+              </Button>
             </form>
           )}
 
@@ -149,26 +149,30 @@ export default function LoginPage() {
               <Button type="submit" size="lg" className="w-full" disabled={state === 'loading'}>
                 {state === 'loading' ? 'Signing in…' : 'Sign in'}
               </Button>
-              <button
-                type="button"
-                onClick={handleForgotPassword}
-                disabled={state === 'loading'}
-                className="w-full text-sm text-neutral-500 transition-colors hover:text-neutral-200"
-              >
-                Reset or set password
-              </button>
-              <button
-                type="button"
-                onClick={() => switchMode('magic')}
-                disabled={state === 'loading'}
-                className="w-full text-sm text-neutral-500 transition-colors hover:text-neutral-200"
-              >
-                Use magic link instead
-              </button>
+              <div className="grid gap-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={handleForgotPassword}
+                  disabled={state === 'loading'}
+                  className="w-full text-neutral-400"
+                >
+                  Reset password
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => switchMode('magic')}
+                  disabled={state === 'loading'}
+                  className="w-full text-neutral-400"
+                >
+                  Use magic link
+                </Button>
+              </div>
             </form>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </section>
     </div>
   )
 }

@@ -76,7 +76,27 @@ body {
     @apply text-sm text-neutral-500;
   }
 
+  .text-metadata {
+    @apply text-xs font-medium uppercase tracking-[0.12em] text-neutral-500;
+  }
+
+  .surface-primary {
+    @apply rounded-xl border border-white/10 bg-white/[0.04] shadow-[0_0_0_1px_rgba(255,255,255,0.01)];
+  }
+
+  .surface-section {
+    @apply rounded-xl border border-white/10 bg-white/[0.03];
+  }
+
+  .surface-row {
+    @apply rounded-lg border border-white/10 bg-white/[0.02];
+  }
+
   .panel-subtle {
-    @apply rounded-2xl border border-white/10 bg-white/[0.03];
+    @apply surface-section;
+  }
+
+  .focus-ring {
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300/35 focus-visible:ring-offset-2 focus-visible:ring-offset-neutral-950;
   }
 }
