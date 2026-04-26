@@ -347,6 +347,11 @@ test('Slice E4 expected: House Agent background seeded under ERftLW', () => {
     /tool-or-language choice/i,
     'House Agent should document the ERftLW mixed tool-or-language choice'
   )
+  assert.match(
+    e4MigrationSql,
+    /'House Agent',\s*ARRAY\['Investigation',\s*'Persuasion'\],\s*0,\s*ARRAY\[\]::text\[\],\s*ARRAY\[\]::text\[\],\s*ARRAY\[\]::text\[\]/i,
+    'House Agent mixed tool-or-language choice must not be stored as a fixed tool proficiency'
+  )
 })
 
 test('Slice E4 expected: Revenant Blade feat seeded under ERftLW', () => {

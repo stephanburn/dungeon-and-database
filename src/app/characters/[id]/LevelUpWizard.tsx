@@ -65,6 +65,7 @@ import {
   getMaverickArcaneBreakthroughOptionDefinitions,
   getSelectedMaverickBreakthroughClassIds,
   getSubclassFeatureOptionDefinitions,
+  filterFeatureOptionChoicesByActiveDefinitions,
   mergeFeatureOptionChoiceInputs,
 } from '@/lib/characters/feature-grants'
 import type { FeatureOptionChoiceInput } from '@/lib/characters/choice-persistence'
@@ -680,13 +681,11 @@ export function LevelUpWizard({
   }, [initialSubclassFeatureOptionKeys, subclassFeatureOptionDefinitions])
 
   useEffect(() => {
-    const activeKeys = new Set(
-      artificerInfusionDefinitions.map((definition) => `${definition.optionGroupKey}:${definition.optionKey}`)
-    )
-    setFeatureOptionChoices((prev) => prev.filter((choice) => (
-      choice.option_group_key !== ARTIFICER_INFUSION_GROUP_KEY
-      || activeKeys.has(`${choice.option_group_key}:${choice.option_key}`)
-    )))
+    setFeatureOptionChoices((prev) => filterFeatureOptionChoicesByActiveDefinitions({
+      choices: prev,
+      optionGroupKey: ARTIFICER_INFUSION_GROUP_KEY,
+      definitions: artificerInfusionDefinitions,
+    }))
   }, [artificerInfusionDefinitions])
 
   const canonicalFeatureOptionChoices = useMemo(

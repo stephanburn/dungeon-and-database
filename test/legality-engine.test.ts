@@ -7,6 +7,8 @@ import { buildTypedLanguageChoices, buildTypedToolChoices } from '@/lib/characte
 import { buildTypedAbilityBonusChoices } from '@/lib/characters/species-ability-bonus-provenance'
 import { buildTypedSkillProficiencies } from '@/lib/characters/skill-provenance'
 import { runLegalityChecks, shouldBlockCharacterSubmit } from '@/lib/legality/engine'
+import { ARTIFICER_INFUSION_GROUP_KEY } from '@/lib/characters/infusions'
+import { FEATURE_OPTION_VALUE_KEY } from '@/lib/characters/feature-grants'
 
 function createContext(overrides: Partial<CharacterBuildContext> = {}): CharacterBuildContext {
   return {
@@ -2038,6 +2040,75 @@ test('subclass bonus spells stay legal and do not consume artificer preparation 
 
   assert.equal(result.checks.find((check) => check.key === 'spell_legality')?.passed, true)
   assert.equal(result.checks.find((check) => check.key === 'spell_selection_count')?.passed, true)
+})
+
+test('legality blocks unknown artificer infusion selected keys', () => {
+  const infusionChoice = (optionKey: string, selectedKey: string, order: number) => ({
+    id: `choice-${optionKey}`,
+    character_id: 'character',
+    character_level_id: null,
+    option_group_key: ARTIFICER_INFUSION_GROUP_KEY,
+    option_key: optionKey,
+    selected_value: { [FEATURE_OPTION_VALUE_KEY]: selectedKey },
+    choice_order: order,
+    source_category: 'class_feature',
+    source_entity_id: 'artificer',
+    source_feature_key: 'class_feature:artificer:infuse_item',
+    created_at: '',
+  })
+  const context = createContext({
+    baseStats: { str: 10, dex: 14, con: 13, int: 18, wis: 10, cha: 8 },
+    allowedSources: ['ERftLW'],
+    allSourceRuleSets: { SRD: '2014', ERftLW: '2014' },
+    speciesSource: 'ERftLW',
+    classes: [{
+      classId: 'artificer',
+      name: 'Artificer',
+      level: 2,
+      hitDie: 8,
+      hpRoll: null,
+      source: 'ERftLW',
+      spellcastingType: 'half',
+      spellcastingProgression: {
+        mode: 'prepared',
+        spellcasting_ability: 'int',
+        cantrips_known_by_level: [2, 2],
+        prepared_formula: 'half_level_down',
+        prepared_add_ability_mod: true,
+        prepared_min: 1,
+      },
+      subclassChoiceLevel: 3,
+      multiclassPrereqs: [{ ability: 'int', min: 13 }],
+      skillChoices: { count: 2, from: ['arcana', 'history'] },
+      savingThrowProficiencies: ['con', 'int'],
+      armorProficiencies: [],
+      weaponProficiencies: [],
+      toolProficiencies: [],
+      subclass: null,
+      progression: [
+        { level: 1, asiAvailable: false, proficiencyBonus: 2, featureNames: ['Magical Tinkering'] },
+        { level: 2, asiAvailable: false, proficiencyBonus: 2, featureNames: ['Infuse Item'] },
+      ],
+      spellSlots: [2],
+    }],
+    sourceCollections: { classSources: ['ERftLW'], subclassSources: [], spellSources: [], featSources: [] },
+    selectedFeatureOptions: [
+      infusionChoice('artificer:infusion_1', 'enhanced_defense', 0),
+      infusionChoice('artificer:infusion_2', 'enhanced_weapon', 1),
+      infusionChoice('artificer:infusion_3', 'homunculus_servant', 2),
+      infusionChoice('artificer:infusion_4', 'not_a_real_infusion', 3),
+    ],
+    featureOptions: [
+      { group_key: ARTIFICER_INFUSION_GROUP_KEY, key: 'enhanced_defense', name: 'Enhanced Defense', description: '', prerequisites: { minimum_class_level: 2 }, effects: {} },
+      { group_key: ARTIFICER_INFUSION_GROUP_KEY, key: 'enhanced_weapon', name: 'Enhanced Weapon', description: '', prerequisites: { minimum_class_level: 2 }, effects: {} },
+      { group_key: ARTIFICER_INFUSION_GROUP_KEY, key: 'homunculus_servant', name: 'Homunculus Servant', description: '', prerequisites: { minimum_class_level: 2 }, effects: {} },
+    ],
+  })
+
+  const check = runLegalityChecks(context).checks.find((entry) => entry.key === 'artificer_infusion_selections')
+
+  assert.equal(check?.passed, false)
+  assert.match(check?.message ?? '', /not_a_real_infusion/)
 })
 
 test('deriveCharacter exposes per-source spellcasting summaries for multiclass casters', () => {

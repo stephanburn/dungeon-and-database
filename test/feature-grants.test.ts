@@ -10,6 +10,7 @@ import {
   getMaverickFeatureSpellChoiceDefinitions,
   getSubclassFeatureOptionDefinitions,
   getSelectedMaverickBreakthroughClassIds,
+  filterFeatureOptionChoicesByActiveDefinitions,
   mergeFeatureOptionChoiceInputs,
 } from '@/lib/characters/feature-grants'
 
@@ -240,6 +241,68 @@ test('mergeFeatureOptionChoiceInputs preserves unrelated feature options while r
       selected_value: { feature_option_key: 'dueling' },
     },
   ])
+})
+
+test('filterFeatureOptionChoicesByActiveDefinitions preserves scoped choices while definitions are unavailable', () => {
+  const choices = [
+    {
+      option_group_key: 'artificer:infusion:2014',
+      option_key: 'artificer:infusion_1',
+      selected_value: { feature_option_key: 'enhanced_defense' },
+      choice_order: 0,
+    },
+    {
+      option_group_key: 'fighting_style:fighter:2014',
+      option_key: 'style',
+      selected_value: { feature_option_key: 'defense' },
+      choice_order: 0,
+    },
+  ]
+
+  assert.deepEqual(
+    filterFeatureOptionChoicesByActiveDefinitions({
+      choices,
+      optionGroupKey: 'artificer:infusion:2014',
+      definitions: [],
+    }),
+    choices
+  )
+})
+
+test('filterFeatureOptionChoicesByActiveDefinitions removes stale scoped choices once definitions are loaded', () => {
+  const choices = [
+    {
+      option_group_key: 'artificer:infusion:2014',
+      option_key: 'artificer:infusion_1',
+      selected_value: { feature_option_key: 'enhanced_defense' },
+      choice_order: 0,
+    },
+    {
+      option_group_key: 'artificer:infusion:2014',
+      option_key: 'artificer:infusion_5',
+      selected_value: { feature_option_key: 'enhanced_weapon' },
+      choice_order: 4,
+    },
+  ]
+
+  assert.deepEqual(
+    filterFeatureOptionChoicesByActiveDefinitions({
+      choices,
+      optionGroupKey: 'artificer:infusion:2014',
+      definitions: [{
+        optionGroupKey: 'artificer:infusion:2014',
+        optionKey: 'artificer:infusion_1',
+        label: 'Artificer Infusion 1',
+        valueKey: 'feature_option_key',
+        choiceOrder: 0,
+        choices: [{ value: 'enhanced_defense', label: 'Enhanced Defense' }],
+        sourceCategory: 'class_feature',
+        sourceEntityId: 'artificer',
+        sourceFeatureKey: 'class_feature:artificer:infuse_item',
+      }],
+    }),
+    [choices[0]]
+  )
 })
 
 test('getFeatureOptionChoiceValue prefers the latest row for a replaced slot', () => {

@@ -65,6 +65,7 @@ import {
   getSpeciesFeatureOptionDefinitions,
   getSpeciesFeatureSpellChoiceDefinitions,
   getSelectedMaverickBreakthroughClassIds,
+  filterFeatureOptionChoicesByActiveDefinitions,
   isInteractiveFeatureSpellSourceFeatureKey,
   MAVERICK_ARCANE_BREAKTHROUGH_GROUP_KEY,
 } from '@/lib/characters/feature-grants'
@@ -1223,13 +1224,11 @@ export function CharacterSheet({
   }, [initialSubclassFeatureOptionKeys, subclassFeatureOptionDefinitions])
 
   useEffect(() => {
-    const activeKeys = new Set(
-      artificerInfusionDefinitions.map((definition) => `${definition.optionGroupKey}:${definition.optionKey}`)
-    )
-    setFeatureOptionChoices((prev) => prev.filter((choice) => (
-      choice.option_group_key !== ARTIFICER_INFUSION_GROUP_KEY
-      || activeKeys.has(`${choice.option_group_key}:${choice.option_key}`)
-    )))
+    setFeatureOptionChoices((prev) => filterFeatureOptionChoicesByActiveDefinitions({
+      choices: prev,
+      optionGroupKey: ARTIFICER_INFUSION_GROUP_KEY,
+      definitions: artificerInfusionDefinitions,
+    }))
   }, [artificerInfusionDefinitions])
 
   useEffect(() => {

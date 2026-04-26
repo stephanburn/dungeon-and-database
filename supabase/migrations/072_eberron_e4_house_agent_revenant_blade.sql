@@ -185,7 +185,7 @@ VALUES (
   ARRAY['Investigation', 'Persuasion'],
   0,
   ARRAY[]::text[],
-  ARRAY['One tool or language of your choice'],
+  ARRAY[]::text[],
   ARRAY[]::text[],
   '[]'::jsonb,
   (SELECT id FROM public.starting_equipment_packages WHERE key = 'background:house_agent:erftlw'),
@@ -193,7 +193,7 @@ VALUES (
   NULL,
   'ERftLW',
   true,
-  'The ERftLW tool-or-language choice is represented as a descriptive proficiency placeholder until mixed tool/language background choices are automated.'
+  'The ERftLW tool-or-language choice is documented descriptively until mixed tool/language background choices are automated; no placeholder proficiency is granted.'
 )
 ON CONFLICT (name, source) DO UPDATE
 SET

@@ -395,6 +395,23 @@ export function mergeFeatureOptionChoiceInputs(args: {
   ]
 }
 
+export function filterFeatureOptionChoicesByActiveDefinitions(args: {
+  choices: FeatureOptionChoiceInput[]
+  optionGroupKey: string
+  definitions: FeatureOptionChoiceDefinition[]
+}) {
+  if (args.definitions.length === 0) return args.choices
+
+  const activeKeys = new Set(
+    args.definitions.map((definition) => `${definition.optionGroupKey}:${definition.optionKey}`)
+  )
+
+  return args.choices.filter((choice) => (
+    choice.option_group_key !== args.optionGroupKey
+    || activeKeys.has(`${choice.option_group_key}:${choice.option_key}`)
+  ))
+}
+
 export function getFightingStyleGroupKey(className: string | null | undefined) {
   if (!className) return null
   return FIGHTING_STYLE_GROUP_KEYS[className] ?? null

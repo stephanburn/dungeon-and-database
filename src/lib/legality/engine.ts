@@ -784,6 +784,7 @@ function checkArtificerInfusionSelections(input: LegalityInput): LegalityCheck {
     .map((choice) => choice.selected_value?.[FEATURE_OPTION_VALUE_KEY])
     .filter((value): value is string => typeof value === 'string' && value.length > 0)
   const duplicates = selectedKeys.filter((key, index) => selectedKeys.indexOf(key) !== index)
+  const unknownKeys = selectedKeys.filter((key) => !optionLevelByKey.has(key))
   const overLevelKeys = selectedKeys.filter((key) => {
     const minLevel = optionLevelByKey.get(key)
     return typeof minLevel === 'number' && minLevel > artificerLevel
@@ -794,6 +795,7 @@ function checkArtificerInfusionSelections(input: LegalityInput): LegalityCheck {
   if (missing > 0) issues.push(`Choose ${missing} more artificer infusion${missing === 1 ? '' : 's'} (${activeChoices.length}/${required}).`)
   if (activeChoices.length > required) issues.push(`Selected ${activeChoices.length} infusions but only ${required} are known at this level.`)
   if (duplicates.length > 0) issues.push(`Each infusion can only be chosen once: ${Array.from(new Set(duplicates)).join(', ')}.`)
+  if (unknownKeys.length > 0) issues.push(`Unknown artificer infusion selections: ${Array.from(new Set(unknownKeys)).join(', ')}.`)
   if (overLevelKeys.length > 0) issues.push(`Some infusions exceed the current artificer level: ${overLevelKeys.join(', ')}.`)
 
   return {
