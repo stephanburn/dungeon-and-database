@@ -133,46 +133,52 @@ const SPECIES_LANGUAGE_CHOICE_RULES: SpeciesChoiceRule[] = [
     sourceFeatureKey: 'species_languages:high_elf',
   },
   {
-    names: ['Half-Elf (Mark of Detection)', 'Mark of Detection Half-Elf'],
+    names: ['Half-Elf (Mark of Detection)'],
     sources: ['ERftLW', 'EE'],
     count: 1,
     sourceFeatureKey: 'species_languages:mark_of_detection_half_elf',
   },
   {
-    names: ['Half-Elf (Mark of Storm)', 'Mark of Storm Half-Elf'],
+    names: ['Half-Elf (Mark of Storm)'],
     count: 1,
     sourceFeatureKey: 'species_languages:mark_of_storm_half_elf',
   },
   {
-    names: ['Human (Mark of Finding)', 'Mark of Finding Human'],
+    names: ['Human (Mark of Finding)'],
     count: 1,
     sourceFeatureKey: 'species_languages:mark_of_finding_human',
   },
   {
-    names: ['Human (Mark of Handling)', 'Mark of Handling Human'],
+    names: ['Human (Mark of Handling)'],
     count: 1,
     sourceFeatureKey: 'species_languages:mark_of_handling_human',
   },
   {
-    names: ['Human (Mark of Making)', 'Mark of Making Human'],
+    names: ['Human (Mark of Making)'],
     count: 1,
     sourceFeatureKey: 'species_languages:mark_of_making_human',
   },
   {
-    names: ['Human (Mark of Passage)', 'Mark of Passage Human'],
+    names: ['Human (Mark of Passage)'],
     count: 1,
     sourceFeatureKey: 'species_languages:mark_of_passage_human',
   },
   {
-    names: ['Human (Mark of Sentinel)', 'Mark of Sentinel Human'],
+    names: ['Human (Mark of Sentinel)'],
     count: 1,
     sourceFeatureKey: 'species_languages:mark_of_sentinel_human',
+  },
+  {
+    names: ['Kalashtar'],
+    sources: ['ERftLW'],
+    count: 1,
+    sourceFeatureKey: 'species_languages:kalashtar',
   },
 ]
 
 const DRAGONMARK_TOOL_CHOICE_RULES: SpeciesToolChoiceRule[] = [
   {
-    names: ['Human (Mark of Making)', 'Mark of Making Human'],
+    names: ['Human (Mark of Making)'],
     count: 1,
     options: ARTISANS_TOOL_OPTIONS,
     sourceFeatureKey: 'species_trait:artisans_gift',

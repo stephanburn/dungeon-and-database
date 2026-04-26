@@ -212,6 +212,9 @@ test('batch 5.5 closeout records visual QA, accessibility notes, and the batch 6
   assert.match(roadmap, /Batch 5\.5 is now effectively complete/)
   assert.match(roadmap, /Slice `5\.5h` closed the polish pass/)
   assert.match(roadmap, /Batch 5\.5 handoff/)
+  assert.match(roadmap, /Batch 6 admin\/content surfaces should be built as restrained work tools/)
+  assert.match(roadmap, /UI convention guard/)
+  assert.match(roadmap, /authenticated visual QA pass deferred from Slice 5\.5h/)
 
   for (const phrase of [
     'Login',

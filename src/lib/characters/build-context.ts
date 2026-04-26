@@ -171,7 +171,7 @@ export interface CharacterBuildContext {
     sourceFeatureKey: string | null
   }>
   selectedFeatureOptions: CharacterFeatureOptionChoice[]
-  featureOptions: Array<Pick<FeatureOption, 'group_key' | 'key' | 'name' | 'description' | 'effects'>>
+  featureOptions: Array<Pick<FeatureOption, 'group_key' | 'key' | 'name' | 'description' | 'prerequisites' | 'effects'>>
   equipmentItems: CharacterArmorItem[]
   armorCatalog: CharacterArmorCatalogEntry[]
   shieldCatalog: CharacterShieldCatalogEntry[]
@@ -180,6 +180,7 @@ export interface CharacterBuildContext {
     bonuses: Partial<Record<AbilityKey, number>>
   }>
   speciesName: string | null
+  speciesLineage: string | null
   selectedLanguages: string[]
   selectedTools: string[]
   speciesSource: string | null

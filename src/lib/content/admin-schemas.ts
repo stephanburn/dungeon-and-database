@@ -44,11 +44,13 @@ const startingEquipmentItemSchema = z.object({
 }).strict()
 
 const featPrerequisiteSchema = z.object({
-  type: z.enum(['ability', 'proficiency', 'feature', 'level', 'spellcasting']),
+  type: z.enum(['ability', 'proficiency', 'feature', 'level', 'spellcasting', 'species']),
   ability: z.string().optional(),
   min: z.number().int().optional(),
   proficiency: z.string().optional(),
   feature: z.string().optional(),
+  species: z.string().optional(),
+  lineage: z.string().optional(),
 }).strict()
 
 const spellComponentsSchema = z.object({

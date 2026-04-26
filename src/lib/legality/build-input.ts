@@ -531,6 +531,7 @@ export async function buildCharacterBuildContext(
       key: option.key,
       name: option.name,
       description: option.description,
+      prerequisites: option.prerequisites,
       effects: option.effects,
     })),
     equipmentItems: typedEquipmentItems.map((row) => ({
@@ -541,6 +542,7 @@ export async function buildCharacterBuildContext(
     shieldCatalog,
     asiChoiceSlots: toAsiChoiceSlots((asiChoicesResult.data ?? []) as CharacterAsiChoice[]),
     speciesName: species?.name ?? null,
+    speciesLineage: species?.lineage_key ?? null,
     selectedLanguages: ((languageChoicesResult.data ?? []) as CharacterLanguageChoice[]).map((row) => row.language),
     selectedTools: ((toolChoicesResult.data ?? []) as CharacterToolChoice[]).map((row) => row.tool),
     speciesSource: species?.source ?? null,

@@ -27,6 +27,7 @@ function createContext(overrides: Partial<CharacterBuildContext> = {}): Characte
     selectedAsiChoices: [],
     asiChoiceSlots: [],
     speciesName: 'Human',
+    speciesLineage: 'human',
     speciesSource: 'SRD',
     speciesAbilityBonuses: {},
     speciesSpeed: 30,

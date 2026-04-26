@@ -29,6 +29,11 @@ import {
   isMaverickSubclass,
   MAVERICK_BREAKTHROUGH_SOURCE_FEATURE_KEY,
 } from '@/lib/characters/maverick'
+import {
+  ARTIFICER_CLASS_NAME,
+  ARTIFICER_INFUSION_GROUP_KEY,
+  getInfusionsKnown,
+} from '@/lib/characters/infusions'
 import { getSpeciesAbilityBonusChoiceConfig } from '@/lib/characters/species-ability-bonus-provenance'
 import { allocateSkillChoices, getSpeciesSkillChoiceConfig } from '@/lib/characters/skill-provenance'
 import { normalizeSkillKey, type SkillKey } from '@/lib/skills'
@@ -491,9 +496,33 @@ function checkFeatPrerequisite(prerequisite: FeatPrerequisite, input: LegalityIn
       return prerequisite.feature ? unlockedFeatures.has(prerequisite.feature.toLowerCase()) : true
     case 'proficiency':
       return prerequisite.proficiency ? derived.proficiencies.all.includes(prerequisite.proficiency.toLowerCase()) : true
+    case 'species':
+      return checkSpeciesFeatPrerequisite(prerequisite, input)
     default:
       return true
   }
+}
+
+function normalizePrerequisiteValue(value: string | null | undefined): string {
+  return (value ?? '').trim().toLowerCase().replace(/[\s-]+/g, '_')
+}
+
+function inferSpeciesLineage(speciesName: string | null): string | null {
+  if (!speciesName) return null
+  const normalizedName = normalizePrerequisiteValue(speciesName.replace(/\(.+\)$/, '').trim())
+  if (normalizedName === 'high_elf' || normalizedName === 'wood_elf' || normalizedName === 'dark_elf') return 'elf'
+  return normalizedName || null
+}
+
+function checkSpeciesFeatPrerequisite(prerequisite: FeatPrerequisite, input: LegalityInput): boolean {
+  const requiredSpecies = normalizePrerequisiteValue(prerequisite.species)
+  const requiredLineage = normalizePrerequisiteValue(prerequisite.lineage)
+  const speciesName = normalizePrerequisiteValue(input.speciesName)
+  const speciesLineage = normalizePrerequisiteValue(input.speciesLineage ?? inferSpeciesLineage(input.speciesName))
+
+  if (requiredSpecies && speciesName !== requiredSpecies) return false
+  if (requiredLineage && speciesLineage !== requiredLineage) return false
+  return true
 }
 
 function checkFeatPrerequisites(input: LegalityInput, derived: DerivedCharacter): LegalityCheck {
@@ -719,6 +748,64 @@ function hasSelectedFeatureOption(
   return countSelectedFeatureOptions(input, optionGroupKey, expectedValueKey) > 0
 }
 
+function checkArtificerInfusionSelections(input: LegalityInput): LegalityCheck {
+  const artificerLevel = input.classes
+    .filter((cls) => cls.name === ARTIFICER_CLASS_NAME)
+    .reduce((acc, cls) => Math.max(acc, cls.level), 0)
+  const required = getInfusionsKnown(artificerLevel)
+  const activeChoices = getActiveFeatureOptionChoices(input.selectedFeatureOptions)
+    .filter((choice) => choice.option_group_key === ARTIFICER_INFUSION_GROUP_KEY)
+    .filter((choice) => {
+      const value = choice.selected_value?.[FEATURE_OPTION_VALUE_KEY]
+      return typeof value === 'string' && value.length > 0
+    })
+
+  if (required === 0) {
+    return {
+      key: 'artificer_infusion_selections',
+      passed: activeChoices.length === 0,
+      message: activeChoices.length === 0
+        ? 'No artificer infusions are required at this level.'
+        : `Found ${activeChoices.length} infusion selection${activeChoices.length === 1 ? '' : 's'} but the current artificer level requires none.`,
+      severity: 'error',
+    }
+  }
+
+  const optionLevelByKey = new Map(
+    input.featureOptions
+      .filter((option) => option.group_key === ARTIFICER_INFUSION_GROUP_KEY)
+      .map((option) => {
+        const raw = option.prerequisites?.minimum_class_level
+        return [option.key, typeof raw === 'number' ? raw : 2] as const
+      })
+  )
+
+  const selectedKeys = activeChoices
+    .map((choice) => choice.selected_value?.[FEATURE_OPTION_VALUE_KEY])
+    .filter((value): value is string => typeof value === 'string' && value.length > 0)
+  const duplicates = selectedKeys.filter((key, index) => selectedKeys.indexOf(key) !== index)
+  const overLevelKeys = selectedKeys.filter((key) => {
+    const minLevel = optionLevelByKey.get(key)
+    return typeof minLevel === 'number' && minLevel > artificerLevel
+  })
+
+  const missing = required - activeChoices.length
+  const issues: string[] = []
+  if (missing > 0) issues.push(`Choose ${missing} more artificer infusion${missing === 1 ? '' : 's'} (${activeChoices.length}/${required}).`)
+  if (activeChoices.length > required) issues.push(`Selected ${activeChoices.length} infusions but only ${required} are known at this level.`)
+  if (duplicates.length > 0) issues.push(`Each infusion can only be chosen once: ${Array.from(new Set(duplicates)).join(', ')}.`)
+  if (overLevelKeys.length > 0) issues.push(`Some infusions exceed the current artificer level: ${overLevelKeys.join(', ')}.`)
+
+  return {
+    key: 'artificer_infusion_selections',
+    passed: issues.length === 0,
+    message: issues.length === 0
+      ? `Artificer infusion selections are valid (${activeChoices.length}/${required}).`
+      : issues.join(' '),
+    severity: 'error',
+  }
+}
+
 function checkSubclassFeatureOptionSelections(input: LegalityInput): LegalityCheck {
   const missing: string[] = []
 
@@ -788,6 +875,7 @@ export function runLegalityChecks(input: LegalityInput): LegalityResult {
     checkMaverickBreakthroughSelections(input),
     checkFightingStyleSelections(input),
     checkSubclassFeatureOptionSelections(input),
+    checkArtificerInfusionSelections(input),
     checkSpellSelectionCount(input, baseDerived),
   ]
 

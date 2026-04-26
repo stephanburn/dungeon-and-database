@@ -10,9 +10,10 @@ This roadmap now has meaningful implementation behind it.
 - Batch 2 is effectively complete.
 - Batch 3 is now effectively complete and closed out by Slice `3l` on 2026-04-18.
 - Batch 4 is now effectively complete and closed out by Slice `4o` on 2026-04-23.
-- Batch 4.5 is now effectively complete and closed out by Slice `4.5h` on 2026-04-24.
+- Batch 4.5 is now effectively complete and closed out by Slice `4.5h` on 2026-04-24. The intended next step is Batch 5 sheet calculation and presentation.
 - Batch 5 is now effectively complete and closed out by Slice `5n` on 2026-04-25. The live data-copy migration smoke (Slice `5m`) was completed before Batch 5 closed; the Batch 4.5 deployment gate is formally closed. The one architectural gap carried into Batch 6 is consolidating the spellcasting derivation from `build-context.ts` into `derived.ts`.
 - Batch 5.5 is now effectively complete and closed out by Slice `5.5h` on 2026-04-25. Slice `5.5a` landed the shared UI hierarchy, surface, radius, and focus conventions. Slice `5.5b` shortened high-traffic player-facing copy and removed implementation language. Slice `5.5c` reduced wizard summary weight and made simple guided choices render as compact rows. Slice `5.5d` refined login and dashboard entry states. Slice `5.5e` made guided creation more momentum-oriented. Slice `5.5f` compacted the character sheet header and simplified section toggles. Slice `5.5g` made validation, DM audit, and stale-provenance states more repair-oriented and calmer by default. Slice `5.5h` closed the polish pass with visual/accessibility QA notes and a Batch 6 handoff.
+- Batch Eberron is now effectively complete and closed out by Slice `E7` on 2026-04-26. Slice E1 locked the audit/guardrails, Slice E2 added the missing species and lineages, Slice E3 cleaned up dragonmarked lineage metadata, stale notes, and legacy dragonmarked rows/code by deleting any characters still tied to the old rows before purging them, Slice E4 added House Agent, Revenant Blade, double-bladed scimitar support, and elf-lineage feat prerequisite checks, Slice E5 modeled the full ERftLW Artificer infusion roster as repeating feature options with minimum-level prerequisites, count legality, and sheet/wizard surfaces, Slice E6 added an automated ERftLW regression matrix covering representative creation, legality, derived sheet, source allowlist, and DM-review paths, and Slice E7 recorded `output/batch-eberron-closeout-audit.md` with the Batch 6 handoff and the remaining ERftLW gaps outside the current app domain.
 - A post-Batch-4 production hotfix shipped on 2026-04-23 to stop the character sheet from entering a React update loop when loading class-scoped spell options for newly created characters.
 - A Batch 4 senior-review pass on 2026-04-23 found several level-up data-integrity bugs that the additive save path makes reachable in normal play (silent spell/feat swap loss, skill PK collision on multiclass overlap, feature-option value-change collision, preserved-spell level misattribution, and a concurrency window in the per-level sync trigger). Batch 4.5 is scheduled before Batch 5 to close these.
 - Batch 4 delivered the end-to-end guided builder workflows that were blocking real character creation:
@@ -86,7 +87,7 @@ Known remaining PHB amendment notes after Batch 3 are now explicit rather than h
 - Battle Master, Hunter, Circle of the Land, and Four Elements still have combat-time or resource-tracking automation gaps
 - Arcane Trickster and Eldritch Knight still have subclass-feature automation gaps beyond spell legality
 
-The intended next step is Batch 5 sheet calculation and presentation. Batch 4 / 4.5 closeout notes live in `output/batch-4-closeout-audit.md`.
+The intended next step is Batch 6 content ingestion and admin tooling. Batch 4 / 4.5 closeout notes live in `output/batch-4-closeout-audit.md`; Batch Eberron closeout notes live in `output/batch-eberron-closeout-audit.md`.
 
 This plan is written for a single implementation agent working inside the repo, not for a human team. That changes the shape of the backlog:
 
@@ -1066,15 +1067,177 @@ Each slice should fit in one Codex session and leave the app coherent. Slices 5.
 - Keyboard focus, contrast, and non-color state communication are improved.
 - Batch 6 can add content/admin tooling without inheriting avoidable UI noise.
 
+## Batch Eberron: Rising Player Options Completion
+
+### Objective
+
+Complete practical character-builder support for player-facing options from `Eberron: Rising from the Last War` before Batch 6 expands the content/admin tooling surface.
+
+### Why Before Batch 6
+
+The repo already contains a partial ERftLW slice: Artificer, several dragonmarked species, Warforged, Changeling, Orc, Aberrant Dragonmark, and dragonmark spell-list support. Coverage is useful but uneven. Finishing this source now gives Batch 6 a cleaner real-world content target and avoids building admin/import tools around known incomplete Eberron assumptions.
+
+Batch Eberron is intentionally a source-completion exception to Batch 6's "stabilization and tooling before broad content" posture. It should be small, player-facing, and backed by regression coverage rather than a new round of open-ended sourcebook ingestion.
+
+### Scope
+
+- Complete missing ERftLW species and lineages supported by the existing character-builder model.
+- Add missing ERftLW player background and feat content.
+- Model artificer infusions as selectable feature options.
+- Tighten dragonmarked species behavior, lineage metadata, and amendment notes.
+- Add regression coverage proving ERftLW campaign allowlists can create representative Eberron builds.
+
+### Non-Goals
+
+- Full book text transcription.
+- Adventure, gazetteer, faction lore, monsters, NPC stat blocks, vehicles, or encounter content.
+- Broad magic-item catalog support beyond what is needed to describe artificer infusion choices.
+- Combat-time automation for every trait, feat, or infusion rider.
+- Replacing Batch 6 importer/admin work.
+
+### Execution Slices
+
+Each slice should fit in one Codex session and leave the app coherent. Slices E1-E5 complete the player-option support surface. Slice E6 proves representative Eberron builds end to end. Slice E7 closes the batch and hands a cleaner content baseline to Batch 6.
+
+**Slice E1 — ERftLW coverage audit and guardrails**
+
+- Goal: lock the expected ERftLW character-option surface before adding data.
+- Deliver:
+  - `output/eberron-content-audit.md`
+  - migration/source tests listing expected ERftLW player options
+  - current coverage table: present, partial, missing, out of scope
+- Acceptance:
+  - missing support is explicit before implementation
+  - tests fail for the known missing player-facing content
+  - out-of-domain book material is documented rather than treated as hidden backlog
+
+**Slice E2 — Missing species and lineages**
+
+- Goal: add missing selectable ERftLW species rows that fit the current builder.
+- Add:
+  - `Kalashtar`
+  - Shifter variants
+  - `Bugbear`
+  - `Goblin`
+  - `Hobgoblin`
+- Update:
+  - species traits
+  - ability/language/skill/tool choice helpers where needed
+  - lineage metadata
+  - amendment notes for non-automated trait riders
+- Acceptance:
+  - each new species appears under an ERftLW allowlist
+  - required choices persist with provenance
+  - derived sheet shows traits, senses, speed, resistances, languages, and proficiencies correctly
+
+**Slice E3 — Dragonmarked cleanup**
+
+- Goal: make the existing dragonmarked rows coherent and less "partial slice" flavored.
+- Update:
+  - canonical naming and lineage metadata
+  - stale amendment notes
+  - language/tool/ability choice rules
+  - static trait-granted spell coverage where current feature-grants support allows it
+- Acceptance:
+  - no amendment note claims an already-implemented choice is missing
+  - dragonmark spell-list expansion remains available in spell pickers
+  - duplicate legacy-style rows are either clearly retained for compatibility or explicitly marked as legacy
+
+**Slice E4 — House Agent, Revenant Blade, and required equipment hooks**
+
+- Goal: add the remaining player-facing background/feat pieces.
+- Add:
+  - `House Agent` background with skill/tool/language support and concise feature summary
+  - `Revenant Blade` feat with prerequisites and structured benefits
+  - double-bladed scimitar equipment row if needed for feat/equipment display
+- Acceptance:
+  - House Agent can be selected and saved
+  - Revenant Blade appears only when its source is allowed
+  - any unautomated feat combat riders are marked with precise amendment notes
+
+**Slice E5 — Artificer infusions as feature options**
+
+- Goal: make the Artificer's core recurring choice system real instead of descriptive only.
+- Add:
+  - infusion option groups
+  - infusion options and prerequisites
+  - level-based selection counts
+  - legality checks for missing/extra infusion choices
+  - sheet display of selected infusions
+- Acceptance:
+  - Artificer characters must choose the correct number of infusions at relevant levels
+  - selected infusions persist through creation and level-up
+  - unsupported magic-item replication details are surfaced descriptively, not silently automated
+
+**Slice E6 — Eberron regression matrix**
+
+- Goal: prove representative Eberron builds work end to end.
+- Cover:
+  - Warforged Artificer with infusions
+  - Kalashtar caster
+  - Shifter martial build
+  - Dragonmarked spellcaster
+  - House Agent character
+  - Revenant Blade eligible build
+- Acceptance:
+  - creation, legality, derived sheet, source allowlisting, and DM review all pass for the matrix
+  - the regression matrix distinguishes supported automation from descriptive-only book mechanics
+
+**Slice E7 — Batch Eberron closeout**
+
+- Goal: hand Batch 6 a clean content baseline.
+- Deliver:
+  - `output/batch-eberron-closeout-audit.md`
+  - updated `Current Status` and Batch 6 entry notes in this roadmap
+  - short list of remaining ERftLW gaps that are intentionally outside the current app domain
+- Acceptance:
+  - player-facing ERftLW character options are either supported or explicitly documented as not in the app's current domain
+  - Batch 6 can proceed with importer/admin tooling against a known-complete Eberron character-options slice
+
+### Suggested Order
+
+1. E1: ERftLW coverage audit and guardrails.
+2. E2: missing species and lineages.
+3. E3: dragonmarked cleanup.
+4. E4: House Agent, Revenant Blade, and required equipment hooks. (complete)
+5. E5: artificer infusions as feature options. (complete)
+6. E6: Eberron regression matrix. (complete)
+7. E7: Batch Eberron closeout. (complete)
+
+### Risks
+
+- Eberron's book content extends well beyond character-builder scope. Slice E1 must hold the scope line so the batch closes against a finished player-options slice rather than an open-ended sourcebook ingestion target.
+- Existing dragonmarked species rows carried lineage ambiguity and stale amendment notes. Slice E3 resolves this by keeping canonical `Species (Mark of X)` rows, deleting characters still tied to older `Mark of X Species` rows, and removing the old rows/code paths rather than carrying a compatibility layer.
+- Artificer infusion modeling can drift toward replicating the magic-item catalog. Keep magic-item replication descriptive unless the current equipment/feature-grant model already supports the underlying item shape.
+- Several Eberron traits (e.g. Shifter shifting, Kalashtar Mind Link, Warforged trait riders) are reaction-time or resource-tracking mechanics that Batch 5 only surfaces descriptively. Mark them with precise amendment notes rather than partially automating combat-time behavior.
+- New player options land before Batch 6's importer/validator, so structural mistakes can only be caught by tests and the regression matrix. Slice E6 is the safety net; do not skip it to ship E7 faster.
+
+### Exit Criteria
+
+- ERftLW player options that fit the current character-builder domain are selectable, persistable, and visible on the derived sheet.
+- Eberron-specific required choices have provenance and legality coverage.
+- Artificer infusions are represented as reusable feature options rather than only prose.
+- Remaining book content outside the app's current character-builder domain is documented for a later content-model expansion.
+- Batch 6 begins with a cleaner sourcebook baseline and a concrete Eberron regression matrix.
+
 ## Batch 6: Content Ingestion and Admin Tooling
 
 ### Objective
 
 Make content expansion sustainable instead of relying on ad hoc patches and narrow seed scripts, while closing the small architectural and data-shape debts that would make a larger content/admin surface brittle.
 
-### Batch 5.5 handoff
+### Batch 5.5 handoff and Batch Eberron handoff
 
 The Batch 5.5 closeout on 2026-04-25 confirms content/admin work can begin on the polished UI foundation. Batch 6 should reuse the shared surface, focus, copy, and progressive-disclosure conventions from the polish pass rather than inventing new admin chrome. Any remaining broad visual polish belongs in Batch 7, not inside the Batch 6 content/admin scope.
+
+Batch Eberron closed on 2026-04-26 with `output/batch-eberron-closeout-audit.md`. Batch 6 begins with a known-complete ERftLW player-options baseline and an Eberron regression matrix. Batch 6 should then improve repeatability and admin maintainability and should not re-open sourcebook-completion work.
+
+The practical effect for future batches is:
+
+- Batch 6 admin/content surfaces should be built as restrained work tools: compact rows for scannable lists, `surface-section` for bounded editor areas, `surface-primary` only for the main workspace, and progressive disclosure for validation, provenance, import diffs, and destructive/retire explanations.
+- New Batch 6 UI copy should stay task-first and avoid implementation terms such as raw rows, derivation seams, persistence internals, or rules-engine language unless the user is explicitly in an admin diagnostics view.
+- Batch 6 should add focused convention tests for each new admin surface it introduces, extending `test/ui-polish-conventions.test.ts` or a sibling test rather than relying on manual visual judgment.
+- Batch 7 should not reopen broad product polish unless the Batch 6 closeout finds a specific regression. Its UI work should focus on authenticated visual QA, keyboard coverage, setup clarity, and production-readiness friction.
 
 ### Why
 
@@ -1222,16 +1385,20 @@ Each slice should fit in one Codex session and leave the repo coherent. Slices 6
   - `src/lib/content/admin-schemas.ts`
   - `src/lib/content/feature-option-content.ts`, `language-content.ts`, `tool-content.ts`
 - UI requirements:
-  - list, create, edit, retire/delete where safe
+  - list, create, edit, retire/delete where safe using the Batch 5.5 hierarchy conventions rather than new admin-specific chrome
+  - compact `surface-row` list entries for scannable catalogs; reserve `surface-section` for the active editor and validation preview
   - source tag / ruleset fields
-  - validation preview before save
+  - validation preview before save, progressively disclosed when it contains detailed row-level findings
   - blocked delete/retire messaging when character rows reference the content
+  - short task-first labels (`Create`, `Save`, `Retire`, `Preview`) with implementation detail kept out of default copy
 - Tests:
   - API schema tests for create/update/delete validation
   - source-code guard tests that admin panels call validation before publishing
+  - UI convention guard that the new admin panel uses shared surfaces, shared focus treatment, and progressive disclosure for detailed validation
 - Acceptance:
   - a DM/admin can maintain feature option groups/options, languages, and tools through the admin UI
   - invalid keys, duplicate keys, and dangling group references are blocked before write
+  - the admin UI feels like the same product as the polished dashboard/sheet, not a separate dense back-office tool
 
 **Slice 6g — Admin CRUD for equipment and starting packages**
 
@@ -1246,17 +1413,20 @@ Each slice should fit in one Codex session and leave the repo coherent. Slices 6
   - `src/lib/content/equipment-content.ts`
   - `src/lib/content/admin-schemas.ts`
 - UI requirements:
+  - reuse the Batch 5.5 admin conventions from Slice 6f for list rows, editor surfaces, focus treatment, and disclosure
   - stable item keys and source/ruleset fields
   - armor/shield AC fields with validation against `deriveArmorClass()`
   - weapon damage/proficiency fields
-  - starting package preview showing resolved items and quantities
+  - starting package preview showing resolved items and quantities as compact grouped rows, with detailed validation collapsed until needed
 - Tests:
   - API/schema tests for each equipment family
   - a fixture test proving a starting package resolves to concrete equipment rows
   - an AC regression that still passes after editing armor/shield content shape
+  - UI convention guard that equipment editors do not introduce nested heavy cards, alert-heavy neutral states, or verbose implementation copy
 - Acceptance:
   - admin UI can maintain all Batch 3 equipment families
   - starting packages can be previewed and validated before publish
+  - equipment editing stays scannable even when packages contain several alternatives or bundle choices
 
 **Slice 6h — Bulk source import and amendment workflow**
 
@@ -1264,16 +1434,18 @@ Each slice should fit in one Codex session and leave the repo coherent. Slices 6
 - Modify/create:
   - bulk import command using the Slice 6e validator
   - source/amendment metadata handling in content APIs
-  - admin preview surface for import diff: create/update/retire/no-op
+  - admin preview surface for import diff: create/update/retire/no-op, using calm grouped rows and disclosure for detailed row errors
   - import documentation in `SETUP.md` or `docs/architecture.md`
 - Tests:
   - fixture import with create/update/no-op rows
   - duplicate source/key conflict test
   - rejected import leaves no partial writes
+  - UI convention guard that import diffs use non-color-only status labels and do not present neutral no-op rows as warnings
 - Acceptance:
   - importer can dry-run and then apply the same validated payload
   - import output is stable enough to paste into closeout notes
   - source amendments remain visible to campaign allowlisting and DM review
+  - admin users can understand the import diff without reading raw payloads
 
 **Slice 6i — Batch 6 closeout gate**
 
@@ -1286,10 +1458,12 @@ Each slice should fit in one Codex session and leave the repo coherent. Slices 6
   - `npm test -- --runInBand`
   - content validator happy-path and failure fixtures
   - regression matrix covering a caster with feature-granted spells, a language/tool-heavy build, and an equipment-starting-package build
+  - visual QA notes for the Batch 6 admin/content surfaces against the Batch 5.5 conventions
 - Acceptance:
   - all Batch 5 carry-ins are closed or explicitly deferred with owner/date/reason
   - content families added in Batch 3 can be maintained through admin UI or importer
   - future content additions no longer require one-off SQL for normal cases
+  - any UI polish debt created by the new admin surfaces is assigned to Batch 7 with a concrete route/surface, not hidden in generic "UX polish"
 
 ### Suggested Order
 
@@ -1335,7 +1509,7 @@ A sophisticated builder that is hard to trust is not useful. The repo already ha
 - Unit tests
 - Integration tests
 - Seed and migration validation
-- UX polish
+- Authenticated visual QA and production-readiness UX hardening
 
 ### Tasks
 
@@ -1360,6 +1534,20 @@ A sophisticated builder that is hard to trust is not useful. The repo already ha
   - incomplete-step warnings
   - save state indicators
   - clear blocked-state explanations
+- Run the authenticated visual QA pass deferred from Slice 5.5h:
+  - dashboard
+  - wizard identity/species/review steps
+  - character sheet
+  - DM dashboard and review/audit surfaces
+  - Batch 6 content/admin screens
+- Extend keyboard and screen-reader-oriented checks over the authenticated surfaces:
+  - login
+  - wizard controls
+  - sheet collapsibles
+  - Save/Submit
+  - validation jump links
+  - admin create/edit/retire flows
+- Keep Batch 7 polish bounded to specific friction found during authenticated QA, Batch 6 admin closeout, or usability testing. Do not re-open the visual system without a concrete regression.
 - Add `.env.example` and setup documentation.
 - Treat language/tool key cutover, character-access consolidation, feature-grant content migration, and module splitting as Batch 6 prerequisites. Batch 7 should only revisit them if the Batch 6 closeout audit explicitly defers a residual with rationale.
 
@@ -1368,6 +1556,7 @@ A sophisticated builder that is hard to trust is not useful. The repo already ha
 - Representative build archetypes persist and reload accurately.
 - Derived outputs are stable across refactors.
 - The app explains invalid states clearly.
+- Authenticated player, DM, and admin surfaces continue to follow the Batch 5.5 visual hierarchy, focus, copy, and progressive-disclosure conventions.
 
 ## Implementation Strategy for Codex
 

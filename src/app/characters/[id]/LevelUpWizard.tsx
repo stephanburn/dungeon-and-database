@@ -69,6 +69,11 @@ import {
 } from '@/lib/characters/feature-grants'
 import type { FeatureOptionChoiceInput } from '@/lib/characters/choice-persistence'
 import { isMaverickSubclass } from '@/lib/characters/maverick'
+import {
+  ARTIFICER_CLASS_NAME,
+  ARTIFICER_INFUSION_GROUP_KEY,
+  getArtificerInfusionOptionDefinitions,
+} from '@/lib/characters/infusions'
 import { getFixedHpGainValue } from '@/lib/characters/derived'
 import {
   buildLevelUpClassOptions,
@@ -129,6 +134,7 @@ const LEVEL_UP_CHECK_STEP_MAP: Record<string, StepId> = {
   subclass_timing: 'subclass',
   fighting_style_selections: 'features',
   subclass_feature_option_selections: 'features',
+  artificer_infusion_selections: 'features',
   multiclass_skill_validation: 'skills',
   skill_proficiencies: 'skills',
   spell_legality: 'spells',
@@ -600,6 +606,27 @@ export function LevelUpWizard({
     }),
     [currentSubclass?.id, currentSubclass?.name, currentSubclass?.source, currentTargetLevel, featureOptionRows, selectedClassId]
   )
+  const isLevelingArtificer = selectedClassDetail?.name === ARTIFICER_CLASS_NAME
+  const artificerInfusionDefinitions = useMemo(
+    () => isLevelingArtificer
+      ? getArtificerInfusionOptionDefinitions({
+          classId: selectedClassId || null,
+          artificerLevel: nextTargetLevel,
+          optionRows: featureOptionRows,
+        })
+      : [],
+    [featureOptionRows, isLevelingArtificer, nextTargetLevel, selectedClassId]
+  )
+  const currentArtificerInfusionDefinitions = useMemo(
+    () => isLevelingArtificer
+      ? getArtificerInfusionOptionDefinitions({
+          classId: selectedClassId || null,
+          artificerLevel: currentTargetLevel,
+          optionRows: featureOptionRows,
+        })
+      : [],
+    [currentTargetLevel, featureOptionRows, isLevelingArtificer, selectedClassId]
+  )
   const levelUpFeatureOptionDefinitions = useMemo(
     () => [
       ...getLevelUpFeatureOptionStepDefinitions({
@@ -610,8 +637,19 @@ export function LevelUpWizard({
         currentDefinitions: currentSubclassFeatureOptionDefinitions,
         nextDefinitions: subclassFeatureOptionDefinitions,
       }),
+      ...getLevelUpFeatureOptionStepDefinitions({
+        currentDefinitions: currentArtificerInfusionDefinitions,
+        nextDefinitions: artificerInfusionDefinitions,
+      }),
     ],
-    [currentFightingStyleDefinitions, currentSubclassFeatureOptionDefinitions, fightingStyleDefinitions, subclassFeatureOptionDefinitions]
+    [
+      artificerInfusionDefinitions,
+      currentArtificerInfusionDefinitions,
+      currentFightingStyleDefinitions,
+      currentSubclassFeatureOptionDefinitions,
+      fightingStyleDefinitions,
+      subclassFeatureOptionDefinitions,
+    ]
   )
 
   useEffect(() => {
@@ -640,6 +678,16 @@ export function LevelUpWizard({
       || activeKeys.has(`${choice.option_group_key}:${choice.option_key}`)
     )))
   }, [initialSubclassFeatureOptionKeys, subclassFeatureOptionDefinitions])
+
+  useEffect(() => {
+    const activeKeys = new Set(
+      artificerInfusionDefinitions.map((definition) => `${definition.optionGroupKey}:${definition.optionKey}`)
+    )
+    setFeatureOptionChoices((prev) => prev.filter((choice) => (
+      choice.option_group_key !== ARTIFICER_INFUSION_GROUP_KEY
+      || activeKeys.has(`${choice.option_group_key}:${choice.option_key}`)
+    )))
+  }, [artificerInfusionDefinitions])
 
   const canonicalFeatureOptionChoices = useMemo(
     () => mergeFeatureOptionChoiceInputs({

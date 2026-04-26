@@ -35,11 +35,13 @@ export type SpellComponents = {
 }
 
 export type FeatPrerequisite = {
-  type: 'ability' | 'proficiency' | 'feature' | 'level' | 'spellcasting'
+  type: 'ability' | 'proficiency' | 'feature' | 'level' | 'spellcasting' | 'species'
   ability?: string
   min?: number
   proficiency?: string
   feature?: string
+  species?: string
+  lineage?: string
 }
 
 export type MulticlassPrereq = {

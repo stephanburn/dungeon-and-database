@@ -69,6 +69,11 @@ import {
   MAVERICK_ARCANE_BREAKTHROUGH_GROUP_KEY,
 } from '@/lib/characters/feature-grants'
 import { buildTypedFeatSpellChoices, getFeatSpellChoiceDefinitions } from '@/lib/characters/feat-spell-options'
+import {
+  ARTIFICER_CLASS_NAME,
+  ARTIFICER_INFUSION_GROUP_KEY,
+  getArtificerInfusionOptionDefinitions,
+} from '@/lib/characters/infusions'
 import { buildSpeciesAbilityBonusMap, type AbilityKey as SpeciesChoiceAbilityKey } from '@/lib/characters/species-ability-bonus-provenance'
 import type { AsiSelection } from '@/lib/characters/asi-provenance'
 import type { CharacterWithRelations } from '@/lib/characters/load-character'
@@ -1140,6 +1145,24 @@ export function CharacterSheet({
     }),
     [featureOptionRows, levels, subclassMap]
   )
+  const artificerInfusionDefinitions = useMemo(
+    () => {
+      const maxLevelByClassId = new Map<string, number>()
+      for (const level of levels) {
+        maxLevelByClassId.set(level.class_id, Math.max(maxLevelByClassId.get(level.class_id) ?? 0, level.level))
+      }
+      return Array.from(maxLevelByClassId.entries()).flatMap(([classId, classLevel]) => {
+        const classDetail = classList.find((entry) => entry.id === classId) ?? null
+        if (classDetail?.name !== ARTIFICER_CLASS_NAME) return []
+        return getArtificerInfusionOptionDefinitions({
+          classId,
+          artificerLevel: classLevel,
+          optionRows: featureOptionRows,
+        })
+      })
+    },
+    [classList, featureOptionRows, levels]
+  )
   const maverickFeatureSpellDefinitions = useMemo(
     () => getMaverickFeatureSpellChoiceDefinitions({
       classLevel: firstClassLevel,
@@ -1198,6 +1221,16 @@ export function CharacterSheet({
       || activeKeys.has(`${choice.option_group_key}:${choice.option_key}`)
     )))
   }, [initialSubclassFeatureOptionKeys, subclassFeatureOptionDefinitions])
+
+  useEffect(() => {
+    const activeKeys = new Set(
+      artificerInfusionDefinitions.map((definition) => `${definition.optionGroupKey}:${definition.optionKey}`)
+    )
+    setFeatureOptionChoices((prev) => prev.filter((choice) => (
+      choice.option_group_key !== ARTIFICER_INFUSION_GROUP_KEY
+      || activeKeys.has(`${choice.option_group_key}:${choice.option_key}`)
+    )))
+  }, [artificerInfusionDefinitions])
 
   useEffect(() => {
     const hasCanonicalMaverickChoices = featureOptionChoices.some(
@@ -2393,6 +2426,14 @@ export function CharacterSheet({
         <FeatureOptionChoicesCard
           title="Subclass Options"
           definitions={subclassFeatureOptionDefinitions}
+          choices={featureOptionChoices}
+          canEdit={canEdit}
+          onChange={setFeatureOptionChoices}
+        />
+
+        <FeatureOptionChoicesCard
+          title="Artificer Infusions"
+          definitions={artificerInfusionDefinitions}
           choices={featureOptionChoices}
           canEdit={canEdit}
           onChange={setFeatureOptionChoices}

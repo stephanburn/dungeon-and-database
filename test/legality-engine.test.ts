@@ -36,6 +36,7 @@ function createContext(overrides: Partial<CharacterBuildContext> = {}): Characte
     shieldCatalog: [],
     asiChoiceSlots: [],
     speciesName: 'Human',
+    speciesLineage: 'human',
     speciesSource: 'SRD',
     speciesAbilityBonuses: { int: 1 },
     speciesSpeed: 30,
@@ -1110,6 +1111,7 @@ test('deriveCharacter computes armor class from equipped armor, shield, and defe
       key: 'defense',
       name: 'Defense',
       description: 'Gain +1 AC while wearing armor.',
+      prerequisites: {},
       effects: {},
     }],
     equipmentItems: [
@@ -1249,6 +1251,7 @@ test('deriveCharacter groups feature details and class resources for sheet prese
         key: 'trip_attack',
         name: 'Trip Attack',
         description: 'Knock a target prone with a superiority-enhanced strike.',
+        prerequisites: {},
         effects: {},
       },
       {
@@ -1256,6 +1259,7 @@ test('deriveCharacter groups feature details and class resources for sheet prese
         key: 'riposte',
         name: 'Riposte',
         description: 'Punish a missed melee attack with a reaction strike and superiority damage.',
+        prerequisites: {},
         effects: {},
       },
     ],
@@ -1518,6 +1522,46 @@ test('legality blocks feat prerequisites and extra feat slots', () => {
 
   assert.equal(result.checks.find((check) => check.key === 'feat_prerequisites')?.passed, false)
   assert.equal(result.checks.find((check) => check.key === 'feat_slots')?.passed, false)
+})
+
+test('legality enforces feat species lineage prerequisites', () => {
+  const elf = runLegalityChecks(createContext({
+    allowedSources: ['SRD', 'ERftLW'],
+    speciesName: 'High Elf',
+    speciesLineage: 'elf',
+    selectedFeats: [{
+      id: 'revenant-blade',
+      name: 'Revenant Blade',
+      source: 'ERftLW',
+      prerequisites: [{ type: 'species', lineage: 'elf' }],
+    }],
+    sourceCollections: {
+      classSources: ['SRD'],
+      subclassSources: ['SRD'],
+      spellSources: ['SRD'],
+      featSources: ['ERftLW'],
+    },
+  }))
+  const halfElf = runLegalityChecks(createContext({
+    allowedSources: ['SRD', 'ERftLW'],
+    speciesName: 'Half-Elf',
+    speciesLineage: 'half_elf',
+    selectedFeats: [{
+      id: 'revenant-blade',
+      name: 'Revenant Blade',
+      source: 'ERftLW',
+      prerequisites: [{ type: 'species', lineage: 'elf' }],
+    }],
+    sourceCollections: {
+      classSources: ['SRD'],
+      subclassSources: ['SRD'],
+      spellSources: ['SRD'],
+      featSources: ['ERftLW'],
+    },
+  }))
+
+  assert.equal(elf.checks.find((check) => check.key === 'feat_prerequisites')?.passed, true)
+  assert.equal(halfElf.checks.find((check) => check.key === 'feat_prerequisites')?.passed, false)
 })
 
 test('legality blocks invalid spell selections above available spell level', () => {

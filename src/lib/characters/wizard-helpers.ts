@@ -362,7 +362,8 @@ export function buildLocalCharacterContext({
         }, {}),
       }))
     .filter((slot) => Object.keys(slot.bonuses).length > 0),
-  speciesName: selectedSpecies?.name ?? null,
+    speciesName: selectedSpecies?.name ?? null,
+    speciesLineage: selectedSpecies?.lineage_key ?? null,
     selectedLanguages: languageChoices,
     selectedTools: toolChoices,
     speciesSource: selectedSpecies?.source ?? null,
@@ -370,13 +371,13 @@ export function buildLocalCharacterContext({
       acc[bonus.ability] = (acc[bonus.ability] ?? 0) + bonus.bonus
       return acc
     }, {}) ?? {},
-  speciesSpeed: selectedSpecies?.speed ?? null,
-  speciesSize: selectedSpecies?.size ?? null,
-  speciesLanguages: selectedSpecies?.languages ?? [],
-  speciesTraits: [],
-  speciesSenses: selectedSpecies?.senses ?? [],
-  speciesDamageResistances: selectedSpecies?.damage_resistances ?? [],
-  speciesConditionImmunities: selectedSpecies?.condition_immunities ?? [],
+    speciesSpeed: selectedSpecies?.speed ?? null,
+    speciesSize: selectedSpecies?.size ?? null,
+    speciesLanguages: selectedSpecies?.languages ?? [],
+    speciesTraits: [],
+    speciesSenses: selectedSpecies?.senses ?? [],
+    speciesDamageResistances: selectedSpecies?.damage_resistances ?? [],
+    speciesConditionImmunities: selectedSpecies?.condition_immunities ?? [],
     background,
     backgroundFeat: backgroundFeat
       ? {
@@ -416,6 +417,7 @@ export function buildLocalCharacterContext({
       key: option.key,
       name: option.name,
       description: option.description,
+      prerequisites: option.prerequisites,
       effects: option.effects,
     })),
     sourceCollections: {
