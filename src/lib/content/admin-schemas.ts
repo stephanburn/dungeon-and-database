@@ -6,6 +6,7 @@ const sizeCategorySchema = z.enum(['tiny', 'small', 'medium', 'large'])
 const variantTypeSchema = z.enum(['base', 'subrace', 'variant'])
 const spellcastingTypeSchema = z.enum(['full', 'half', 'third', 'pact', 'none'])
 const ruleSetSchema = z.enum(['2014', '2024'])
+const contentKeySchema = z.string().min(1).regex(/^[a-z0-9:_-]+$/, 'Use lowercase letters, numbers, underscores, colons, or hyphens.')
 
 const nullableUuidSchema = z.union([z.string().uuid(), z.null()])
 
@@ -162,12 +163,94 @@ const spellFieldsSchema = z.object({
 }).strict()
 
 const equipmentItemFieldsSchema = z.object({
-  key: z.string().min(1).optional(),
+  key: contentKeySchema.optional(),
   name: z.string().min(1).optional(),
   item_category: z.string().min(1).optional(),
   cost_quantity: z.number().int().min(0).optional(),
   cost_unit: z.string().min(1).optional(),
   weight_lb: z.union([z.number().min(0), z.null()]).optional(),
+  source: z.string().min(1).optional(),
+  amended: z.boolean().optional(),
+  amendment_note: z.union([z.string(), z.null()]).optional(),
+}).strict()
+
+const nullableNonNegativeIntegerSchema = z.union([z.number().int().min(0), z.null()])
+const damageDiceSchema = z.string().regex(/^\d+d\d+(?:\s*[+-]\s*\d+)?$/, 'Use dice notation like 1d8 or 1d8+2.')
+
+const weaponFieldsSchema = z.object({
+  item_id: z.string().uuid().optional(),
+  weapon_category: z.enum(['simple', 'martial']).optional(),
+  weapon_kind: z.enum(['melee', 'ranged']).optional(),
+  damage_dice: damageDiceSchema.optional(),
+  damage_type: z.string().min(1).optional(),
+  properties: z.array(z.string()).optional(),
+  normal_range: nullableNonNegativeIntegerSchema.optional(),
+  long_range: nullableNonNegativeIntegerSchema.optional(),
+  versatile_damage: z.union([damageDiceSchema, z.null()]).optional(),
+}).strict()
+
+const armorFieldsSchema = z.object({
+  item_id: z.string().uuid().optional(),
+  armor_category: z.enum(['light', 'medium', 'heavy']).optional(),
+  base_ac: z.number().int().min(1).max(30).optional(),
+  dex_bonus_cap: nullableNonNegativeIntegerSchema.optional(),
+  minimum_strength: nullableNonNegativeIntegerSchema.optional(),
+  stealth_disadvantage: z.boolean().optional(),
+}).strict()
+
+const shieldFieldsSchema = z.object({
+  item_id: z.string().uuid().optional(),
+  armor_class_bonus: z.number().int().min(1).max(10).optional(),
+}).strict()
+
+const startingEquipmentPackageItemAdminSchema = z.object({
+  item_id: z.string().uuid(),
+  quantity: z.number().int().min(1),
+  item_order: z.number().int().min(0).optional(),
+  choice_group: z.union([z.string(), z.null()]).optional(),
+  notes: z.union([z.string(), z.null()]).optional(),
+}).strict()
+
+const startingEquipmentPackageFieldsSchema = z.object({
+  key: contentKeySchema.optional(),
+  name: z.string().min(1).max(160).optional(),
+  description: z.string().optional(),
+  source: z.string().min(1).optional(),
+  amended: z.boolean().optional(),
+  amendment_note: z.union([z.string(), z.null()]).optional(),
+  items: z.array(startingEquipmentPackageItemAdminSchema).optional(),
+}).strict()
+
+const keyedCatalogFieldsSchema = z.object({
+  key: contentKeySchema.optional(),
+  name: z.string().min(1).max(100).optional(),
+  sort_order: z.number().int().min(0).optional(),
+  source: z.string().min(1).optional(),
+  amended: z.boolean().optional(),
+  amendment_note: z.union([z.string(), z.null()]).optional(),
+}).strict()
+
+const featureOptionGroupFieldsSchema = z.object({
+  key: contentKeySchema.optional(),
+  name: z.string().min(1).max(160).optional(),
+  option_family: z.string().min(1).optional(),
+  description: z.string().optional(),
+  selection_limit: z.number().int().min(1).optional(),
+  allows_duplicate_selections: z.boolean().optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+  source: z.string().min(1).optional(),
+  amended: z.boolean().optional(),
+  amendment_note: z.union([z.string(), z.null()]).optional(),
+}).strict()
+
+const featureOptionFieldsSchema = z.object({
+  group_key: contentKeySchema.optional(),
+  key: contentKeySchema.optional(),
+  name: z.string().min(1).max(160).optional(),
+  description: z.string().optional(),
+  option_order: z.number().int().min(0).optional(),
+  prerequisites: z.record(z.string(), z.unknown()).optional(),
+  effects: z.record(z.string(), z.unknown()).optional(),
   source: z.string().min(1).optional(),
   amended: z.boolean().optional(),
   amendment_note: z.union([z.string(), z.null()]).optional(),
@@ -244,6 +327,127 @@ export const equipmentItemCreateSchema = equipmentItemFieldsSchema.extend({
 export const equipmentItemUpdateSchema = equipmentItemFieldsSchema.extend({
   id: z.string().uuid(),
 })
+
+export const equipmentItemDeleteSchema = z.object({
+  id: z.string().uuid(),
+}).strict()
+
+export const weaponCreateSchema = weaponFieldsSchema.extend({
+  item_id: z.string().uuid(),
+  weapon_category: z.enum(['simple', 'martial']),
+  weapon_kind: z.enum(['melee', 'ranged']),
+  damage_dice: damageDiceSchema,
+  damage_type: z.string().min(1),
+})
+
+export const weaponUpdateSchema = weaponFieldsSchema.extend({
+  item_id: z.string().uuid(),
+})
+
+export const weaponDeleteSchema = z.object({
+  item_id: z.string().uuid(),
+}).strict()
+
+export const armorCreateSchema = armorFieldsSchema.extend({
+  item_id: z.string().uuid(),
+  armor_category: z.enum(['light', 'medium', 'heavy']),
+  base_ac: z.number().int().min(1).max(30),
+  stealth_disadvantage: z.boolean(),
+})
+
+export const armorUpdateSchema = armorFieldsSchema.extend({
+  item_id: z.string().uuid(),
+})
+
+export const armorDeleteSchema = z.object({
+  item_id: z.string().uuid(),
+}).strict()
+
+export const shieldCreateSchema = shieldFieldsSchema.extend({
+  item_id: z.string().uuid(),
+  armor_class_bonus: z.number().int().min(1).max(10),
+})
+
+export const shieldUpdateSchema = shieldFieldsSchema.extend({
+  item_id: z.string().uuid(),
+})
+
+export const shieldDeleteSchema = z.object({
+  item_id: z.string().uuid(),
+}).strict()
+
+export const startingEquipmentPackageCreateSchema = startingEquipmentPackageFieldsSchema.extend({
+  key: contentKeySchema,
+  name: z.string().min(1).max(160),
+  source: z.string().min(1),
+})
+
+export const startingEquipmentPackageUpdateSchema = startingEquipmentPackageFieldsSchema.extend({
+  id: z.string().uuid(),
+})
+
+export const startingEquipmentPackageDeleteSchema = z.object({
+  id: z.string().uuid(),
+}).strict()
+
+export const languageCreateSchema = keyedCatalogFieldsSchema.extend({
+  key: contentKeySchema,
+  name: z.string().min(1).max(100),
+  source: z.string().min(1),
+})
+
+export const languageUpdateSchema = keyedCatalogFieldsSchema.extend({
+  key: contentKeySchema,
+})
+
+export const languageDeleteSchema = z.object({
+  key: contentKeySchema,
+}).strict()
+
+export const toolCreateSchema = keyedCatalogFieldsSchema.extend({
+  key: contentKeySchema,
+  name: z.string().min(1).max(100),
+  source: z.string().min(1),
+})
+
+export const toolUpdateSchema = keyedCatalogFieldsSchema.extend({
+  key: contentKeySchema,
+})
+
+export const toolDeleteSchema = z.object({
+  key: contentKeySchema,
+}).strict()
+
+export const featureOptionGroupCreateSchema = featureOptionGroupFieldsSchema.extend({
+  key: contentKeySchema,
+  name: z.string().min(1).max(160),
+  option_family: z.string().min(1),
+  selection_limit: z.number().int().min(1),
+  source: z.string().min(1),
+})
+
+export const featureOptionGroupUpdateSchema = featureOptionGroupFieldsSchema.extend({
+  key: contentKeySchema,
+})
+
+export const featureOptionGroupDeleteSchema = z.object({
+  key: contentKeySchema,
+}).strict()
+
+export const featureOptionCreateSchema = featureOptionFieldsSchema.extend({
+  group_key: contentKeySchema,
+  key: contentKeySchema,
+  name: z.string().min(1).max(160),
+  source: z.string().min(1),
+})
+
+export const featureOptionUpdateSchema = featureOptionFieldsSchema.extend({
+  id: z.string().uuid(),
+})
+
+export const featureOptionDeleteSchema = z.object({
+  id: z.string().uuid(),
+}).strict()
 
 export const sourceUpdateSchema = z.object({
   original_key: z.string().min(1),

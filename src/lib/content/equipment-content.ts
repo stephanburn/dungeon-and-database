@@ -58,6 +58,30 @@ export type StartingEquipmentPackageEntry = StartingEquipmentPackage & {
   }>
 }
 
+export type ResolvedStartingEquipmentPackageRow = {
+  key: string
+  label: string
+  category: string
+  quantity: number
+  choiceGroup: string | null
+  notes: string | null
+}
+
+export function resolveStartingEquipmentPackageRows(
+  items: StartingEquipmentPackageEntry['items']
+): ResolvedStartingEquipmentPackageRow[] {
+  return [...items]
+    .sort((left, right) => left.item_order - right.item_order)
+    .map((item) => ({
+      key: item.item_key,
+      label: `${item.quantity} x ${item.item_name}`,
+      category: item.item_category,
+      quantity: item.quantity,
+      choiceGroup: item.choice_group || null,
+      notes: item.notes ?? null,
+    }))
+}
+
 export async function listEquipmentItems(
   supabase: SupabaseClient<Database>,
   query: EquipmentQuery = {}

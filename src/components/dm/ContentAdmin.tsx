@@ -17,6 +17,17 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
+import {
+  validateContentImport,
+  type ContentImportBundle,
+  type ContentImportValidationResult,
+} from '../../../scripts/content-import/validator'
+import {
+  CONTENT_IMPORT_STATUS_LABELS,
+  planContentImport,
+  type ContentImportPlan,
+  type ContentImportSnapshot,
+} from '../../../scripts/content-import/import-workflow'
 
 // ── Types ──────────────────────────────────────────────────
 
@@ -30,6 +41,13 @@ type PackageItemFormRow = {
 }
 type FormValue = string | number | boolean | string[] | PackageItemFormRow[]
 type FormState = Record<string, FormValue>
+type PackagePreviewRow = {
+  item_key: string
+  item_name: string
+  item_category: string
+  quantity: number
+  choice_group: string | null
+}
 
 interface ClassRow { id: string; name: string; subclass_choice_level: number }
 interface SourceRow { key: string; full_name: string; is_srd: boolean; rule_set: '2014' | '2024' }
@@ -37,6 +55,7 @@ interface FeatRow { id: string; name: string }
 interface EquipmentItemRow { id: string; key: string; name: string; item_category: string; source: string }
 interface StartingEquipmentPackageRow { id: string; key: string; name: string; source: string }
 interface SpeciesRow { id: string; name: string; lineage_key?: string; variant_type?: string }
+interface FeatureOptionGroupRow { key: string; name: string; option_family: string; source: string }
 
 const STAT_KEYS = ['str', 'dex', 'con', 'int', 'wis', 'cha'] as const
 const STAT_LABELS: Record<string, string> = {
@@ -54,17 +73,19 @@ const READ_ONLY_TABS = new Set<string>()
 function tabLabel(tab: string) {
   if (tab === 'equipment-items') return 'equipment item'
   if (tab === 'starting-equipment-packages') return 'starting equipment package'
+  if (tab === 'feature-option-groups') return 'feature option group'
+  if (tab === 'feature-options') return 'feature option'
   return tab === 'classes' ? 'class' : tab.slice(0, -1)
 }
 
 function getItemIdentifier(tab: string, item: ContentItem) {
-  if (tab === 'sources') return item.key as string
+  if (tab === 'sources' || tab === 'languages' || tab === 'tools' || tab === 'feature-option-groups') return item.key as string
   if (tab === 'weapons' || tab === 'armor' || tab === 'shields') return item.item_id as string
   return item.id as string
 }
 
 function getDeleteParam(tab: string, itemKey: string) {
-  if (tab === 'sources') return `key=${itemKey}`
+  if (tab === 'sources' || tab === 'languages' || tab === 'tools' || tab === 'feature-option-groups') return `key=${itemKey}`
   if (tab === 'weapons' || tab === 'armor' || tab === 'shields') return `item_id=${itemKey}`
   return `id=${itemKey}`
 }
@@ -103,6 +124,10 @@ function defaultForm(tab: string, classes: ClassRow[]): FormState {
   if (tab === 'spells') return { name: '', level: 0, school: '', casting_time: '1 action', range: '', comp_verbal: false, comp_somatic: false, comp_material: false, comp_materials: '', duration: 'Instantaneous', concentration: false, ritual: false, description: '', classes: [] as string[], source: '' }
   if (tab === 'feats') return { name: '', description: '', source: '' }
   if (tab === 'sources') return { key: '', full_name: '', rule_set: '2014' }
+  if (tab === 'languages') return { key: '', name: '', sort_order: 0, source: '' }
+  if (tab === 'tools') return { key: '', name: '', sort_order: 0, source: '' }
+  if (tab === 'feature-option-groups') return { key: '', name: '', option_family: '', description: '', selection_limit: 1, allows_duplicate_selections: false, metadata: '{}', source: '' }
+  if (tab === 'feature-options') return { group_key: '', key: '', name: '', description: '', option_order: 0, prerequisites: '{}', effects: '{}', source: '' }
   if (tab === 'equipment-items') return { key: '', name: '', item_category: 'gear', cost_quantity: 0, cost_unit: 'gp', weight_lb: 0, source: '' }
   if (tab === 'weapons') return { item_id: '', weapon_category: 'simple', weapon_kind: 'melee', damage_dice: '1d6', damage_type: 'slashing', properties: '', normal_range: 0, long_range: 0, versatile_damage: '' }
   if (tab === 'armor') return { item_id: '', armor_category: 'light', base_ac: 11, dex_bonus_cap: 0, minimum_strength: 0, stealth_disadvantage: false }
@@ -210,6 +235,38 @@ function itemToForm(tab: string, item: ContentItem): FormState {
       key: item.key as string,
       full_name: item.full_name as string,
       rule_set: (item.rule_set as '2014' | '2024') ?? '2014',
+    }
+  }
+  if (tab === 'languages' || tab === 'tools') {
+    return {
+      key: item.key as string,
+      name: item.name as string,
+      sort_order: (item.sort_order as number) ?? 0,
+      source: item.source as string,
+    }
+  }
+  if (tab === 'feature-option-groups') {
+    return {
+      key: item.key as string,
+      name: item.name as string,
+      option_family: item.option_family as string,
+      description: (item.description as string) ?? '',
+      selection_limit: (item.selection_limit as number) ?? 1,
+      allows_duplicate_selections: (item.allows_duplicate_selections as boolean) ?? false,
+      metadata: JSON.stringify((item.metadata as Record<string, unknown>) ?? {}, null, 2),
+      source: item.source as string,
+    }
+  }
+  if (tab === 'feature-options') {
+    return {
+      group_key: item.group_key as string,
+      key: item.key as string,
+      name: item.name as string,
+      description: (item.description as string) ?? '',
+      option_order: (item.option_order as number) ?? 0,
+      prerequisites: JSON.stringify((item.prerequisites as Record<string, unknown>) ?? {}, null, 2),
+      effects: JSON.stringify((item.effects as Record<string, unknown>) ?? {}, null, 2),
+      source: item.source as string,
     }
   }
   if (tab === 'equipment-items') {
@@ -375,6 +432,38 @@ function formToPayload(tab: string, form: FormState, classes: ClassRow[] = []): 
   if (tab === 'sources') {
     return { key: form.key, full_name: form.full_name, rule_set: form.rule_set }
   }
+  if (tab === 'languages' || tab === 'tools') {
+    return {
+      key: form.key,
+      name: form.name,
+      sort_order: Number(form.sort_order),
+      source: form.source,
+    }
+  }
+  if (tab === 'feature-option-groups') {
+    return {
+      key: form.key,
+      name: form.name,
+      option_family: form.option_family,
+      description: form.description,
+      selection_limit: Number(form.selection_limit),
+      allows_duplicate_selections: Boolean(form.allows_duplicate_selections),
+      metadata: JSON.parse((form.metadata as string) || '{}'),
+      source: form.source,
+    }
+  }
+  if (tab === 'feature-options') {
+    return {
+      group_key: form.group_key,
+      key: form.key,
+      name: form.name,
+      description: form.description,
+      option_order: Number(form.option_order),
+      prerequisites: JSON.parse((form.prerequisites as string) || '{}'),
+      effects: JSON.parse((form.effects as string) || '{}'),
+      source: form.source,
+    }
+  }
   if (tab === 'equipment-items') {
     return {
       key: form.key,
@@ -433,6 +522,24 @@ function formToPayload(tab: string, form: FormState, classes: ClassRow[] = []): 
   return {}
 }
 
+function resolvePackagePreviewRows(
+  packageItems: PackageItemFormRow[],
+  equipmentItems: EquipmentItemRow[]
+): PackagePreviewRow[] {
+  return [...packageItems]
+    .sort((left, right) => Number(left.item_order) - Number(right.item_order))
+    .map((entry) => {
+      const item = equipmentItems.find((candidate) => candidate.id === entry.item_id)
+      return {
+        item_key: item?.key ?? entry.item_id,
+        item_name: item?.name ?? 'Unresolved item',
+        item_category: item?.item_category ?? 'missing',
+        quantity: Number(entry.quantity) || 0,
+        choice_group: entry.choice_group || null,
+      }
+    })
+}
+
 // ── Table column helpers ───────────────────────────────────
 
 function renderTableHead(tab: string) {
@@ -443,6 +550,9 @@ function renderTableHead(tab: string) {
   if (tab === 'spells') return <><TableHead>Name</TableHead><TableHead>Level</TableHead><TableHead>School</TableHead><TableHead>Source</TableHead></>
   if (tab === 'feats') return <><TableHead>Name</TableHead><TableHead>Source</TableHead></>
   if (tab === 'sources') return <><TableHead>Key</TableHead><TableHead>Full Name</TableHead><TableHead>Rule Set</TableHead></>
+  if (tab === 'languages' || tab === 'tools') return <><TableHead>Name</TableHead><TableHead>Key</TableHead><TableHead>Order</TableHead><TableHead>Source</TableHead></>
+  if (tab === 'feature-option-groups') return <><TableHead>Name</TableHead><TableHead>Family</TableHead><TableHead>Limit</TableHead><TableHead>Source</TableHead></>
+  if (tab === 'feature-options') return <><TableHead>Name</TableHead><TableHead>Group</TableHead><TableHead>Order</TableHead><TableHead>Source</TableHead></>
   if (tab === 'equipment-items') return <><TableHead>Name</TableHead><TableHead>Category</TableHead><TableHead>Cost</TableHead><TableHead>Source</TableHead></>
   if (tab === 'weapons') return <><TableHead>Name</TableHead><TableHead>Category</TableHead><TableHead>Damage</TableHead><TableHead>Properties</TableHead></>
   if (tab === 'armor') return <><TableHead>Name</TableHead><TableHead>Category</TableHead><TableHead>AC</TableHead><TableHead>Source</TableHead></>
@@ -462,6 +572,9 @@ function renderTableCells(tab: string, item: ContentItem, classes: ClassRow[]) {
   if (tab === 'spells') return <><TableCell className="font-medium">{item.name as string}</TableCell><TableCell className="text-neutral-400 text-sm">{LEVEL_LABELS[item.level as number]}</TableCell><TableCell className="text-neutral-400 text-sm">{item.school as string}</TableCell><TableCell className="text-neutral-400 text-sm">{item.source as string}</TableCell></>
   if (tab === 'feats') return <><TableCell className="font-medium">{item.name as string}</TableCell><TableCell className="text-neutral-400 text-sm">{item.source as string}</TableCell></>
   if (tab === 'sources') return <><TableCell className="font-medium font-mono">{item.key as string}</TableCell><TableCell className="text-neutral-400 text-sm">{item.full_name as string}</TableCell><TableCell className="text-neutral-400 text-sm">{item.rule_set as string}</TableCell></>
+  if (tab === 'languages' || tab === 'tools') return <><TableCell className="font-medium">{item.name as string}</TableCell><TableCell className="text-neutral-400 text-sm font-mono">{item.key as string}</TableCell><TableCell className="text-neutral-400 text-sm">{item.sort_order as number}</TableCell><TableCell className="text-neutral-400 text-sm">{item.source as string}</TableCell></>
+  if (tab === 'feature-option-groups') return <><TableCell className="font-medium">{item.name as string}</TableCell><TableCell className="text-neutral-400 text-sm">{item.option_family as string}</TableCell><TableCell className="text-neutral-400 text-sm">{item.selection_limit as number}</TableCell><TableCell className="text-neutral-400 text-sm">{item.source as string}</TableCell></>
+  if (tab === 'feature-options') return <><TableCell className="font-medium">{item.name as string}</TableCell><TableCell className="text-neutral-400 text-sm font-mono">{item.group_key as string}</TableCell><TableCell className="text-neutral-400 text-sm">{item.option_order as number}</TableCell><TableCell className="text-neutral-400 text-sm">{item.source as string}</TableCell></>
   if (tab === 'equipment-items') return <><TableCell className="font-medium">{item.name as string}</TableCell><TableCell className="text-neutral-400 text-sm capitalize">{String(item.item_category ?? '—')}</TableCell><TableCell className="text-neutral-400 text-sm">{item.cost_quantity as number} {item.cost_unit as string}</TableCell><TableCell className="text-neutral-400 text-sm">{item.source as string}</TableCell></>
   if (tab === 'weapons') return <><TableCell className="font-medium">{item.name as string}</TableCell><TableCell className="text-neutral-400 text-sm capitalize">{item.weapon_category as string} {item.weapon_kind as string}</TableCell><TableCell className="text-neutral-400 text-sm">{item.damage_dice as string} {(item.damage_type as string) === 'none' ? '' : item.damage_type as string}</TableCell><TableCell className="text-neutral-400 text-sm">{((item.properties as string[]) ?? []).join(', ') || '—'}</TableCell></>
   if (tab === 'armor') return <><TableCell className="font-medium">{item.name as string}</TableCell><TableCell className="text-neutral-400 text-sm capitalize">{item.armor_category as string}</TableCell><TableCell className="text-neutral-400 text-sm">{item.base_ac as number}{item.dex_bonus_cap == null ? ' + DEX' : item.dex_bonus_cap === 0 ? '' : ` + DEX (max ${item.dex_bonus_cap as number})`}</TableCell><TableCell className="text-neutral-400 text-sm">{item.source as string}</TableCell></>
@@ -482,10 +595,11 @@ interface FormProps {
   equipmentItems: EquipmentItemRow[]
   startingPackages: StartingEquipmentPackageRow[]
   speciesRows: SpeciesRow[]
+  featureOptionGroups: FeatureOptionGroupRow[]
   autoFocusFirst?: boolean
 }
 
-function ContentForm({ tab, form, setField, classes, sources, feats, equipmentItems, startingPackages, speciesRows, autoFocusFirst }: FormProps) {
+function ContentForm({ tab, form, setField, classes, sources, feats, equipmentItems, startingPackages, speciesRows, featureOptionGroups, autoFocusFirst }: FormProps) {
   let firstFieldRendered = false
 
   const field = (label: string, key: string, type: 'text' | 'number' = 'text', placeholder?: string) => {
@@ -538,6 +652,7 @@ function ContentForm({ tab, form, setField, classes, sources, feats, equipmentIt
   const armorItems = equipmentItems.filter((item) => item.item_category === 'armor')
   const shieldItems = equipmentItems.filter((item) => item.item_category === 'shield')
   const packageItems = (form.package_items as PackageItemFormRow[] | undefined) ?? []
+  const packagePreviewRows = resolvePackagePreviewRows(packageItems, equipmentItems)
 
   function updatePackageItem(index: number, fieldName: keyof PackageItemFormRow, value: string | number) {
     const next = packageItems.map((entry, itemIndex) => (
@@ -947,6 +1062,103 @@ function ContentForm({ tab, form, setField, classes, sources, feats, equipmentIt
     </div>
   )
 
+  if (tab === 'languages' || tab === 'tools') return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-4">
+        {field('Key', 'key', 'text', tab === 'languages' ? 'giant_eagle' : 'glassblowers_tools')}
+        {sourceSelect}
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        {field('Name', 'name', 'text', tab === 'languages' ? 'Giant Eagle' : "Glassblower's Tools")}
+        {field('Sort Order', 'sort_order', 'number')}
+      </div>
+    </div>
+  )
+
+  if (tab === 'feature-option-groups') return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-4">
+        {field('Key', 'key', 'text', 'fighter:fighting_style')}
+        {sourceSelect}
+      </div>
+      <div className="grid grid-cols-3 gap-4">
+        {field('Name', 'name', 'text', 'Fighting Style')}
+        {field('Family', 'option_family', 'text', 'class_feature')}
+        {field('Selection Limit', 'selection_limit', 'number')}
+      </div>
+      <div className="flex items-end pb-1">
+        {check('Allow duplicate selections', 'allows_duplicate_selections')}
+      </div>
+      <div>
+        <Label className="text-neutral-400 text-xs mb-1 block">Description</Label>
+        <Textarea
+          value={form.description as string}
+          onChange={event => setField('description', event.target.value)}
+          rows={3}
+        />
+      </div>
+      <div>
+        <Label className="text-neutral-400 text-xs mb-1 block">Metadata (JSON)</Label>
+        <Textarea
+          value={form.metadata as string}
+          onChange={event => setField('metadata', event.target.value)}
+          rows={5}
+        />
+      </div>
+    </div>
+  )
+
+  if (tab === 'feature-options') return (
+    <div className="space-y-4">
+      <div>
+        <Label className="text-neutral-400 text-xs mb-1 block">Group</Label>
+        <Select value={(form.group_key as string) || 'none'} onValueChange={value => setField('group_key', value === 'none' ? '' : value)}>
+          <SelectTrigger><SelectValue placeholder="Select group" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none" className="text-neutral-400">Select group</SelectItem>
+            {featureOptionGroups.map((group) => (
+              <SelectItem key={group.key} value={group.key} className="text-neutral-200">
+                {group.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="grid grid-cols-3 gap-4">
+        {field('Key', 'key', 'text', 'defense')}
+        {field('Name', 'name', 'text', 'Defense')}
+        {field('Order', 'option_order', 'number')}
+      </div>
+      <div>
+        <Label className="text-neutral-400 text-xs mb-1 block">Description</Label>
+        <Textarea
+          value={form.description as string}
+          onChange={event => setField('description', event.target.value)}
+          rows={3}
+        />
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <Label className="text-neutral-400 text-xs mb-1 block">Prerequisites (JSON)</Label>
+          <Textarea
+            value={form.prerequisites as string}
+            onChange={event => setField('prerequisites', event.target.value)}
+            rows={5}
+          />
+        </div>
+        <div>
+          <Label className="text-neutral-400 text-xs mb-1 block">Effects (JSON)</Label>
+          <Textarea
+            value={form.effects as string}
+            onChange={event => setField('effects', event.target.value)}
+            rows={5}
+          />
+        </div>
+      </div>
+      {sourceSelect}
+    </div>
+  )
+
   if (tab === 'equipment-items') return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-4">
@@ -1115,7 +1327,7 @@ function ContentForm({ tab, form, setField, classes, sources, feats, equipmentIt
         {packageItems.length === 0 ? (
           <p className="text-sm text-neutral-500">No items yet.</p>
         ) : packageItems.map((entry, index) => (
-          <div key={`${entry.item_id}-${index}`} className="rounded-2xl border border-white/10 p-3 space-y-3">
+          <div key={`${entry.item_id}-${index}`} className="surface-row p-3 space-y-3">
             <div className="grid grid-cols-1 gap-4">
               <div>
                 <Label className="text-neutral-400 text-xs mb-1 block">Item</Label>
@@ -1158,6 +1370,26 @@ function ContentForm({ tab, form, setField, classes, sources, feats, equipmentIt
           </div>
         ))}
       </div>
+      {packagePreviewRows.length > 0 && (
+        <details className="surface-section">
+          <summary className="cursor-pointer text-sm font-medium text-neutral-200">
+            Package preview
+          </summary>
+          <div className="mt-3 space-y-2">
+            {packagePreviewRows.map((entry, index) => (
+              <div key={`${entry.item_key}-${index}`} className="surface-row flex items-center justify-between gap-3 p-3">
+                <div>
+                  <p className="text-sm font-medium text-neutral-100">{entry.quantity} x {entry.item_name}</p>
+                  <p className="text-xs text-neutral-500">{entry.item_key} / {entry.item_category}</p>
+                </div>
+                {entry.choice_group && (
+                  <span className="text-xs text-neutral-400">{entry.choice_group}</span>
+                )}
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
     </div>
   )
 
@@ -1166,8 +1398,161 @@ function ContentForm({ tab, form, setField, classes, sources, feats, equipmentIt
 
 // ── Main component ─────────────────────────────────────────
 
-const TABS = ['backgrounds', 'species', 'classes', 'subclasses', 'spells', 'feats', 'sources', 'equipment-items', 'weapons', 'armor', 'shields', 'starting-equipment-packages'] as const
+const TABS = ['backgrounds', 'species', 'classes', 'subclasses', 'spells', 'feats', 'sources', 'languages', 'tools', 'feature-option-groups', 'feature-options', 'equipment-items', 'weapons', 'armor', 'shields', 'starting-equipment-packages'] as const
 type Tab = typeof TABS[number]
+
+function buildValidationBundle(
+  tab: Tab,
+  payload: ContentItem,
+  featureOptionGroups: FeatureOptionGroupRow[],
+  equipmentItems: EquipmentItemRow[]
+): ContentImportBundle {
+  const equipmentBundleRows = equipmentItems.map((item) => ({
+    key: item.key,
+    name: item.name,
+    source: item.source,
+    item_category: item.item_category,
+  }))
+
+  if (tab === 'languages') {
+    return {
+      languages: [{
+        key: payload.key as string,
+        name: payload.name as string,
+        source: payload.source as string,
+      }],
+    }
+  }
+
+  if (tab === 'tools') {
+    return {
+      tools: [{
+        key: payload.key as string,
+        name: payload.name as string,
+        source: payload.source as string,
+      }],
+    }
+  }
+
+  if (tab === 'feature-option-groups') {
+    return {
+      classes: [{ key: '__admin_preview__', name: 'Admin Preview', source: payload.source as string, progression: [{ level: 1, proficiency_bonus: 2 }] }],
+      featureOptionGroups: [{
+        key: payload.key as string,
+        label: payload.name as string,
+        source: payload.source as string,
+        owner_table: 'classes',
+        owner_key: '__admin_preview__',
+      }],
+    }
+  }
+
+  if (tab === 'feature-options') {
+    const source = (payload.source as string) || 'PHB'
+    return {
+      classes: [{ key: '__admin_preview__', name: 'Admin Preview', source, progression: [{ level: 1, proficiency_bonus: 2 }] }],
+      featureOptionGroups: [
+        ...featureOptionGroups.map((group) => ({
+          key: group.key,
+          label: group.name,
+          source: group.source,
+          owner_table: 'classes' as const,
+          owner_key: '__admin_preview__',
+        })),
+        {
+          key: payload.group_key as string,
+          label: String(payload.group_key ?? ''),
+          source,
+          owner_table: 'classes' as const,
+          owner_key: '__admin_preview__',
+        },
+      ],
+      featureOptions: [{
+        key: payload.key as string,
+        group_key: payload.group_key as string,
+        label: payload.name as string,
+        source,
+      }],
+    }
+  }
+
+  if (tab === 'equipment-items') {
+    return {
+      equipmentItems: [{
+        key: payload.key as string,
+        name: payload.name as string,
+        source: payload.source as string,
+        item_category: payload.item_category as string,
+      }],
+    }
+  }
+
+  if (tab === 'weapons' || tab === 'armor' || tab === 'shields') {
+    const item = equipmentItems.find((candidate) => candidate.id === payload.item_id)
+    return {
+      equipmentItems: item ? [{
+        key: item.key,
+        name: item.name,
+        source: item.source,
+        item_category: item.item_category,
+      }] : [],
+    }
+  }
+
+  if (tab === 'starting-equipment-packages') {
+    const items = ((payload.items as Array<{ item_id: string; quantity: number }> | undefined) ?? []).map((entry) => {
+      const item = equipmentItems.find((candidate) => candidate.id === entry.item_id)
+      return {
+        item_key: item?.key ?? entry.item_id,
+        quantity: Number(entry.quantity) || 0,
+      }
+    })
+
+    return {
+      equipmentItems: equipmentBundleRows,
+      startingEquipmentPackages: [{
+        key: payload.key as string,
+        name: payload.name as string,
+        source: payload.source as string,
+        items,
+      }],
+    }
+  }
+
+  return {}
+}
+
+function buildContentImportSnapshot(
+  activeTab: Tab,
+  items: ContentItem[],
+  sources: SourceRow[],
+  equipmentItems: EquipmentItemRow[],
+  featureOptionGroups: FeatureOptionGroupRow[]
+): ContentImportSnapshot {
+  return {
+    sources: sources.map((source) => ({
+      key: source.key,
+      name: source.full_name,
+      full_name: source.full_name,
+    })),
+    languages: activeTab === 'languages' ? items as ContentImportSnapshot['languages'] : [],
+    tools: activeTab === 'tools' ? items as ContentImportSnapshot['tools'] : [],
+    equipment_items: equipmentItems.map((item) => ({
+      key: item.key,
+      name: item.name,
+      item_category: item.item_category,
+      source: item.source,
+    })),
+    feature_option_groups: featureOptionGroups.map((group) => ({
+      key: group.key,
+      name: group.name,
+      option_family: group.option_family,
+      source: group.source,
+    })),
+    feature_options: activeTab === 'feature-options' ? items as ContentImportSnapshot['feature_options'] : [],
+    starting_equipment_packages: activeTab === 'starting-equipment-packages' ? items as ContentImportSnapshot['starting_equipment_packages'] : [],
+  }
+}
 
 export default function ContentAdmin() {
   const [activeTab, setActiveTab] = useState<Tab>('backgrounds')
@@ -1177,11 +1562,16 @@ export default function ContentAdmin() {
   const [feats, setFeats] = useState<FeatRow[]>([])
   const [equipmentItems, setEquipmentItems] = useState<EquipmentItemRow[]>([])
   const [startingPackages, setStartingPackages] = useState<StartingEquipmentPackageRow[]>([])
+  const [featureOptionGroups, setFeatureOptionGroups] = useState<FeatureOptionGroupRow[]>([])
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [form, setForm] = useState<FormState>({})
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [validationPreview, setValidationPreview] = useState<ContentImportValidationResult | null>(null)
+  const [contentImportText, setContentImportText] = useState('')
+  const [contentImportPreview, setContentImportPreview] = useState<ContentImportPlan | null>(null)
+  const [contentImportError, setContentImportError] = useState<string | null>(null)
 
   const apiUrl = useCallback((tab: Tab) =>
     tab === 'subclasses' ? '/api/content/subclasses' : `/api/content/${tab}`
@@ -1217,19 +1607,25 @@ export default function ContentAdmin() {
       .then(d => setStartingPackages(Array.isArray(d) ? d : []))
   }, [])
 
+  const fetchFeatureOptionGroups = useCallback(() => {
+    fetch('/api/content/feature-option-groups').then(r => r.json()).then(d => setFeatureOptionGroups(Array.isArray(d) ? d : []))
+  }, [])
+
   useEffect(() => {
     fetchClasses()
     fetchSources()
     fetchFeats()
     fetchEquipmentItems()
     fetchStartingPackages()
-  }, [fetchClasses, fetchSources, fetchFeats, fetchEquipmentItems, fetchStartingPackages])
+    fetchFeatureOptionGroups()
+  }, [fetchClasses, fetchSources, fetchFeats, fetchEquipmentItems, fetchStartingPackages, fetchFeatureOptionGroups])
 
   useEffect(() => {
     fetchItems(activeTab)
     setShowForm(false)
     setEditingId(null)
     setError(null)
+    setValidationPreview(null)
   }, [activeTab, fetchItems])
 
   function setField(key: string, value: FormValue) {
@@ -1241,6 +1637,7 @@ export default function ContentAdmin() {
     setForm(defaultForm(activeTab, classes))
     setShowForm(true)
     setError(null)
+    setValidationPreview(null)
   }
 
   function startEdit(item: ContentItem) {
@@ -1248,12 +1645,38 @@ export default function ContentAdmin() {
     setForm(itemToForm(activeTab, item))
     setShowForm(true)
     setError(null)
+    setValidationPreview(null)
   }
 
   function cancel() {
     setShowForm(false)
     setEditingId(null)
     setError(null)
+    setValidationPreview(null)
+  }
+
+  function previewValidation(payload = formToPayload(activeTab, form, classes)) {
+    const preview = validateContentImport(buildValidationBundle(activeTab, payload, featureOptionGroups, equipmentItems))
+    setValidationPreview(preview)
+    return preview
+  }
+
+  function previewContentImport() {
+    setContentImportError(null)
+    try {
+      const bundle = JSON.parse(contentImportText || '{}') as ContentImportBundle
+      const preview = planContentImport(
+        bundle,
+        buildContentImportSnapshot(activeTab, items, sources, equipmentItems, featureOptionGroups),
+        { retireMissing: true }
+      )
+      setContentImportPreview(preview)
+      return preview
+    } catch (e) {
+      setContentImportPreview(null)
+      setContentImportError(e instanceof Error ? e.message : 'Import fixture could not be read.')
+      return null
+    }
   }
 
   async function save() {
@@ -1261,6 +1684,8 @@ export default function ContentAdmin() {
     setError(null)
     try {
       const payload = formToPayload(activeTab, form, classes)
+      const preview = previewValidation(payload)
+      if (!preview.ok) throw new Error('Resolve validation findings before saving.')
       const url = apiUrl(activeTab)
       if (editingId) {
         if (activeTab === 'sources') {
@@ -1282,6 +1707,7 @@ export default function ContentAdmin() {
       if (activeTab === 'feats') fetchFeats()
       if (activeTab === 'equipment-items') fetchEquipmentItems()
       if (activeTab === 'starting-equipment-packages') fetchStartingPackages()
+      if (activeTab === 'feature-option-groups') fetchFeatureOptionGroups()
       cancel()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Save failed')
@@ -1332,6 +1758,61 @@ export default function ContentAdmin() {
         </TabsList>
       </div>
 
+      <details className="surface-section mb-4">
+        <summary className="cursor-pointer text-sm font-medium text-neutral-200">
+          Import diff
+        </summary>
+        <div className="mt-3 space-y-3">
+          <Textarea
+            aria-label="Import fixture"
+            value={contentImportText}
+            onChange={e => setContentImportText(e.target.value)}
+            rows={5}
+          />
+          {contentImportError && <p className="text-sm text-red-400">{contentImportError}</p>}
+          {contentImportPreview && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-2 text-xs text-neutral-400 sm:grid-cols-4">
+                <span>Create {contentImportPreview.summary.create}</span>
+                <span>Update {contentImportPreview.summary.update}</span>
+                <span>No change {contentImportPreview.summary.noOp}</span>
+                <span>Retire {contentImportPreview.summary.retire}</span>
+              </div>
+              {!contentImportPreview.ok ? (
+                <details className="surface-section">
+                  <summary className="cursor-pointer text-sm font-medium text-neutral-200">
+                    Validation findings
+                  </summary>
+                  <div className="mt-3 space-y-2">
+                    {contentImportPreview.validation.errors.map((finding) => (
+                      <div key={`${finding.table}-${finding.entityKey}-${finding.code}`} className="surface-row p-3">
+                        <p className="text-sm font-medium text-neutral-100">{finding.table}: {finding.entityKey}</p>
+                        <p className="text-xs text-neutral-400">{finding.message}</p>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              ) : (
+                <div className="space-y-2">
+                  {contentImportPreview.rows.map((row) => (
+                    <div key={`${row.table}-${row.key}-${row.status}`} className="surface-row flex items-center justify-between gap-3 p-3">
+                      <div>
+                        <p className="text-sm font-medium text-neutral-100">{row.label}</p>
+                        <p className="text-xs text-neutral-500">{row.table} / {row.key} / {row.source ?? 'source'}</p>
+                      </div>
+                      <span className="text-xs text-neutral-300">{CONTENT_IMPORT_STATUS_LABELS[row.status]}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          <Button size="sm" variant="outline" type="button" onClick={previewContentImport}>
+            Preview
+          </Button>
+        </div>
+      </details>
+
       {TABS.map(tab => (
         <TabsContent key={tab} value={tab} className="mt-0 space-y-4">
           {showForm && activeTab === tab && (
@@ -1349,10 +1830,33 @@ export default function ContentAdmin() {
                 equipmentItems={equipmentItems}
                 startingPackages={startingPackages}
                 speciesRows={speciesRows}
+                featureOptionGroups={featureOptionGroups}
                 autoFocusFirst={!editingId}
               />
               {error && <p className="text-sm text-red-400">{error}</p>}
+              {validationPreview && (
+                <details className="surface-section">
+                  <summary className="cursor-pointer text-sm font-medium text-neutral-200">
+                    Validation preview
+                  </summary>
+                  {validationPreview.ok ? (
+                    <p className="mt-3 text-sm text-emerald-300">Ready to save.</p>
+                  ) : (
+                    <div className="mt-3 space-y-2">
+                      {validationPreview.errors.map((finding) => (
+                        <div key={`${finding.table}-${finding.entityKey}-${finding.code}`} className="surface-row p-3">
+                          <p className="text-sm font-medium text-neutral-100">{finding.table}: {finding.entityKey}</p>
+                          <p className="text-xs text-neutral-400">{finding.message}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </details>
+              )}
               <div className="flex gap-2">
+                <Button size="sm" variant="outline" type="button" onClick={() => previewValidation()} disabled={saving}>
+                  Preview
+                </Button>
                 <Button size="sm" onClick={save} disabled={saving}>
                   {saving ? 'Saving…' : 'Save'}
                 </Button>

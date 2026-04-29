@@ -1,6 +1,17 @@
 import type { AbilityKey } from '@/lib/characters/build-context'
 import { SAVING_THROW_NAMES, SKILLS, normalizeSkillKey, type SkillKey } from '@/lib/skills'
-import type { Sense, SizeCategory } from '@/lib/types/database'
+import type { Sense, SizeCategory, SpellcastingProgression, SpellcastingType } from '@/lib/types/database'
+import type { FeatSlotDefinition } from '@/lib/characters/feat-slots'
+import {
+  getMaverickCantripBonus,
+  getMaverickPreparedBreakthroughLevels,
+  isMaverickSubclass,
+} from '@/lib/characters/maverick'
+import {
+  buildSpellSelectionSummary,
+  resolveLeveledSpellSelectionCap,
+  resolvePreparedSpellCap,
+} from '@/lib/characters/spell-selection'
 
 export interface CharacterAggregateClass {
   classId: string
@@ -135,6 +146,213 @@ export interface DerivedGrantedNonSkillProficiencies {
   weapons: DerivedGrantedProficiencyEntry[]
   tools: DerivedGrantedProficiencyEntry[]
   languages: DerivedGrantedProficiencyEntry[]
+}
+
+export type DerivedSpellSelectionMode = 'prepared' | 'known' | 'spellbook' | 'none'
+
+export type DerivedSpellDisplayCategory = 'known' | 'prepared' | 'spellbook' | 'granted'
+
+export interface DerivedSelectedSpellSummary {
+  id: string
+  name: string
+  level: number
+  source: string
+  granted: boolean
+  countsAgainstSelectionLimit: boolean
+  sourceFeatureKey: string | null
+  category: DerivedSpellDisplayCategory
+  grantLabel: string | null
+}
+
+export interface DerivedSpellcastingSourceSummary {
+  classId: string
+  className: string
+  classLevel: number
+  spellcastingType: SpellcastingType | null
+  mode: DerivedSpellSelectionMode
+  spellcastingAbility: AbilityKey | null
+  spellcastingAbilityModifier: number | null
+  spellSaveDc: number | null
+  spellAttackModifier: number | null
+  cantripSelectionCap: number | null
+  leveledSpellSelectionCap: number
+  selectionSummary: string | null
+  selectedSpellCountsByLevel: Record<number, number>
+  selectedSpells: DerivedSelectedSpellSummary[]
+  knownSpells: DerivedSelectedSpellSummary[]
+  preparedSpells: DerivedSelectedSpellSummary[]
+  spellbookSpells: DerivedSelectedSpellSummary[]
+  grantedSpells: DerivedSelectedSpellSummary[]
+}
+
+export interface DerivedSpellcastingSummary {
+  className: string | null
+  mode: DerivedSpellSelectionMode
+  maxSpellLevel: number
+  spellSlots: number[]
+  pactSpellSlots: Array<{ classId: string; className: string; slots: number[] }>
+  cantripSelectionCap: number | null
+  leveledSpellSelectionCap: number
+  selectionSummary: string | null
+  selectedSpells: DerivedSelectedSpellSummary[]
+  selectedSpellCountsByLevel: Record<number, number>
+  freePreparedSpellIds: string[]
+  grantedSpellIds: string[]
+  sources: DerivedSpellcastingSourceSummary[]
+  grantedSpells: DerivedSelectedSpellSummary[]
+}
+
+export type DerivedSavingThrowSummary = DerivedSheetSavingThrow
+
+export interface DerivedSkillSummary {
+  key: SkillKey
+  name: string
+  ability: AbilityKey
+  proficient: boolean
+  modifier: number
+}
+
+export interface DerivedProficiencySummary {
+  skills: string[]
+  savingThrows: string[]
+  armor: string[]
+  weapons: string[]
+  tools: string[]
+  all: string[]
+}
+
+export interface DerivedAcSummary {
+  value: number
+  formula: string
+  alternatives?: Array<{
+    label: string
+    value: number
+    formula: string
+  }>
+}
+
+export interface DerivedSubclassState {
+  classId: string
+  className: string
+  currentLevel: number
+  requiredAt: number
+  subclassId: string | null
+  subclassName: string | null
+  status: 'not_yet_available' | 'available_unselected' | 'selected' | 'selected_too_early'
+}
+
+export interface DerivedFeatureSummary {
+  classId: string
+  className: string
+  level: number
+  name: string
+  subclassName: string | null
+  sourceType: 'class' | 'subclass'
+  sourceLabel: string
+  description: string | null
+  source: string | null
+  amended: boolean
+  amendmentNote: string | null
+}
+
+export interface DerivedSpeciesTraitSummary {
+  id: string
+  name: string
+  description: string
+  source: string
+}
+
+export interface DerivedClassResourceSummary {
+  id: string
+  label: string
+  value: string
+  detail: string
+  recharge: string | null
+  sourceLabel: string
+}
+
+export interface DerivedAsiFeatHistoryEntry {
+  id: string
+  type: 'asi' | 'feat'
+  label: string
+  detail: string
+  classId: string | null
+  className: string | null
+  levelNumber: number | null
+  takenAt: string | null
+  sourceFeatureKey: string | null
+}
+
+export interface DerivedCombatActionSummary {
+  id: string
+  name: string
+  category: 'maneuver' | 'hunter' | 'discipline' | 'trait'
+  sourceLabel: string
+  trigger: string | null
+  effect: string
+  cost: string | null
+  saveDc: number | null
+}
+
+export interface DerivedIssueSummary {
+  key: string
+  message: string
+  severity: 'error' | 'warning'
+}
+
+export type DerivedCharacter = DerivedCharacterCore & {
+  classCount: number
+  totalAsiSlots: number
+  featSlots: FeatSlotDefinition[]
+  featSlotLabels: string[]
+  multiclassCasterLevel: number
+  spellSlots: number[]
+  spellLevelCaps: Record<number, number>
+  leveledSpellSelectionCap: number
+  cantripSelectionCap: number | null
+  spellSelectionMode: DerivedSpellSelectionMode
+  spellSelectionClassName: string | null
+  spellSelectionSummary: string | null
+  pactSpellSlots: Array<{ classId: string; className: string; slots: number[] }>
+  maxSpellLevel: number
+  unlockedFeatures: string[]
+  subclassRequirements: Array<{
+    classId: string
+    className: string
+    currentLevel: number
+    requiredAt: number
+    subclassId: string | null
+    subclassName: string | null
+    subclassRequired: boolean
+    missingRequiredSubclass: boolean
+    selectedTooEarly: boolean
+  }>
+  choiceCaps: {
+    featSlots: number
+    backgroundSkillChoices: number
+    classSkillChoices: number
+  }
+  savingThrows: DerivedSavingThrowSummary[]
+  skills: DerivedSkillSummary[]
+  proficiencies: DerivedProficiencySummary
+  initiative: number
+  passivePerception: number
+  speed: number | null
+  size: SizeCategory | null
+  languages: string[]
+  speciesTraits: DerivedSpeciesTraitSummary[]
+  senses: Sense[]
+  damageResistances: string[]
+  conditionImmunities: string[]
+  armorClass: DerivedAcSummary
+  subclassStates: DerivedSubclassState[]
+  features: DerivedFeatureSummary[]
+  classResources: DerivedClassResourceSummary[]
+  asiFeatHistory: DerivedAsiFeatHistoryEntry[]
+  combatActions: DerivedCombatActionSummary[]
+  spellcasting: DerivedSpellcastingSummary
+  blockingIssues: DerivedIssueSummary[]
+  warnings: DerivedIssueSummary[]
 }
 
 export interface DerivedAbilityScoreContributor {
@@ -345,6 +563,257 @@ export function deriveCharacterCore(aggregate: CharacterAggregate): DerivedChara
         value: cls.hpRoll,
       })),
     },
+  }
+}
+
+export interface SpellcastingClassInput {
+  classId: string
+  className: string
+  classLevel: number
+  spellcastingType: SpellcastingType | null
+  spellcastingProgression: SpellcastingProgression | null
+  subclass: { id: string; name: string; source: string } | null
+}
+
+export interface SpellcastingSpellInput {
+  id: string
+  name: string
+  level: number
+  source: string
+  classes: string[]
+  grantedBySubclassIds: string[]
+  countsAgainstSelectionLimit: boolean
+  sourceFeatureKey: string | null
+}
+
+export interface DeriveSpellcastingSummaryArgs {
+  classes: SpellcastingClassInput[]
+  selectedSpells: SpellcastingSpellInput[]
+  grantedSpellIds: string[]
+  freePreparedSpellIds: string[]
+  progression: {
+    spellSelectionMode: DerivedSpellSelectionMode
+    spellSelectionClassName: string | null
+    spellSelectionSummary: string | null
+    maxSpellLevel: number
+    spellSlots: number[]
+    pactSpellSlots: Array<{ classId: string; className: string; slots: number[] }>
+    cantripSelectionCap: number | null
+    leveledSpellSelectionCap: number
+  }
+  adjustedScores: Record<AbilityKey, number>
+  proficiencyBonus: number
+}
+
+function titleCaseFeaturePart(value: string) {
+  return value
+    .split(/[_-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ')
+}
+
+function spellGrantLabel(sourceFeatureKey: string | null) {
+  if (!sourceFeatureKey) return null
+
+  if (sourceFeatureKey.startsWith('feat_spell:')) {
+    const [, , ...choiceParts] = sourceFeatureKey.split(':')
+    const choiceLabel = titleCaseFeaturePart(choiceParts.join(' '))
+    return choiceLabel ? `Feat spell: ${choiceLabel}` : 'Feat spell'
+  }
+
+  if (sourceFeatureKey.startsWith('feature_spell:')) {
+    const [, category, ...featureParts] = sourceFeatureKey.split(':')
+    const featureLabel = titleCaseFeaturePart(featureParts.join(' '))
+    const categoryLabel = titleCaseFeaturePart(category)
+    return featureLabel ? `${categoryLabel} feature: ${featureLabel}` : `${categoryLabel} feature`
+  }
+
+  if (sourceFeatureKey.startsWith('species_trait:')) {
+    return `Species trait: ${titleCaseFeaturePart(sourceFeatureKey.replace(/^species_trait:/, ''))}`
+  }
+
+  if (sourceFeatureKey.startsWith('subclass_feature:')) {
+    const [, , ...featureParts] = sourceFeatureKey.split(':')
+    return `Subclass feature: ${titleCaseFeaturePart(featureParts.join(' '))}`
+  }
+
+  if (sourceFeatureKey.startsWith('class_feature:')) {
+    const [, ...featureParts] = sourceFeatureKey.split(':')
+    return `Class feature: ${titleCaseFeaturePart(featureParts.join(' '))}`
+  }
+
+  return titleCaseFeaturePart(sourceFeatureKey)
+}
+
+function spellDisplayCategory(
+  spell: Pick<SpellcastingSpellInput, 'level'>,
+  mode: DerivedSpellSelectionMode,
+  granted: boolean
+): DerivedSpellDisplayCategory {
+  if (granted) return 'granted'
+  if (spell.level === 0) return 'known'
+  if (mode === 'spellbook') return 'spellbook'
+  if (mode === 'prepared') return 'prepared'
+  return 'known'
+}
+
+function countSelectedSpellsByLevel(spells: DerivedSelectedSpellSummary[]): Record<number, number> {
+  return Object.fromEntries(
+    Array.from({ length: 10 }, (_, level) => [
+      level,
+      spells.filter((spell) => spell.level === level && spell.countsAgainstSelectionLimit).length,
+    ]).filter(([, count]) => count > 0)
+  )
+}
+
+export function deriveSpellcastingSummary(args: DeriveSpellcastingSummaryArgs): DerivedSpellcastingSummary {
+  const {
+    classes,
+    selectedSpells,
+    grantedSpellIds,
+    freePreparedSpellIds,
+    progression,
+    adjustedScores,
+    proficiencyBonus,
+  } = args
+  const spellSourceMode = (spell: SpellcastingSpellInput): DerivedSpellSelectionMode => {
+    const owningClass = classes.find((cls) =>
+      spell.classes.includes(cls.classId) ||
+      spell.grantedBySubclassIds.includes(cls.subclass?.id ?? '')
+    )
+    return owningClass?.spellcastingProgression?.mode ?? progression.spellSelectionMode
+  }
+  const firstSpellcastingClassId = classes.find(
+    (cls) => cls.spellcastingType && cls.spellcastingType !== 'none' && cls.spellcastingProgression?.mode && cls.spellcastingProgression.mode !== 'none'
+  )?.classId ?? null
+  const activeClassIds = new Set(classes.map((cls) => cls.classId))
+
+  const selectedSpellEntries = selectedSpells
+    .filter((spell) =>
+      spell.level === 0 ||
+      spell.level <= progression.maxSpellLevel ||
+      grantedSpellIds.includes(spell.id) ||
+      freePreparedSpellIds.includes(spell.id)
+    )
+    .map((spell) => {
+      const granted = grantedSpellIds.includes(spell.id) || freePreparedSpellIds.includes(spell.id)
+      const category = spellDisplayCategory(spell, spellSourceMode(spell), granted)
+      return {
+        id: spell.id,
+        name: spell.name,
+        level: spell.level,
+        source: spell.source,
+        granted,
+        countsAgainstSelectionLimit: spell.countsAgainstSelectionLimit,
+        sourceFeatureKey: spell.sourceFeatureKey,
+        category,
+        grantLabel: granted ? spellGrantLabel(spell.sourceFeatureKey) : null,
+      }
+    })
+
+  const selectedSpellCountsByLevel = countSelectedSpellsByLevel(selectedSpellEntries)
+  const sources: DerivedSpellcastingSourceSummary[] = classes.flatMap((cls) => {
+    const profile = cls.spellcastingProgression
+    if (!cls.spellcastingType || cls.spellcastingType === 'none' || !profile || !profile.mode || profile.mode === 'none') {
+      return []
+    }
+
+    const cantripCapBase = profile.cantrips_known_by_level?.[Math.max(cls.classLevel - 1, 0)] ?? null
+    const cantripCap = cantripCapBase === null
+      ? null
+      : cantripCapBase + (isMaverickSubclass(cls.subclass) ? getMaverickCantripBonus(cls.classLevel) : 0)
+    const ability = profile.spellcasting_ability
+    const abilityMod = ability ? abilityModifier(adjustedScores[ability]) : 0
+    const preparedSpellCap = profile.mode === 'prepared' || profile.mode === 'spellbook'
+      ? resolvePreparedSpellCap({
+          profile,
+          classLevel: cls.classLevel,
+          abilityModifier: abilityMod,
+        })
+      : null
+    const leveledCap = resolveLeveledSpellSelectionCap({
+      profile,
+      classLevel: cls.classLevel,
+      abilityModifier: abilityMod,
+    })
+
+    const sourceSelectedSpells = selectedSpellEntries
+      .filter((spell) =>
+        selectedSpells.some((selected) =>
+          selected.id === spell.id && (
+            selected.classes.includes(cls.classId) ||
+            selected.grantedBySubclassIds.includes(cls.subclass?.id ?? '') ||
+            (
+              (grantedSpellIds.includes(selected.id) || freePreparedSpellIds.includes(selected.id)) &&
+              !selected.classes.some((classId) => activeClassIds.has(classId)) &&
+              selected.grantedBySubclassIds.length === 0 &&
+              cls.classId === firstSpellcastingClassId
+            )
+          )
+        )
+      )
+      .map((spell) => {
+        const granted = spell.granted
+        const category = spellDisplayCategory(spell, profile.mode, granted)
+        return {
+          ...spell,
+          category,
+          grantLabel: granted ? spell.grantLabel : null,
+        }
+      })
+
+    let selectionSummary = buildSpellSelectionSummary({
+      className: cls.className,
+      classLevel: cls.classLevel,
+      mode: profile.mode,
+      leveledSelectionCap: leveledCap,
+      preparedSpellCap,
+    })
+    if (isMaverickSubclass(cls.subclass)) {
+      const extraLevels = getMaverickPreparedBreakthroughLevels(cls.classLevel)
+      if (extraLevels.length > 0) {
+        selectionSummary = `${selectionSummary} Maverick also prepares one Breakthrough spell each of levels ${extraLevels.join(', ')} for free.`
+      }
+    }
+
+    return [{
+      classId: cls.classId,
+      className: cls.className,
+      classLevel: cls.classLevel,
+      spellcastingType: cls.spellcastingType,
+      mode: profile.mode,
+      spellcastingAbility: ability ?? null,
+      spellcastingAbilityModifier: ability ? abilityMod : null,
+      spellSaveDc: ability ? 8 + proficiencyBonus + abilityMod : null,
+      spellAttackModifier: ability ? proficiencyBonus + abilityMod : null,
+      cantripSelectionCap: cantripCap,
+      leveledSpellSelectionCap: leveledCap,
+      selectionSummary,
+      selectedSpellCountsByLevel: countSelectedSpellsByLevel(sourceSelectedSpells),
+      selectedSpells: sourceSelectedSpells,
+      knownSpells: sourceSelectedSpells.filter((spell) => spell.category === 'known'),
+      preparedSpells: sourceSelectedSpells.filter((spell) => spell.category === 'prepared'),
+      spellbookSpells: sourceSelectedSpells.filter((spell) => spell.category === 'spellbook'),
+      grantedSpells: sourceSelectedSpells.filter((spell) => spell.category === 'granted'),
+    }]
+  })
+
+  return {
+    className: progression.spellSelectionClassName,
+    mode: progression.spellSelectionMode,
+    maxSpellLevel: progression.maxSpellLevel,
+    spellSlots: progression.spellSlots,
+    pactSpellSlots: progression.pactSpellSlots,
+    cantripSelectionCap: progression.cantripSelectionCap,
+    leveledSpellSelectionCap: progression.leveledSpellSelectionCap,
+    selectionSummary: progression.spellSelectionSummary,
+    selectedSpells: selectedSpellEntries,
+    selectedSpellCountsByLevel,
+    freePreparedSpellIds,
+    grantedSpellIds,
+    sources,
+    grantedSpells: selectedSpellEntries.filter((spell) => spell.category === 'granted'),
   }
 }
 

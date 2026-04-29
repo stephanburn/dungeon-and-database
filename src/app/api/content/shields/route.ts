@@ -1,6 +1,11 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { requireAdmin, requireAuth, jsonError, readJsonBody } from '@/lib/api-helpers'
+import {
+  shieldCreateSchema,
+  shieldDeleteSchema,
+  shieldUpdateSchema,
+} from '@/lib/content/admin-schemas'
 import { listShields } from '@/lib/content/equipment-content'
 import { writeAuditLog } from '@/lib/server/audit'
 import type { Database } from '@/lib/types/database'
@@ -37,17 +42,18 @@ export async function POST(request: NextRequest) {
 
   const bodyResult = await readJsonBody<Record<string, unknown>>(request)
   if ('response' in bodyResult) return bodyResult.response
-  const body = bodyResult.data
-  if (!body.item_id) return jsonError('item_id is required', 400)
+  const parsed = shieldCreateSchema.safeParse(bodyResult.data)
+  if (!parsed.success) return jsonError(parsed.error.message, 400)
+  const body = parsed.data
 
-  const validation = await validateShieldItem(supabase, body.item_id as string)
+  const validation = await validateShieldItem(supabase, body.item_id)
   if (validation.error) return jsonError(validation.error.message, 400)
 
   const { data, error } = await supabase
     .from('shields')
     .insert({
-      item_id: body.item_id as string,
-      armor_class_bonus: Number(body.armor_class_bonus ?? 2),
+      item_id: body.item_id,
+      armor_class_bonus: body.armor_class_bonus,
     })
     .select()
     .single()
@@ -70,18 +76,19 @@ export async function PUT(request: NextRequest) {
 
   const bodyResult = await readJsonBody<Record<string, unknown>>(request)
   if ('response' in bodyResult) return bodyResult.response
-  const body = bodyResult.data
-  if (!body.item_id) return jsonError('item_id is required', 400)
+  const parsed = shieldUpdateSchema.safeParse(bodyResult.data)
+  if (!parsed.success) return jsonError(parsed.error.message, 400)
+  const body = parsed.data
 
-  const validation = await validateShieldItem(supabase, body.item_id as string)
+  const validation = await validateShieldItem(supabase, body.item_id)
   if (validation.error) return jsonError(validation.error.message, 400)
 
   const { data, error } = await supabase
     .from('shields')
     .update({
-      armor_class_bonus: Number(body.armor_class_bonus ?? 2),
+      armor_class_bonus: body.armor_class_bonus,
     })
-    .eq('item_id', body.item_id as string)
+    .eq('item_id', body.item_id)
     .select()
     .single()
 
@@ -101,8 +108,11 @@ export async function DELETE(request: NextRequest) {
   if (auth instanceof NextResponse) return auth
   const { supabase, user } = auth
 
-  const itemId = request.nextUrl.searchParams.get('item_id')
-  if (!itemId) return jsonError('item_id is required', 400)
+  const parsed = shieldDeleteSchema.safeParse({
+    item_id: request.nextUrl.searchParams.get('item_id'),
+  })
+  if (!parsed.success) return jsonError(parsed.error.message, 400)
+  const itemId = parsed.data.item_id
 
   const { error } = await supabase.from('shields').delete().eq('item_id', itemId)
   if (error) return jsonError(error.message, 500)

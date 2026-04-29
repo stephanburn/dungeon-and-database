@@ -35,6 +35,7 @@ import type {
   Class,
   Feat,
   FeatureOption,
+  FeatureSpellGrant,
   RuleSet,
   Species,
   StatMethod,
@@ -236,6 +237,7 @@ export function LevelUpWizard({
   const [classList, setClassList] = useState<Class[]>([])
   const [featList, setFeatList] = useState<Feat[]>([])
   const [featureOptionRows, setFeatureOptionRows] = useState<FeatureOption[]>([])
+  const [featureSpellGrants, setFeatureSpellGrants] = useState<FeatureSpellGrant[]>([])
   const [classDetailMap, setClassDetailMap] = useState<Record<string, ClassDetail>>({})
   const [subclassMap, setSubclassMap] = useState<Record<string, Subclass[]>>({})
   const [spellOptions, setSpellOptions] = useState<SpellOption[]>([])
@@ -431,10 +433,12 @@ export function LevelUpWizard({
       fetch(`/api/content/classes${qs}`).then((response) => response.json()),
       fetch(`/api/content/feats${qs}`).then((response) => response.json()),
       fetch(`/api/content/feature-options${qs}`).then((response) => response.json()),
-    ]).then(([classes, feats, featureOptions]) => {
+      fetch(`/api/content/feature-spell-grants${qs}`).then((response) => response.json()),
+    ]).then(([classes, feats, featureOptions, spellGrants]) => {
       setClassList(Array.isArray(classes) ? classes : [])
       setFeatList(Array.isArray(feats) ? feats : [])
       setFeatureOptionRows(Array.isArray(featureOptions) ? featureOptions : [])
+      setFeatureSpellGrants(Array.isArray(spellGrants) ? spellGrants : [])
       if (!selectedClassId && Array.isArray(classes) && classes.length > 0) {
         setSelectedClassId(classes[0].id)
       }
@@ -804,6 +808,7 @@ export function LevelUpWizard({
     languageChoices: initialLanguageChoices,
     toolChoices: initialToolChoices,
     featureOptionRows,
+    featureSpellGrants,
     featureOptionChoices: activeInitialFeatureOptionChoices,
   })
 
@@ -844,6 +849,7 @@ export function LevelUpWizard({
       languageChoices,
       toolChoices,
       featureOptionRows,
+      featureSpellGrants,
       featureOptionChoices: [
         ...canonicalFeatureOptionChoices.map((choice) => ({
           id: `${choice.option_group_key}:${choice.option_key}`,
@@ -883,6 +889,7 @@ export function LevelUpWizard({
     featChoices,
     featList,
     featureOptionRows,
+    featureSpellGrants,
     canonicalFeatureOptionChoices,
     mergedSpellOptions,
     newFeatChoice,
@@ -970,6 +977,7 @@ export function LevelUpWizard({
     languageChoices,
     toolChoices,
     featureOptionRows,
+    featureSpellGrants,
     featureOptionChoices: [
       ...canonicalFeatureOptionChoices.map((choice) => ({
         id: `${choice.option_group_key}:${choice.option_key}`,

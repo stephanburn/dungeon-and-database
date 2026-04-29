@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { requireAuth, jsonError, readJsonBody } from '@/lib/api-helpers'
 import { hasDmAccess } from '@/lib/auth/roles'
+import { assertCharacterAccessibleByUser } from '@/lib/auth/ownership'
 import { loadCharacterState } from '@/lib/characters/load-character'
 import {
   buildCharacterAtomicSavePayload,
@@ -234,6 +235,9 @@ export async function GET(
   if (auth instanceof NextResponse) return auth
   const { profile, supabase } = auth
 
+  const accessibleCharacter = await assertCharacterAccessibleByUser(supabase, params.id, profile.id, profile.role)
+  if (!accessibleCharacter) return jsonError('Forbidden', 403)
+
   const loadedState = await loadCharacterState(supabase, params.id)
   if (loadedState.status === 'not_found') return jsonError('Character not found', 404)
   if (loadedState.status === 'error') return jsonError(loadedState.error.message, 500)
@@ -278,17 +282,8 @@ export async function PUT(
   if (auth instanceof NextResponse) return auth
   const { profile, supabase } = auth
 
-  // Verify ownership (players) or DM access
-  const { data: existing } = await supabase
-    .from('characters')
-    .select('user_id, status, updated_at')
-    .eq('id', params.id)
-    .single()
-
-  if (!existing) return jsonError('Character not found', 404)
-  if (!hasDmAccess(profile.role) && existing.user_id !== profile.id) {
-    return jsonError('Forbidden', 403)
-  }
+  const existing = await assertCharacterAccessibleByUser(supabase, params.id, profile.id, profile.role)
+  if (!existing) return jsonError('Forbidden', 403)
 
   const bodyResult = await readJsonBody<unknown>(request)
   if ('response' in bodyResult) return bodyResult.response
@@ -398,16 +393,8 @@ export async function DELETE(
   if (auth instanceof NextResponse) return auth
   const { profile, supabase } = auth
 
-  const { data: existing } = await supabase
-    .from('characters')
-    .select('user_id')
-    .eq('id', params.id)
-    .single()
-
-  if (!existing) return jsonError('Character not found', 404)
-  if (!hasDmAccess(profile.role) && existing.user_id !== profile.id) {
-    return jsonError('Forbidden', 403)
-  }
+  const existing = await assertCharacterAccessibleByUser(supabase, params.id, profile.id, profile.role)
+  if (!existing) return jsonError('Forbidden', 403)
 
   const { error } = await supabase.from('characters').delete().eq('id', params.id)
   if (error) return jsonError(error.message, 500)

@@ -1,10 +1,12 @@
 import type { Database } from '@/lib/types/database'
 import {
   buildLanguageKeyByNameMap,
+  buildLanguageNameByKeyMap,
   normalizeLanguageName,
 } from '@/lib/content/language-content'
 import {
   buildToolKeyByNameMap,
+  buildToolNameByKeyMap,
   normalizeToolName,
 } from '@/lib/content/tool-content'
 import type {
@@ -188,14 +190,16 @@ async function prepareLanguageChoices(
   if (error) throw error
 
   const languageKeyByName = buildLanguageKeyByNameMap(languageRows ?? [])
+  const languageNameByKey = buildLanguageNameByKeyMap(languageRows ?? [])
 
-  return normalizedChoices.map((choice) => ({
-    ...choice,
-    language_key:
-      languageKeyByName.get(normalizeLanguageName(choice.language)) ??
-      choice.language_key ??
-      null,
-  }))
+  return normalizedChoices.map((choice) => {
+    const languageKey = choice.language_key ?? languageKeyByName.get(normalizeLanguageName(choice.language)) ?? null
+    return {
+      ...choice,
+      language: languageKey ? languageNameByKey.get(languageKey) ?? choice.language : choice.language,
+      language_key: languageKey,
+    }
+  })
 }
 
 async function prepareToolChoices(
@@ -234,14 +238,16 @@ async function prepareToolChoices(
   if (error) throw error
 
   const toolKeyByName = buildToolKeyByNameMap(toolRows ?? [])
+  const toolNameByKey = buildToolNameByKeyMap(toolRows ?? [])
 
-  return normalizedChoices.map((choice) => ({
-    ...choice,
-    tool_key:
-      toolKeyByName.get(normalizeToolName(choice.tool)) ??
-      choice.tool_key ??
-      null,
-  }))
+  return normalizedChoices.map((choice) => {
+    const toolKey = choice.tool_key ?? toolKeyByName.get(normalizeToolName(choice.tool)) ?? null
+    return {
+      ...choice,
+      tool: toolKey ? toolNameByKey.get(toolKey) ?? choice.tool : choice.tool,
+      tool_key: toolKey,
+    }
+  })
 }
 
 export async function buildCharacterAtomicSavePayload(

@@ -3,6 +3,7 @@ import type {
   CharacterSpellSelection,
   Class,
   FeatureOption,
+  FeatureSpellGrant,
   Species,
   Spell,
 } from '@/lib/types/database'
@@ -71,13 +72,6 @@ const FIGHTING_STYLE_UNLOCK_LEVELS: Record<string, number> = {
 
 const INTERACTIVE_FEATURE_SPELL_PREFIXES = ['feat_spell:', 'feature_spell:'] as const
 const MAVERICK_BREAKTHROUGH_LEVELS = [3, 5, 9, 13, 17] as const
-type StaticGrantedSpellRule = {
-  spellName: string
-  spellSource?: string
-  spellSources?: string[]
-  minLevel?: number
-  sourceFeatureKey: string
-}
 
 type DragonbornAncestryDefinition = {
   key: string
@@ -85,71 +79,6 @@ type DragonbornAncestryDefinition = {
   damageType: string
   description: string
 }
-
-type StaticFeatureGrantedSpellRule = StaticGrantedSpellRule & {
-  owningClassId: string | null
-}
-
-const MARK_OF_DETECTION_RULES: StaticGrantedSpellRule[] = [
-  { spellName: 'Detect Magic', spellSource: 'ERftLW', sourceFeatureKey: 'species_trait:magical_detection:detect_magic' },
-  { spellName: 'Detect Poison and Disease', spellSource: 'EE', sourceFeatureKey: 'species_trait:magical_detection:detect_poison_and_disease' },
-  { spellName: 'See Invisibility', spellSource: 'ERftLW', minLevel: 3, sourceFeatureKey: 'species_trait:magical_detection:see_invisibility' },
-]
-const MARK_OF_STORM_RULES: StaticGrantedSpellRule[] = [
-  { spellName: 'Gust', spellSources: ['EE', 'PHB', 'SRD'], sourceFeatureKey: 'species_trait:storms_boon:gust' },
-  { spellName: 'Gust of Wind', spellSource: 'ERftLW', minLevel: 3, sourceFeatureKey: 'species_trait:storms_boon:gust_of_wind' },
-]
-const MARK_OF_FINDING_RULES: StaticGrantedSpellRule[] = [
-  { spellName: 'Hunter\'s Mark', spellSource: 'ERftLW', sourceFeatureKey: 'species_trait:finders_magic:hunters_mark' },
-  { spellName: 'Locate Object', spellSource: 'ERftLW', minLevel: 3, sourceFeatureKey: 'species_trait:finders_magic:locate_object' },
-]
-const MARK_OF_HANDLING_RULES: StaticGrantedSpellRule[] = [
-  { spellName: 'Animal Friendship', spellSource: 'ERftLW', sourceFeatureKey: 'species_trait:primal_connection:animal_friendship' },
-  { spellName: 'Speak With Animals', spellSource: 'ERftLW', sourceFeatureKey: 'species_trait:primal_connection:speak_with_animals' },
-]
-const MARK_OF_MAKING_RULES: StaticGrantedSpellRule[] = [
-  { spellName: 'Mending', spellSource: 'ERftLW', sourceFeatureKey: 'species_trait:spellsmith:mending' },
-  { spellName: 'Magic Weapon', spellSource: 'ERftLW', sourceFeatureKey: 'species_trait:spellsmith:magic_weapon' },
-]
-const MARK_OF_PASSAGE_RULES: StaticGrantedSpellRule[] = [
-  { spellName: 'Misty Step', spellSource: 'ERftLW', sourceFeatureKey: 'species_trait:magical_passage:misty_step' },
-]
-const MARK_OF_SENTINEL_RULES: StaticGrantedSpellRule[] = [
-  { spellName: 'Shield', spellSource: 'ERftLW', sourceFeatureKey: 'species_trait:guardians_shield:shield' },
-]
-const MARK_OF_WARDING_RULES: StaticGrantedSpellRule[] = [
-  { spellName: 'Alarm', spellSource: 'ERftLW', sourceFeatureKey: 'species_trait:wards_and_seals:alarm' },
-  { spellName: 'Mage Armor', spellSources: ['EE', 'PHB', 'SRD', 'ERftLW'], sourceFeatureKey: 'species_trait:wards_and_seals:mage_armor' },
-  { spellName: 'Arcane Lock', spellSource: 'ERftLW', minLevel: 3, sourceFeatureKey: 'species_trait:wards_and_seals:arcane_lock' },
-]
-const MARK_OF_HOSPITALITY_RULES: StaticGrantedSpellRule[] = [
-  { spellName: 'Prestidigitation', spellSource: 'ERftLW', sourceFeatureKey: 'species_trait:innkeepers_magic:prestidigitation' },
-  { spellName: 'Purify Food and Drink', spellSource: 'ERftLW', sourceFeatureKey: 'species_trait:innkeepers_magic:purify_food_and_drink' },
-  { spellName: 'Unseen Servant', spellSources: ['EE', 'PHB', 'SRD', 'ERftLW'], sourceFeatureKey: 'species_trait:innkeepers_magic:unseen_servant' },
-]
-const MARK_OF_HEALING_RULES: StaticGrantedSpellRule[] = [
-  { spellName: 'Cure Wounds', spellSource: 'ERftLW', sourceFeatureKey: 'species_trait:healing_touch:cure_wounds' },
-  { spellName: 'Lesser Restoration', spellSource: 'ERftLW', minLevel: 3, sourceFeatureKey: 'species_trait:healing_touch:lesser_restoration' },
-]
-const MARK_OF_SHADOW_RULES: StaticGrantedSpellRule[] = [
-  { spellName: 'Minor Illusion', spellSources: ['EE', 'PHB', 'SRD', 'ERftLW'], sourceFeatureKey: 'species_trait:shape_shadows:minor_illusion' },
-  { spellName: 'Invisibility', spellSource: 'ERftLW', minLevel: 3, sourceFeatureKey: 'species_trait:shape_shadows:invisibility' },
-]
-const MARK_OF_SCRIBING_RULES: StaticGrantedSpellRule[] = [
-  { spellName: 'Message', spellSource: 'ERftLW', sourceFeatureKey: 'species_trait:scribes_insight:message' },
-  { spellName: 'Comprehend Languages', spellSource: 'ERftLW', sourceFeatureKey: 'species_trait:scribes_insight:comprehend_languages' },
-  { spellName: 'Magic Mouth', spellSource: 'ERftLW', sourceFeatureKey: 'species_trait:scribes_insight:magic_mouth' },
-]
-const DROW_MAGIC_RULES: StaticGrantedSpellRule[] = [
-  { spellName: 'Dancing Lights', spellSources: ['PHB', 'SRD', 'ERftLW'], sourceFeatureKey: 'species_trait:drow_magic:dancing_lights' },
-  { spellName: 'Faerie Fire', spellSources: ['PHB', 'SRD', 'ERftLW'], minLevel: 3, sourceFeatureKey: 'species_trait:drow_magic:faerie_fire' },
-  { spellName: 'Darkness', spellSources: ['PHB', 'SRD', 'ERftLW'], minLevel: 5, sourceFeatureKey: 'species_trait:drow_magic:darkness' },
-]
-const INFERNAL_LEGACY_RULES: StaticGrantedSpellRule[] = [
-  { spellName: 'Thaumaturgy', spellSources: ['PHB', 'SRD'], sourceFeatureKey: 'species_trait:infernal_legacy:thaumaturgy' },
-  { spellName: 'Hellish Rebuke', spellSources: ['PHB', 'SRD'], minLevel: 3, sourceFeatureKey: 'species_trait:infernal_legacy:hellish_rebuke' },
-  { spellName: 'Darkness', spellSources: ['PHB', 'SRD', 'ERftLW'], minLevel: 5, sourceFeatureKey: 'species_trait:infernal_legacy:darkness' },
-]
 
 const DRAGONBORN_ANCESTRIES: DragonbornAncestryDefinition[] = [
   { key: 'black', label: 'Black', damageType: 'acid', description: 'Acid breath weapon in a line, with acid resistance.' },
@@ -163,24 +92,6 @@ const DRAGONBORN_ANCESTRIES: DragonbornAncestryDefinition[] = [
   { key: 'silver', label: 'Silver', damageType: 'cold', description: 'Cold breath weapon in a cone, with cold resistance.' },
   { key: 'white', label: 'White', damageType: 'cold', description: 'Cold breath weapon in a cone, with cold resistance.' },
 ]
-
-const STATIC_SPECIES_GRANTED_SPELL_RULES: Record<string, StaticGrantedSpellRule[]> = {
-  'ERftLW:Half-Elf (Mark of Detection)': MARK_OF_DETECTION_RULES,
-  'ERftLW:Half-Elf (Mark of Storm)': MARK_OF_STORM_RULES,
-  'ERftLW:Half-Orc (Mark of Finding)': MARK_OF_FINDING_RULES,
-  'ERftLW:Human (Mark of Finding)': MARK_OF_FINDING_RULES,
-  'ERftLW:Human (Mark of Handling)': MARK_OF_HANDLING_RULES,
-  'ERftLW:Human (Mark of Making)': MARK_OF_MAKING_RULES,
-  'ERftLW:Human (Mark of Passage)': MARK_OF_PASSAGE_RULES,
-  'ERftLW:Human (Mark of Sentinel)': MARK_OF_SENTINEL_RULES,
-  'ERftLW:Dwarf (Mark of Warding)': MARK_OF_WARDING_RULES,
-  'ERftLW:Halfling (Mark of Hospitality)': MARK_OF_HOSPITALITY_RULES,
-  'ERftLW:Halfling (Mark of Healing)': MARK_OF_HEALING_RULES,
-  'ERftLW:Elf (Mark of Shadow)': MARK_OF_SHADOW_RULES,
-  'ERftLW:Gnome (Mark of Scribing)': MARK_OF_SCRIBING_RULES,
-  'PHB:Dark Elf (Drow)': DROW_MAGIC_RULES,
-  'PHB:Tiefling': INFERNAL_LEGACY_RULES,
-}
 
 export function isInteractiveFeatureSpellSourceFeatureKey(sourceFeatureKey: string | null | undefined) {
   return INTERACTIVE_FEATURE_SPELL_PREFIXES.some((prefix) => sourceFeatureKey?.startsWith(prefix))
@@ -773,37 +684,31 @@ export function getMaverickFeatureSpellChoiceDefinitions(args: {
 }
 
 export function getStaticSpeciesGrantedSpells(args: {
+  speciesId: string | null
   speciesName: string | null
   speciesSource: string | null
   totalLevel: number
   spells: Array<Pick<Spell, 'id' | 'name' | 'level' | 'school' | 'classes' | 'source'>>
+  featureSpellGrants: FeatureSpellGrant[]
 }) {
-  const key = args.speciesName && args.speciesSource
-    ? `${args.speciesSource}:${args.speciesName}`
-    : null
-  if (!key) return []
+  if (!args.speciesId) return []
 
-  const rules = STATIC_SPECIES_GRANTED_SPELL_RULES[key] ?? []
-  return rules.flatMap((rule) => {
-    if ((rule.minLevel ?? 1) > args.totalLevel) return []
+  const spellById = new Map(args.spells.map((spell) => [spell.id, spell]))
+  return args.featureSpellGrants.flatMap((grant) => {
+    if (grant.source_category !== 'species_trait') return []
+    if (grant.source_entity_id !== args.speciesId) return []
+    if (grant.minimum_character_level > args.totalLevel) return []
 
-    const preferredSources = rule.spellSources ?? (rule.spellSource ? [rule.spellSource] : [])
-    const matchingSpells = args.spells.filter((entry) => entry.name === rule.spellName)
-    const spell = preferredSources.length > 0
-      ? preferredSources
-          .map((source) => matchingSpells.find((entry) => entry.source === source))
-          .find((entry): entry is typeof matchingSpells[number] => Boolean(entry))
-        ?? matchingSpells[0]
-      : matchingSpells[0]
+    const spell = spellById.get(grant.spell_id)
     if (!spell) return []
 
     return [{
       ...spell,
-      acquisitionMode: 'granted',
-      countsAgainstSelectionLimit: false,
-      sourceFeatureKey: rule.sourceFeatureKey,
-      owningClassId: null,
-      grantedBySubclassIds: [] as string[],
+      acquisitionMode: grant.acquisition_mode,
+      countsAgainstSelectionLimit: grant.counts_against_selection_limit,
+      sourceFeatureKey: grant.source_feature_key,
+      owningClassId: grant.owning_class_id,
+      grantedBySubclassIds: grant.granting_subclass_id ? [grant.granting_subclass_id] : [] as string[],
     }]
   })
 }
@@ -815,10 +720,12 @@ export function getStaticSubclassFeatureGrantedSpells(args: {
     subclass: { id: string | null; name: string | null; source: string | null } | null
   }>
   selectedFeatureOptions: Array<Pick<CharacterFeatureOptionChoice, 'option_group_key' | 'option_key' | 'selected_value'>>
-  optionRows: Array<Pick<FeatureOption, 'group_key' | 'key' | 'effects'>>
+  optionRows: Array<Pick<FeatureOption, 'id' | 'group_key' | 'key'>>
   spells: Array<Pick<Spell, 'id' | 'name' | 'level' | 'school' | 'classes' | 'source'>>
+  featureSpellGrants: FeatureSpellGrant[]
 }) {
-  const rules: StaticFeatureGrantedSpellRule[] = []
+  const grantedSpells: Array<ReturnType<typeof getStaticSpeciesGrantedSpells>[number]> = []
+  const spellById = new Map(args.spells.map((spell) => [spell.id, spell]))
 
   for (const cls of args.classes) {
     if (cls.subclass?.name !== 'Circle of the Land' || cls.subclass.source !== 'PHB') continue
@@ -835,57 +742,28 @@ export function getStaticSubclassFeatureGrantedSpells(args: {
       option.group_key === CIRCLE_OF_LAND_TERRAIN_GROUP_KEY
       && option.key === terrainKey
     ))
-    const spellGrants = Array.isArray(terrainOption?.effects?.spell_grants)
-      ? terrainOption.effects.spell_grants
-      : []
+    if (!terrainOption) continue
 
-    for (const grant of spellGrants) {
-      if (!grant || typeof grant !== 'object') continue
+    for (const grant of args.featureSpellGrants) {
+      if (grant.source_category !== 'feature_option') continue
+      if (grant.source_entity_id !== terrainOption.id) continue
+      if ((grant.minimum_class_level ?? 1) > cls.level) continue
 
-      const spellName = typeof (grant as { spell_name?: unknown }).spell_name === 'string'
-        ? (grant as { spell_name: string }).spell_name
-        : null
-      const minLevel = typeof (grant as { min_class_level?: unknown }).min_class_level === 'number'
-        ? (grant as { min_class_level: number }).min_class_level
-        : 1
-      const sourceFeatureKey = typeof (grant as { source_feature_key?: unknown }).source_feature_key === 'string'
-        ? (grant as { source_feature_key: string }).source_feature_key
-        : null
-      const spellSources = Array.isArray((grant as { spell_sources?: unknown }).spell_sources)
-        ? (grant as { spell_sources: unknown[] }).spell_sources.filter((value): value is string => typeof value === 'string')
-        : ['PHB', 'SRD', 'srd']
+      const spell = spellById.get(grant.spell_id)
+      if (!spell) continue
 
-      if (!spellName || !sourceFeatureKey || cls.level < minLevel) continue
-
-      rules.push({
-        spellName,
-        spellSources,
-        minLevel,
-        sourceFeatureKey,
-        owningClassId: cls.classId,
+      grantedSpells.push({
+        ...spell,
+        acquisitionMode: grant.acquisition_mode,
+        countsAgainstSelectionLimit: grant.counts_against_selection_limit,
+        sourceFeatureKey: grant.source_feature_key,
+        owningClassId: grant.owning_class_id ?? cls.classId,
+        grantedBySubclassIds: grant.granting_subclass_id ? [grant.granting_subclass_id] : [],
       })
     }
   }
 
-  return rules.flatMap((rule) => {
-    const matchingSpells = args.spells.filter((entry) => entry.name === rule.spellName)
-    const spell = rule.spellSources && rule.spellSources.length > 0
-      ? rule.spellSources
-          .map((source) => matchingSpells.find((entry) => entry.source === source))
-          .find((entry): entry is typeof matchingSpells[number] => Boolean(entry))
-        ?? matchingSpells[0]
-      : matchingSpells[0]
-    if (!spell) return []
-
-    return [{
-      ...spell,
-      acquisitionMode: 'granted',
-      countsAgainstSelectionLimit: false,
-      sourceFeatureKey: rule.sourceFeatureKey,
-      owningClassId: rule.owningClassId,
-      grantedBySubclassIds: [] as string[],
-    }]
-  })
+  return grantedSpells
 }
 
 function ordinalSuffix(value: number) {

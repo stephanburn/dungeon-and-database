@@ -135,6 +135,14 @@ Managed content includes:
 - feats
 - sources
 
+Bulk content fixtures use the Slice 6e validator before any write path. Run a dry-run with:
+
+```bash
+npm run content:import -- --fixture path/to/content-import.json --dry-run
+```
+
+Use `--apply --state path/to/import-state.json` to apply the same validated payload to an explicit import snapshot, and add `--retire-missing` when rows from imported sources should be marked retired if they are absent from the fixture. Import diffs use `Create`, `Update`, `No change`, and `Retire` labels so closeout notes do not depend on color. Rows can carry `amended` and `amendment_note` metadata; those values remain part of the import diff and the applied snapshot for DM review and campaign source allowlisting.
+
 ## Not Found In Repo
 
 - A checked-in ERD or schema diagram image

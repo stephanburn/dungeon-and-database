@@ -18,6 +18,14 @@ export function buildToolKeyByNameMap(
   )
 }
 
+export function buildToolNameByKeyMap(
+  tools: Array<Pick<Tool, 'key' | 'name'>>
+) {
+  return new Map(
+    tools.map((tool) => [tool.key, tool.name])
+  )
+}
+
 export async function listTools(
   supabase: SupabaseClient<Database>,
   query: ToolQuery = {}

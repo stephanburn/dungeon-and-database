@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import type { DerivedCharacter } from '@/lib/characters/build-context'
+import type { DerivedCharacter } from '@/lib/characters/derived'
 import type { Spell } from '@/lib/types/database'
 
 const LEVEL_LABELS: Record<number, string> = {

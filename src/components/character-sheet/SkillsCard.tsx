@@ -4,7 +4,6 @@ import { Circle, Disc, Lock } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { SKILLS, SAVING_THROW_NAMES } from '@/lib/skills'
 import type { AbilityKey, SkillKey } from '@/lib/skills'
-import type { DerivedCharacter } from '@/lib/characters/build-context'
 import {
   deriveAbilityScores,
   buildSavingThrowSourceMap,
@@ -12,6 +11,7 @@ import {
   deriveSheetSkills,
   formatModifier,
   proficiencyBonusFromLevel,
+  type DerivedCharacter,
 } from '@/lib/characters/derived'
 import { buildSkillDisplaySummaries, deriveSkillChoiceBuckets, type SkillSourceRowLike } from '@/lib/characters/skill-provenance'
 import type { Class, Background, Feat, Species, Subclass } from '@/lib/types/database'

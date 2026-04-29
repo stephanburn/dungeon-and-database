@@ -91,6 +91,7 @@ import type {
   Class, Subclass, Feat, Alignment, StatMethod, AbilityScoreBonus,
   Campaign,
   FeatureOption,
+  FeatureSpellGrant,
   Language,
   Tool,
 } from '@/lib/types/database'
@@ -678,6 +679,7 @@ export function CharacterSheet({
   const [armorCatalog, setArmorCatalog] = useState<ArmorCatalogEntry[]>([])
   const [shieldCatalog, setShieldCatalog] = useState<ShieldCatalogEntry[]>([])
   const [featureOptionRows, setFeatureOptionRows] = useState<FeatureOption[]>([])
+  const [featureSpellGrants, setFeatureSpellGrants] = useState<FeatureSpellGrant[]>([])
   const [spellOptions, setSpellOptions] = useState<SpellOption[]>(initialSelectedSpells)
 
   const [skillProficiencies, setSkillProficiencies] = useState<string[]>(initialSkillProficiencies)
@@ -764,7 +766,8 @@ export function CharacterSheet({
       fetch(`/api/content/armor${qs}`).then((r) => r.json()),
       fetch(`/api/content/shields${qs}`).then((r) => r.json()),
       fetch(`/api/content/feature-options${qs}`).then((r) => r.json()),
-    ]).then(([s, b, c, f, languages, tools, armor, shields, featureOptions]) => {
+      fetch(`/api/content/feature-spell-grants${qs}`).then((r) => r.json()),
+    ]).then(([s, b, c, f, languages, tools, armor, shields, featureOptions, spellGrants]) => {
       setSpeciesList(s)
       setBackgroundList(b)
       setClassList(c)
@@ -774,6 +777,7 @@ export function CharacterSheet({
       setArmorCatalog(Array.isArray(armor) ? armor : [])
       setShieldCatalog(Array.isArray(shields) ? shields : [])
       setFeatureOptionRows(Array.isArray(featureOptions) ? featureOptions : [])
+      setFeatureSpellGrants(Array.isArray(spellGrants) ? spellGrants : [])
     })
   }, [campaignId])
 
@@ -1488,6 +1492,7 @@ export function CharacterSheet({
       toolChoices,
       featureOptionChoices: localFeatureOptionChoices,
       featureOptionRows,
+      featureSpellGrants,
     })
     return deriveLocalCharacter(context)
   }, [
@@ -1498,6 +1503,7 @@ export function CharacterSheet({
     classList,
     featChoices,
     featList,
+    featureSpellGrants,
     featureOptionRows,
     hpMax,
     initialEquipmentItems,

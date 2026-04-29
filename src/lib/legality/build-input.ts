@@ -46,6 +46,8 @@ import {
   buildAllSourceRuleSets,
   resolveAllowedSources,
 } from '@/lib/characters/wizard-context'
+import { buildLanguageNameByKeyMap } from '@/lib/content/language-content'
+import { buildToolNameByKeyMap } from '@/lib/content/tool-content'
 
 function toAbilityBonusMap(species: Species | null): Partial<Record<AbilityKey, number>> {
   const bonuses: Partial<Record<AbilityKey, number>> = {}
@@ -161,6 +163,31 @@ export async function buildCharacterBuildContext(
   const typedFeatureOptionChoices = (featureOptionChoicesResult.data ?? []) as CharacterFeatureOptionChoice[]
   const featureOptions = (featureOptionsResult.data ?? []) as FeatureOption[]
   const typedEquipmentItems = (equipmentItemsResult.data ?? []) as CharacterEquipmentItem[]
+  const rawLanguageChoiceRows = (languageChoicesResult.data ?? []) as CharacterLanguageChoice[]
+  const rawToolChoiceRows = (toolChoicesResult.data ?? []) as CharacterToolChoice[]
+  const languageKeys = Array.from(new Set(rawLanguageChoiceRows.map((row) => row.language_key).filter((value): value is string => Boolean(value))))
+  const toolKeys = Array.from(new Set(rawToolChoiceRows.map((row) => row.tool_key).filter((value): value is string => Boolean(value))))
+  const [languageCatalogResult, toolCatalogResult] = await Promise.all([
+    languageKeys.length > 0
+      ? supabase.from('languages').select('key, name').in('key', languageKeys)
+      : Promise.resolve({ data: [] as Array<{ key: string; name: string }>, error: null }),
+    toolKeys.length > 0
+      ? supabase.from('tools').select('key, name').in('key', toolKeys)
+      : Promise.resolve({ data: [] as Array<{ key: string; name: string }>, error: null }),
+  ])
+  if (languageCatalogResult.error) throw languageCatalogResult.error
+  if (toolCatalogResult.error) throw toolCatalogResult.error
+
+  const languageNameByKey = buildLanguageNameByKeyMap(languageCatalogResult.data ?? [])
+  const toolNameByKey = buildToolNameByKeyMap(toolCatalogResult.data ?? [])
+  const typedLanguageChoiceRows = rawLanguageChoiceRows.map((row) => ({
+    ...row,
+    language: row.language_key ? languageNameByKey.get(row.language_key) ?? row.language : row.language,
+  }))
+  const typedToolChoiceRows = rawToolChoiceRows.map((row) => ({
+    ...row,
+    tool: row.tool_key ? toolNameByKey.get(row.tool_key) ?? row.tool : row.tool,
+  }))
   spellIds.push(...typedSpellSelections.map((row) => row.spell_id))
   featIds.push(...typedFeatSelections.map((row) => row.feat_id))
 
@@ -543,8 +570,8 @@ export async function buildCharacterBuildContext(
     asiChoiceSlots: toAsiChoiceSlots((asiChoicesResult.data ?? []) as CharacterAsiChoice[]),
     speciesName: species?.name ?? null,
     speciesLineage: species?.lineage_key ?? null,
-    selectedLanguages: ((languageChoicesResult.data ?? []) as CharacterLanguageChoice[]).map((row) => row.language),
-    selectedTools: ((toolChoicesResult.data ?? []) as CharacterToolChoice[]).map((row) => row.tool),
+    selectedLanguages: typedLanguageChoiceRows.map((row) => row.language),
+    selectedTools: typedToolChoiceRows.map((row) => row.tool),
     speciesSource: species?.source ?? null,
     speciesAbilityBonuses: toAbilityBonusMap(species),
     speciesSpeed: species?.speed ?? null,

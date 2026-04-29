@@ -8,6 +8,7 @@ import type {
   ClassFeatureProgression,
   Feat,
   FeatureOption,
+  FeatureSpellGrant,
   RuleSet,
   Species,
   Spell,
@@ -47,14 +48,13 @@ import {
   progressionRowToSummary,
   type BuildClassSummary,
   type CharacterBuildContext,
-  type DerivedCharacter,
 } from '@/lib/characters/build-context'
 import {
   getStaticSpeciesGrantedSpells,
   getStaticSubclassFeatureGrantedSpells,
 } from '@/lib/characters/feature-grants'
 import type { FeatSlotDefinition } from '@/lib/characters/feat-slots'
-import { hitPointGainFromRoll } from '@/lib/characters/derived'
+import { hitPointGainFromRoll, type DerivedCharacter } from '@/lib/characters/derived'
 
 export interface ClassDetail extends Class {
   progression: ClassFeatureProgression[]
@@ -115,6 +115,7 @@ type LocalBuildContextArgs = {
   toolChoices?: string[]
   featureOptionChoices?: CharacterFeatureOptionChoice[]
   featureOptionRows?: FeatureOption[]
+  featureSpellGrants?: FeatureSpellGrant[]
 }
 
 export function buildLocalCharacterContext({
@@ -146,6 +147,7 @@ export function buildLocalCharacterContext({
   toolChoices = [],
   featureOptionChoices = [],
   featureOptionRows = [],
+  featureSpellGrants = [],
 }: LocalBuildContextArgs): CharacterBuildContext | null {
   if (!campaign) return null
 
@@ -205,10 +207,12 @@ export function buildLocalCharacterContext({
   }))
   const totalLevel = levels.reduce((sum, level) => sum + level.level, 0)
   const staticGrantedSpells = getStaticSpeciesGrantedSpells({
+    speciesId: selectedSpecies?.id ?? null,
     speciesName: selectedSpecies?.name ?? null,
     speciesSource: selectedSpecies?.source ?? null,
     totalLevel,
     spells: spellOptions,
+    featureSpellGrants,
   })
   const staticSubclassGrantedSpells = getStaticSubclassFeatureGrantedSpells({
     classes: classes.map((cls) => ({
@@ -225,6 +229,7 @@ export function buildLocalCharacterContext({
     selectedFeatureOptions: featureOptionChoices,
     optionRows: featureOptionRows,
     spells: spellOptions,
+    featureSpellGrants,
   })
   const selectedSpellSummaries = [
     ...typedSpellSelections

@@ -143,6 +143,41 @@ test('buildCharacterAtomicSavePayload normalizes typed rows and resolves languag
   ])
 })
 
+test('buildCharacterAtomicSavePayload prefers catalog display names when language/tool keys are present', async () => {
+  const supabase = createSupabaseMock()
+
+  const payload = await buildCharacterAtomicSavePayload(supabase.client as never, {
+    characterFields: { name: 'Aelar' },
+    language_choices: [{
+      language: 'Old Common Label',
+      language_key: 'common',
+      source_category: 'species_choice',
+    }],
+    tool_choices: [{
+      tool: 'Old Smith Label',
+      tool_key: 'smiths-tools',
+      source_category: 'background_choice',
+    }],
+  })
+
+  assert.deepEqual(payload.language_choices, [{
+    language: 'Common',
+    language_key: 'common',
+    character_level_id: null,
+    source_category: 'species_choice',
+    source_entity_id: null,
+    source_feature_key: null,
+  }])
+  assert.deepEqual(payload.tool_choices, [{
+    tool: "Smith's tools",
+    tool_key: 'smiths-tools',
+    character_level_id: null,
+    source_category: 'background_choice',
+    source_entity_id: null,
+    source_feature_key: null,
+  }])
+})
+
 test('saveCharacterAtomic sends the full payload through the atomic RPC', async () => {
   const supabase = createSupabaseMock()
   const payload = {

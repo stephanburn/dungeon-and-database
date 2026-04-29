@@ -18,6 +18,14 @@ export function buildLanguageKeyByNameMap(
   )
 }
 
+export function buildLanguageNameByKeyMap(
+  languages: Array<Pick<Language, 'key' | 'name'>>
+) {
+  return new Map(
+    languages.map((language) => [language.key, language.name])
+  )
+}
+
 export async function listLanguages(
   supabase: SupabaseClient<Database>,
   query: LanguageQuery = {}

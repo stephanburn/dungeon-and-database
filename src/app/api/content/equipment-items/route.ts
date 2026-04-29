@@ -1,6 +1,10 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { requireAdmin, requireAuth, jsonError, readJsonBody } from '@/lib/api-helpers'
-import { equipmentItemCreateSchema, equipmentItemUpdateSchema } from '@/lib/content/admin-schemas'
+import {
+  equipmentItemCreateSchema,
+  equipmentItemDeleteSchema,
+  equipmentItemUpdateSchema,
+} from '@/lib/content/admin-schemas'
 import { listEquipmentItems } from '@/lib/content/equipment-content'
 import { writeAuditLog } from '@/lib/server/audit'
 
@@ -37,8 +41,8 @@ export async function POST(request: NextRequest) {
       cost_unit: (body.cost_unit as string | undefined) ?? 'gp',
       weight_lb: body.weight_lb ?? null,
       source: body.source as string,
-      amended: false,
-      amendment_note: null,
+      amended: body.amended ?? false,
+      amendment_note: body.amendment_note ?? null,
     })
     .select()
     .single()
@@ -88,8 +92,11 @@ export async function DELETE(request: NextRequest) {
   if (auth instanceof NextResponse) return auth
   const { supabase, user } = auth
 
-  const id = request.nextUrl.searchParams.get('id')
-  if (!id) return jsonError('id is required', 400)
+  const parsed = equipmentItemDeleteSchema.safeParse({
+    id: request.nextUrl.searchParams.get('id'),
+  })
+  if (!parsed.success) return jsonError(parsed.error.message, 400)
+  const { id } = parsed.data
 
   const { error } = await supabase.from('equipment_items').delete().eq('id', id)
   if (error) return jsonError(error.message, 500)

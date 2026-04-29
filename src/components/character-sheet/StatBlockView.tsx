@@ -5,8 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import type { Character, Species, Background, CharacterLevel, Sense, Feat } from '@/lib/types/database'
-import type { DerivedCharacter } from '@/lib/characters/build-context'
-import { formatModifier, type DerivedCharacterCore } from '@/lib/characters/derived'
+import { formatModifier, type DerivedCharacter, type DerivedCharacterCore } from '@/lib/characters/derived'
 
 interface CharacterWithRelations extends Character {
   species: Species | null

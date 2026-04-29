@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { requireAuth, jsonError } from '@/lib/api-helpers'
+import { assertCharacterOwnedByUser } from '@/lib/auth/ownership'
 import { buildLegalityInput } from '@/lib/legality/build-input'
 import { runLegalityChecks, shouldBlockCharacterSubmit } from '@/lib/legality/engine'
 import { captureSnapshot } from '@/lib/snapshots'
@@ -12,14 +13,8 @@ export async function POST(
   if (auth instanceof NextResponse) return auth
   const { profile, supabase } = auth
 
-  const { data: character } = await supabase
-    .from('characters')
-    .select('user_id, status')
-    .eq('id', params.id)
-    .single()
-
-  if (!character) return jsonError('Character not found', 404)
-  if (character.user_id !== profile.id) return jsonError('Forbidden', 403)
+  const character = await assertCharacterOwnedByUser(supabase, params.id, profile.id)
+  if (!character) return jsonError('Forbidden', 403)
   if (character.status !== 'draft' && character.status !== 'changes_requested') {
     return jsonError(`Cannot submit a character with status "${character.status}"`, 400)
   }

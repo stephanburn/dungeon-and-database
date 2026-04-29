@@ -1,6 +1,11 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { requireAdmin, requireAuth, jsonError, readJsonBody } from '@/lib/api-helpers'
+import {
+  armorCreateSchema,
+  armorDeleteSchema,
+  armorUpdateSchema,
+} from '@/lib/content/admin-schemas'
 import { listArmor } from '@/lib/content/equipment-content'
 import { writeAuditLog } from '@/lib/server/audit'
 import type { Database } from '@/lib/types/database'
@@ -37,21 +42,22 @@ export async function POST(request: NextRequest) {
 
   const bodyResult = await readJsonBody<Record<string, unknown>>(request)
   if ('response' in bodyResult) return bodyResult.response
-  const body = bodyResult.data
-  if (!body.item_id) return jsonError('item_id is required', 400)
+  const parsed = armorCreateSchema.safeParse(bodyResult.data)
+  if (!parsed.success) return jsonError(parsed.error.message, 400)
+  const body = parsed.data
 
-  const validation = await validateArmorItem(supabase, body.item_id as string)
+  const validation = await validateArmorItem(supabase, body.item_id)
   if (validation.error) return jsonError(validation.error.message, 400)
 
   const { data, error } = await supabase
     .from('armor')
     .insert({
-      item_id: body.item_id as string,
-      armor_category: body.armor_category as string,
-      base_ac: Number(body.base_ac),
-      dex_bonus_cap: body.dex_bonus_cap == null || body.dex_bonus_cap === '' ? null : Number(body.dex_bonus_cap),
-      minimum_strength: body.minimum_strength == null || body.minimum_strength === '' ? null : Number(body.minimum_strength),
-      stealth_disadvantage: Boolean(body.stealth_disadvantage),
+      item_id: body.item_id,
+      armor_category: body.armor_category,
+      base_ac: body.base_ac,
+      dex_bonus_cap: body.dex_bonus_cap ?? null,
+      minimum_strength: body.minimum_strength ?? null,
+      stealth_disadvantage: body.stealth_disadvantage,
     })
     .select()
     .single()
@@ -74,22 +80,23 @@ export async function PUT(request: NextRequest) {
 
   const bodyResult = await readJsonBody<Record<string, unknown>>(request)
   if ('response' in bodyResult) return bodyResult.response
-  const body = bodyResult.data
-  if (!body.item_id) return jsonError('item_id is required', 400)
+  const parsed = armorUpdateSchema.safeParse(bodyResult.data)
+  if (!parsed.success) return jsonError(parsed.error.message, 400)
+  const body = parsed.data
 
-  const validation = await validateArmorItem(supabase, body.item_id as string)
+  const validation = await validateArmorItem(supabase, body.item_id)
   if (validation.error) return jsonError(validation.error.message, 400)
 
   const { data, error } = await supabase
     .from('armor')
     .update({
-      armor_category: body.armor_category as string,
-      base_ac: Number(body.base_ac),
-      dex_bonus_cap: body.dex_bonus_cap == null || body.dex_bonus_cap === '' ? null : Number(body.dex_bonus_cap),
-      minimum_strength: body.minimum_strength == null || body.minimum_strength === '' ? null : Number(body.minimum_strength),
-      stealth_disadvantage: Boolean(body.stealth_disadvantage),
+      armor_category: body.armor_category,
+      base_ac: body.base_ac,
+      dex_bonus_cap: body.dex_bonus_cap ?? null,
+      minimum_strength: body.minimum_strength ?? null,
+      stealth_disadvantage: body.stealth_disadvantage,
     })
-    .eq('item_id', body.item_id as string)
+    .eq('item_id', body.item_id)
     .select()
     .single()
 
@@ -109,8 +116,11 @@ export async function DELETE(request: NextRequest) {
   if (auth instanceof NextResponse) return auth
   const { supabase, user } = auth
 
-  const itemId = request.nextUrl.searchParams.get('item_id')
-  if (!itemId) return jsonError('item_id is required', 400)
+  const parsed = armorDeleteSchema.safeParse({
+    item_id: request.nextUrl.searchParams.get('item_id'),
+  })
+  if (!parsed.success) return jsonError(parsed.error.message, 400)
+  const itemId = parsed.data.item_id
 
   const { error } = await supabase.from('armor').delete().eq('item_id', itemId)
   if (error) return jsonError(error.message, 500)

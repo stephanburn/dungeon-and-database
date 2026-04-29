@@ -238,6 +238,22 @@ export type SpeciesBonusSpell = {
   minimum_character_level: number
 }
 
+export type FeatureSpellGrant = {
+  id: string
+  source_feature_key: string
+  source_category: string
+  source_entity_id: string | null
+  acquisition_mode: string
+  counts_against_selection_limit: boolean
+  minimum_character_level: number
+  minimum_class_level: number | null
+  owning_class_id: string | null
+  granting_subclass_id: string | null
+  spell_id: string
+  metadata: Record<string, unknown>
+  created_at: string
+}
+
 export type Spell = {
   id: string
   name: string
@@ -614,6 +630,7 @@ export type Database = {
       subclass_features: { Row: SubclassFeature; Insert: Omit<SubclassFeature, 'id'>; Update: Partial<Omit<SubclassFeature, 'id'>>; Relationships: R }
       subclass_bonus_spells: { Row: SubclassBonusSpell; Insert: Omit<SubclassBonusSpell, 'id'>; Update: Partial<Omit<SubclassBonusSpell, 'id'>>; Relationships: R }
       species_bonus_spells: { Row: SpeciesBonusSpell; Insert: Omit<SpeciesBonusSpell, 'id'>; Update: Partial<Omit<SpeciesBonusSpell, 'id'>>; Relationships: R }
+      feature_spell_grants: { Row: FeatureSpellGrant; Insert: Omit<FeatureSpellGrant, 'id' | 'created_at'>; Update: Partial<Omit<FeatureSpellGrant, 'id' | 'created_at'>>; Relationships: R }
       spells: { Row: Spell; Insert: Omit<Spell, 'id'>; Update: Partial<Omit<Spell, 'id'>>; Relationships: R }
       feats: { Row: Feat; Insert: Omit<Feat, 'id'>; Update: Partial<Omit<Feat, 'id'>>; Relationships: R }
       backgrounds: { Row: Background; Insert: Omit<Background, 'id'>; Update: Partial<Omit<Background, 'id'>>; Relationships: R }

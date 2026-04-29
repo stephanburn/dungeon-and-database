@@ -30,6 +30,7 @@ import type {
   EquipmentItem,
   Feat,
   FeatureOption,
+  FeatureSpellGrant,
   Language,
   Species,
   StatMethod,
@@ -247,6 +248,7 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
   const [languageList, setLanguageList] = useState<Language[]>([])
   const [toolList, setToolList] = useState<Tool[]>([])
   const [featureOptionRows, setFeatureOptionRows] = useState<FeatureOption[]>([])
+  const [featureSpellGrants, setFeatureSpellGrants] = useState<FeatureSpellGrant[]>([])
   const [startingEquipmentPackages, setStartingEquipmentPackages] = useState<StartingEquipmentPackageEntry[]>([])
   const [equipmentItems, setEquipmentItems] = useState<EquipmentItem[]>([])
   const [weaponCatalog, setWeaponCatalog] = useState<WeaponCatalogEntry[]>([])
@@ -483,12 +485,13 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
       fetch(`/api/content/languages${qs}`).then((response) => response.json()),
       fetch(`/api/content/tools${qs}`).then((response) => response.json()),
       fetch(`/api/content/feature-options${qs}`).then((response) => response.json()),
+      fetch(`/api/content/feature-spell-grants${qs}`).then((response) => response.json()),
       fetch(`/api/content/starting-equipment-packages${qs}`).then((response) => response.json()),
       fetch(`/api/content/equipment-items${qs}`).then((response) => response.json()),
       fetch(`/api/content/weapons${qs}`).then((response) => response.json()),
       fetch(`/api/content/armor${qs}`).then((response) => response.json()),
       fetch(`/api/content/shields${qs}`).then((response) => response.json()),
-    ]).then(([species, backgrounds, classes, feats, languages, tools, featureOptions, packages, items, weapons, armor, shields]) => {
+    ]).then(([species, backgrounds, classes, feats, languages, tools, featureOptions, spellGrants, packages, items, weapons, armor, shields]) => {
       setSpeciesList(species)
       setBackgroundList(backgrounds)
       setClassList(classes)
@@ -496,6 +499,7 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
       setLanguageList(Array.isArray(languages) ? languages : [])
       setToolList(Array.isArray(tools) ? tools : [])
       setFeatureOptionRows(Array.isArray(featureOptions) ? featureOptions : [])
+      setFeatureSpellGrants(Array.isArray(spellGrants) ? spellGrants : [])
       setStartingEquipmentPackages(Array.isArray(packages) ? packages : [])
       setEquipmentItems(Array.isArray(items) ? items : [])
       setWeaponCatalog(Array.isArray(weapons) ? weapons : [])
@@ -1151,6 +1155,7 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
     languageChoices,
     toolChoices,
     featureOptionRows,
+    featureSpellGrants,
     featureOptionChoices: [
       ...featureOptionChoices.map((choice) => ({
         id: `${choice.option_group_key}:${choice.option_key}`,

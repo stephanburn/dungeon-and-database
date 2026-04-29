@@ -1,6 +1,6 @@
 import type { Database } from '@/lib/types/database'
-import { buildLanguageKeyByNameMap, normalizeLanguageName } from '@/lib/content/language-content'
-import { buildToolKeyByNameMap, normalizeToolName } from '@/lib/content/tool-content'
+import { buildLanguageKeyByNameMap, buildLanguageNameByKeyMap, normalizeLanguageName } from '@/lib/content/language-content'
+import { buildToolKeyByNameMap, buildToolNameByKeyMap, normalizeToolName } from '@/lib/content/tool-content'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 export type SpellChoiceInput =
@@ -372,13 +372,18 @@ export async function replaceCharacterLanguageChoices(
   if (languageLookupError) return languageLookupError
 
   const languageKeyByName = buildLanguageKeyByNameMap(languageRows ?? [])
+  const languageNameByKey = buildLanguageNameByKeyMap(languageRows ?? [])
 
   const { error } = await supabase.from('character_language_choices').insert(
-    normalizedChoices.map((choice) => ({
-      character_id: characterId,
-      ...choice,
-      language_key: languageKeyByName.get(normalizeLanguageName(choice.language)) ?? choice.language_key ?? null,
-    }))
+    normalizedChoices.map((choice) => {
+      const languageKey = choice.language_key ?? languageKeyByName.get(normalizeLanguageName(choice.language)) ?? null
+      return {
+        character_id: characterId,
+        ...choice,
+        language: languageKey ? languageNameByKey.get(languageKey) ?? choice.language : choice.language,
+        language_key: languageKey,
+      }
+    })
   )
   return error
 }
@@ -406,13 +411,18 @@ export async function replaceCharacterToolChoices(
   if (toolLookupError) return toolLookupError
 
   const toolKeyByName = buildToolKeyByNameMap(toolRows ?? [])
+  const toolNameByKey = buildToolNameByKeyMap(toolRows ?? [])
 
   const { error } = await supabase.from('character_tool_choices').insert(
-    normalizedChoices.map((choice) => ({
-      character_id: characterId,
-      ...choice,
-      tool_key: toolKeyByName.get(normalizeToolName(choice.tool)) ?? choice.tool_key ?? null,
-    }))
+    normalizedChoices.map((choice) => {
+      const toolKey = choice.tool_key ?? toolKeyByName.get(normalizeToolName(choice.tool)) ?? null
+      return {
+        character_id: characterId,
+        ...choice,
+        tool: toolKey ? toolNameByKey.get(toolKey) ?? choice.tool : choice.tool,
+        tool_key: toolKey,
+      }
+    })
   )
   return error
 }

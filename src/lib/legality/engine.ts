@@ -2,9 +2,9 @@ import type { CheckSeverity, FeatPrerequisite } from '@/lib/types/database'
 import {
   deriveCharacter,
   getAdjustedAbilityScores,
-  type DerivedCharacter,
   type CharacterBuildContext,
 } from '@/lib/characters/build-context'
+import type { DerivedCharacter } from '@/lib/characters/derived'
 import {
   BATTLE_MASTER_MANEUVER_GROUP_KEY,
   CIRCLE_OF_LAND_TERRAIN_GROUP_KEY,

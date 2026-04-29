@@ -1,6 +1,11 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { requireAdmin, requireAuth, jsonError, readJsonBody } from '@/lib/api-helpers'
+import {
+  startingEquipmentPackageCreateSchema,
+  startingEquipmentPackageDeleteSchema,
+  startingEquipmentPackageUpdateSchema,
+} from '@/lib/content/admin-schemas'
 import { listStartingEquipmentPackages } from '@/lib/content/equipment-content'
 import { writeAuditLog } from '@/lib/server/audit'
 import type { Database } from '@/lib/types/database'
@@ -62,20 +67,19 @@ export async function POST(request: NextRequest) {
 
   const bodyResult = await readJsonBody<Record<string, unknown>>(request)
   if ('response' in bodyResult) return bodyResult.response
-  const body = bodyResult.data
-  if (!body.key || !body.name || !body.source) {
-    return jsonError('key, name, and source are required', 400)
-  }
+  const parsed = startingEquipmentPackageCreateSchema.safeParse(bodyResult.data)
+  if (!parsed.success) return jsonError(parsed.error.message, 400)
+  const body = parsed.data
 
   const { data, error } = await supabase
     .from('starting_equipment_packages')
     .insert({
-      key: body.key as string,
-      name: body.name as string,
-      description: (body.description as string | undefined) ?? '',
-      source: body.source as string,
-      amended: false,
-      amendment_note: null,
+      key: body.key,
+      name: body.name,
+      description: body.description ?? '',
+      source: body.source,
+      amended: body.amended ?? false,
+      amendment_note: body.amendment_note ?? null,
     })
     .select()
     .single()
@@ -84,7 +88,7 @@ export async function POST(request: NextRequest) {
   const itemsError = await replacePackageItems(
     supabase,
     data.id,
-    ((body.items as PackageItemBody[] | undefined) ?? [])
+    body.items ?? []
   )
   if (itemsError) return jsonError(itemsError.message, 500)
 
@@ -105,17 +109,20 @@ export async function PUT(request: NextRequest) {
 
   const bodyResult = await readJsonBody<Record<string, unknown>>(request)
   if ('response' in bodyResult) return bodyResult.response
-  const body = bodyResult.data
-  if (!body.id) return jsonError('id is required', 400)
+  const parsed = startingEquipmentPackageUpdateSchema.safeParse(bodyResult.data)
+  if (!parsed.success) return jsonError(parsed.error.message, 400)
+  const body = parsed.data
 
-  const id = body.id as string
+  const id = body.id
   const { data, error } = await supabase
     .from('starting_equipment_packages')
     .update({
-      key: body.key as string,
-      name: body.name as string,
-      description: (body.description as string | undefined) ?? '',
-      source: body.source as string,
+      key: body.key,
+      name: body.name,
+      description: body.description ?? '',
+      source: body.source,
+      amended: body.amended,
+      amendment_note: body.amendment_note,
     })
     .eq('id', id)
     .select()
@@ -125,7 +132,7 @@ export async function PUT(request: NextRequest) {
   const itemsError = await replacePackageItems(
     supabase,
     id,
-    ((body.items as PackageItemBody[] | undefined) ?? [])
+    body.items ?? []
   )
   if (itemsError) return jsonError(itemsError.message, 500)
 
@@ -144,8 +151,11 @@ export async function DELETE(request: NextRequest) {
   if (auth instanceof NextResponse) return auth
   const { supabase, user } = auth
 
-  const id = request.nextUrl.searchParams.get('id')
-  if (!id) return jsonError('id is required', 400)
+  const parsed = startingEquipmentPackageDeleteSchema.safeParse({
+    id: request.nextUrl.searchParams.get('id'),
+  })
+  if (!parsed.success) return jsonError(parsed.error.message, 400)
+  const id = parsed.data.id
 
   const { error } = await supabase.from('starting_equipment_packages').delete().eq('id', id)
   if (error) return jsonError(error.message, 500)

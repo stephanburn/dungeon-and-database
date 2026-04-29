@@ -13,6 +13,8 @@
     "start": "node node_modules/next/dist/bin/next start",
     "lint": "next lint",
     "test": "node --import tsx --test test/**/*.test.ts",
+    "content:validate": "tsx scripts/content-import/validate.ts",
+    "content:import": "tsx scripts/content-import/import.ts",
     "seed-srd": "tsx --env-file=.env.local scripts/seed-srd.ts"
   },
   "dependencies": {

@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import type { Class, Campaign, FeatureOption, Species } from '@/lib/types/database'
+import { readFileSync } from 'node:fs'
+import type { Class, Campaign, FeatureOption, FeatureSpellGrant, Species } from '@/lib/types/database'
 import { deriveLocalCharacter, buildLocalCharacterContext, type ClassDetail } from '@/lib/characters/wizard-helpers'
 import {
   getFeatureOptionChoiceValue,
@@ -26,6 +27,50 @@ const campaign: Campaign = {
   rule_set: '2014',
   created_at: '',
 }
+
+function featureSpellGrant(overrides: Partial<FeatureSpellGrant> & Pick<FeatureSpellGrant, 'source_feature_key' | 'source_category' | 'spell_id'>): FeatureSpellGrant {
+  return {
+    id: `grant-${overrides.source_feature_key}`,
+    source_feature_key: overrides.source_feature_key,
+    source_category: overrides.source_category,
+    source_entity_id: null,
+    acquisition_mode: 'granted',
+    counts_against_selection_limit: false,
+    minimum_character_level: 1,
+    minimum_class_level: null,
+    owning_class_id: null,
+    granting_subclass_id: null,
+    spell_id: overrides.spell_id,
+    metadata: {},
+    created_at: '',
+    ...overrides,
+  }
+}
+
+test('feature spell grant migration stores spell ids instead of spell names', () => {
+  const migration = readFileSync('supabase/migrations/075_feature_spell_grants.sql', 'utf8')
+
+  assert.match(migration, /CREATE TABLE(?: IF NOT EXISTS)? public\.feature_spell_grants/i)
+  assert.match(migration, /source_feature_key text NOT NULL/i)
+  assert.match(migration, /source_category text NOT NULL/i)
+  assert.match(migration, /source_entity_id uuid/i)
+  assert.match(migration, /acquisition_mode text NOT NULL/i)
+  assert.match(migration, /counts_against_selection_limit boolean NOT NULL/i)
+  assert.match(migration, /owning_class_id uuid/i)
+  assert.match(migration, /granting_subclass_id uuid/i)
+  assert.match(migration, /spell_id uuid NOT NULL REFERENCES public\.spells\(id\)/i)
+  assert.match(migration, /species_trait:spellsmith:mending/)
+  assert.match(migration, /subclass_feature:circle_of_the_land:forest:barkskin/)
+  assert.doesNotMatch(migration, /spell_name text/i)
+})
+
+test('feature grant derivation no longer contains spell-name lookup tables', () => {
+  const source = readFileSync('src/lib/characters/feature-grants.ts', 'utf8')
+
+  assert.doesNotMatch(source, /STATIC_SPECIES_GRANTED_SPELL_RULES/)
+  assert.doesNotMatch(source, /spellName/)
+  assert.doesNotMatch(source, /spell_grants/)
+})
 
 test('Maverick Arcane Breakthrough exposes the expected option and spell definitions', () => {
   const classList: Class[] = [
@@ -769,18 +814,45 @@ test('Circle of the Land terrain choices grant free derived spells in local cont
       description: 'Forest circle spells.',
       option_order: 10,
       prerequisites: {},
-      effects: {
-        spell_grants: [
-          { spell_name: 'Barkskin', min_class_level: 3, source_feature_key: 'forest:barkskin' },
-          { spell_name: 'Spider Climb', min_class_level: 3, source_feature_key: 'forest:spider_climb' },
-          { spell_name: 'Call Lightning', min_class_level: 5, source_feature_key: 'forest:call_lightning' },
-          { spell_name: 'Plant Growth', min_class_level: 5, source_feature_key: 'forest:plant_growth' },
-        ],
-      },
+      effects: {},
       source: 'PHB',
       amended: false,
       amendment_note: null,
     }],
+    featureSpellGrants: [
+      featureSpellGrant({
+        source_feature_key: 'subclass_feature:circle_of_the_land:forest:barkskin',
+        source_category: 'feature_option',
+        source_entity_id: 'forest-land',
+        spell_id: 'barkskin',
+        minimum_class_level: 3,
+        owning_class_id: 'druid',
+      }),
+      featureSpellGrant({
+        source_feature_key: 'subclass_feature:circle_of_the_land:forest:spider_climb',
+        source_category: 'feature_option',
+        source_entity_id: 'forest-land',
+        spell_id: 'spider-climb',
+        minimum_class_level: 3,
+        owning_class_id: 'druid',
+      }),
+      featureSpellGrant({
+        source_feature_key: 'subclass_feature:circle_of_the_land:forest:call_lightning',
+        source_category: 'feature_option',
+        source_entity_id: 'forest-land',
+        spell_id: 'call-lightning',
+        minimum_class_level: 5,
+        owning_class_id: 'druid',
+      }),
+      featureSpellGrant({
+        source_feature_key: 'subclass_feature:circle_of_the_land:forest:plant_growth',
+        source_category: 'feature_option',
+        source_entity_id: 'forest-land',
+        spell_id: 'plant-growth',
+        minimum_class_level: 5,
+        owning_class_id: 'druid',
+      }),
+    ],
     featureOptionChoices: [{
       id: 'forest-choice',
       character_id: 'local',
@@ -998,7 +1070,7 @@ test('PHB High Elf, Drow, and Tiefling derive dynamic spell-trait summaries', ()
   )
 })
 
-test('static dragonmark trait grants become free derived spells when the spell exists locally', () => {
+test('species trait grant rows resolve free derived spells by spell id when the spell name changes', () => {
   const artificerDetail: ClassDetail = {
     id: 'artificer',
     name: 'Artificer',
@@ -1066,8 +1138,8 @@ test('static dragonmark trait grants become free derived spells when the spell e
     subclassMap: {},
     spellOptions: [
       {
-        id: 'mending',
-        name: 'Mending',
+        id: 'mending-erftlw',
+        name: 'Mending (Renamed)',
         level: 0,
         school: 'Varies',
         casting_time: 'Varies',
@@ -1100,6 +1172,20 @@ test('static dragonmark trait grants become free derived spells when the spell e
         amendment_note: null,
       },
     ],
+    featureSpellGrants: [
+      featureSpellGrant({
+        source_feature_key: 'species_trait:spellsmith:mending',
+        source_category: 'species_trait',
+        source_entity_id: 'mark-of-making',
+        spell_id: 'mending-erftlw',
+      }),
+      featureSpellGrant({
+        source_feature_key: 'species_trait:spellsmith:magic_weapon',
+        source_category: 'species_trait',
+        source_entity_id: 'mark-of-making',
+        spell_id: 'magic-weapon',
+      }),
+    ],
     spellChoices: [],
     featList: [],
     featChoices: [],
@@ -1116,7 +1202,7 @@ test('static dragonmark trait grants become free derived spells when the spell e
   assert.deepEqual(
     derived.spellcasting.selectedSpells.map((spell) => [spell.name, spell.granted, spell.countsAgainstSelectionLimit]),
     [
-      ['Mending', true, false],
+      ['Mending (Renamed)', true, false],
       ['Magic Weapon', true, false],
     ]
   )
@@ -1241,6 +1327,21 @@ test('static dragonmark trait grants use seeded source fallbacks and include Mar
         amendment_note: null,
       },
     ],
+    featureSpellGrants: [
+      featureSpellGrant({
+        source_feature_key: 'species_trait:storms_boon:gust',
+        source_category: 'species_trait',
+        source_entity_id: 'mark-of-storm',
+        spell_id: 'gust',
+      }),
+      featureSpellGrant({
+        source_feature_key: 'species_trait:storms_boon:gust_of_wind',
+        source_category: 'species_trait',
+        source_entity_id: 'mark-of-storm',
+        spell_id: 'gust-of-wind',
+        minimum_character_level: 3,
+      }),
+    ],
     spellChoices: [],
     featList: [],
     featChoices: [],
@@ -1315,6 +1416,26 @@ test('static dragonmark trait grants use seeded source fallbacks and include Mar
         amended: false,
         amendment_note: null,
       },
+    ],
+    featureSpellGrants: [
+      featureSpellGrant({
+        source_feature_key: 'species_trait:innkeepers_magic:prestidigitation',
+        source_category: 'species_trait',
+        source_entity_id: 'mark-of-hospitality',
+        spell_id: 'prestidigitation',
+      }),
+      featureSpellGrant({
+        source_feature_key: 'species_trait:innkeepers_magic:purify_food_and_drink',
+        source_category: 'species_trait',
+        source_entity_id: 'mark-of-hospitality',
+        spell_id: 'purify-food-and-drink',
+      }),
+      featureSpellGrant({
+        source_feature_key: 'species_trait:innkeepers_magic:unseen_servant',
+        source_category: 'species_trait',
+        source_entity_id: 'mark-of-hospitality',
+        spell_id: 'unseen-servant',
+      }),
     ],
     spellChoices: [],
     featList: [],

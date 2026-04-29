@@ -23,6 +23,8 @@ import { runLegalityChecks, type LegalityResult } from '@/lib/legality/engine'
 import { buildAsiSelectionsFromRows, type AsiSelection } from '@/lib/characters/asi-provenance'
 import { aggregateCharacterLevels, sortCharacterClassLevels } from '@/lib/characters/class-levels'
 import type { SpellOption } from '@/lib/characters/wizard-helpers'
+import { buildLanguageNameByKeyMap } from '@/lib/content/language-content'
+import { buildToolNameByKeyMap } from '@/lib/content/tool-content'
 
 export interface CharacterWithRelations extends Character {
   species: Species | null
@@ -207,10 +209,44 @@ export async function loadCharacterState(
   const typedFeatChoices = ((typedFeatChoicesResult.data ?? []) as CharacterFeatChoice[])
     .map((row) => row.feat_id)
     .filter((value): value is string => Boolean(value))
-  const typedLanguageChoices = ((languageChoicesResult.data ?? []) as CharacterLanguageChoice[])
+  const rawLanguageChoiceRows = (languageChoicesResult.data ?? []) as CharacterLanguageChoice[]
+  const rawToolChoiceRows = (toolChoicesResult.data ?? []) as CharacterToolChoice[]
+  const languageKeys = Array.from(new Set(rawLanguageChoiceRows.map((row) => row.language_key).filter((value): value is string => Boolean(value))))
+  const toolKeys = Array.from(new Set(rawToolChoiceRows.map((row) => row.tool_key).filter((value): value is string => Boolean(value))))
+  const languageCatalogResult = languageKeys.length > 0
+    ? await supabase.from('languages').select('key, name').in('key', languageKeys)
+    : { data: [] as Array<{ key: string; name: string }>, error: null }
+  const toolCatalogResult = toolKeys.length > 0
+    ? await supabase.from('tools').select('key, name').in('key', toolKeys)
+    : { data: [] as Array<{ key: string; name: string }>, error: null }
+
+  if (languageCatalogResult.error || toolCatalogResult.error) {
+    return {
+      status: 'error',
+      error: {
+        message: 'Failed to load language/tool catalog rows',
+        issues: [
+          languageCatalogResult.error ? { scope: 'languages', message: languageCatalogResult.error.message } : null,
+          toolCatalogResult.error ? { scope: 'tools', message: toolCatalogResult.error.message } : null,
+        ].filter((issue): issue is { scope: string; message: string } => Boolean(issue)),
+      },
+    }
+  }
+
+  const languageNameByKey = buildLanguageNameByKeyMap(languageCatalogResult.data ?? [])
+  const toolNameByKey = buildToolNameByKeyMap(toolCatalogResult.data ?? [])
+  const typedLanguageChoiceRows = rawLanguageChoiceRows.map((row) => ({
+    ...row,
+    language: row.language_key ? languageNameByKey.get(row.language_key) ?? row.language : row.language,
+  }))
+  const typedToolChoiceRows = rawToolChoiceRows.map((row) => ({
+    ...row,
+    tool: row.tool_key ? toolNameByKey.get(row.tool_key) ?? row.tool : row.tool,
+  }))
+  const typedLanguageChoices = typedLanguageChoiceRows
     .map((row) => row.language)
     .filter((value): value is string => Boolean(value))
-  const typedToolChoices = ((toolChoicesResult.data ?? []) as CharacterToolChoice[])
+  const typedToolChoices = typedToolChoiceRows
     .map((row) => row.tool)
     .filter((value): value is string => Boolean(value))
   const typedAbilityBonusChoices = ((abilityBonusChoicesResult.data ?? []) as CharacterAbilityBonusChoice[])
@@ -286,9 +322,9 @@ export async function loadCharacterState(
     initialAsiChoices: typedAsiChoices,
     initialTypedAsiChoices: (asiChoicesResult.data ?? []) as CharacterAsiChoice[],
     initialLanguageChoices: typedLanguageChoices,
-    initialTypedLanguageChoices: (languageChoicesResult.data ?? []) as CharacterLanguageChoice[],
+    initialTypedLanguageChoices: typedLanguageChoiceRows,
     initialToolChoices: typedToolChoices,
-    initialTypedToolChoices: (toolChoicesResult.data ?? []) as CharacterToolChoice[],
+    initialTypedToolChoices: typedToolChoiceRows,
     initialSpellChoices: typedSpellChoices,
     initialSpellSelections: typedSpellSelections,
     initialSelectedSpells,

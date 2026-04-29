@@ -169,11 +169,20 @@ test('armor class derivation handles equipped armor, shields, fighting style, an
 })
 
 test('sheet components consume derived helpers instead of local mechanical math', () => {
+  const derived = readFileSync('src/lib/characters/derived.ts', 'utf8')
+  const buildContext = readFileSync('src/lib/characters/build-context.ts', 'utf8')
   const statBlock = readFileSync('src/components/character-sheet/StatBlock.tsx', 'utf8')
   const skillsCard = readFileSync('src/components/character-sheet/SkillsCard.tsx', 'utf8')
   const statBlockView = readFileSync('src/components/character-sheet/StatBlockView.tsx', 'utf8')
   const characterSheet = readFileSync('src/components/character-sheet/CharacterSheet.tsx', 'utf8')
+  const spellsCard = readFileSync('src/components/character-sheet/SpellsCard.tsx', 'utf8')
 
+  assert.match(derived, /export interface DerivedSpellcastingSummary/)
+  assert.match(derived, /export function deriveSpellcastingSummary/)
+  assert.doesNotMatch(buildContext, /export interface DerivedSpellcastingSummary/)
+  assert.doesNotMatch(buildContext, /const spellcastingSources:/)
+  assert.match(spellsCard, /import type \{ DerivedCharacter \} from '@\/lib\/characters\/derived'/)
+  assert.doesNotMatch(spellsCard, /import type \{ DerivedCharacter \} from '@\/lib\/characters\/build-context'/)
   assert.match(statBlock, /abilityModifier/)
   assert.match(statBlock, /derivedAbilities/)
   assert.match(statBlock, /contributors/)

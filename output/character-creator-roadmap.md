@@ -14,6 +14,7 @@ This roadmap now has meaningful implementation behind it.
 - Batch 5 is now effectively complete and closed out by Slice `5n` on 2026-04-25. The live data-copy migration smoke (Slice `5m`) was completed before Batch 5 closed; the Batch 4.5 deployment gate is formally closed. The one architectural gap carried into Batch 6 is consolidating the spellcasting derivation from `build-context.ts` into `derived.ts`.
 - Batch 5.5 is now effectively complete and closed out by Slice `5.5h` on 2026-04-25. Slice `5.5a` landed the shared UI hierarchy, surface, radius, and focus conventions. Slice `5.5b` shortened high-traffic player-facing copy and removed implementation language. Slice `5.5c` reduced wizard summary weight and made simple guided choices render as compact rows. Slice `5.5d` refined login and dashboard entry states. Slice `5.5e` made guided creation more momentum-oriented. Slice `5.5f` compacted the character sheet header and simplified section toggles. Slice `5.5g` made validation, DM audit, and stale-provenance states more repair-oriented and calmer by default. Slice `5.5h` closed the polish pass with visual/accessibility QA notes and a Batch 6 handoff.
 - Batch Eberron is now effectively complete and closed out by Slice `E7` on 2026-04-26. Slice E1 locked the audit/guardrails, Slice E2 added the missing species and lineages, Slice E3 cleaned up dragonmarked lineage metadata, stale notes, and legacy dragonmarked rows/code by deleting any characters still tied to the old rows before purging them, Slice E4 added House Agent, Revenant Blade, double-bladed scimitar support, and elf-lineage feat prerequisite checks, Slice E5 modeled the full ERftLW Artificer infusion roster as repeating feature options with minimum-level prerequisites, count legality, and sheet/wizard surfaces, Slice E6 added an automated ERftLW regression matrix covering representative creation, legality, derived sheet, source allowlist, and DM-review paths, and Slice E7 recorded `output/batch-eberron-closeout-audit.md` with the Batch 6 handoff and the remaining ERftLW gaps outside the current app domain.
+- Batch 6 is now effectively complete and closed out by Slice `6i` on 2026-04-29. Slice `6a` moved spellcasting summaries and per-source spellcasting output onto `derived.ts`. Slice `6b` moved feature-granted spells into `feature_spell_grants` rows keyed to `spells.id`. Slice `6c` made character language/tool catalog keys authoritative. Slice `6d` consolidated character route access checks and marked pre-Batch-4 null-class spell selections for explicit DM audit provenance. Slice `6e` introduced the reusable dry-run content validator. Slice `6f` and `6g` added audited admin CRUD and validation-preview coverage for the Batch 3 content families. Slice `6h` added stable bulk import dry-run/apply planning and amendment metadata. Slice `6i` recorded `output/batch-6-closeout-audit.md` with Batch 7 entry notes.
 - A post-Batch-4 production hotfix shipped on 2026-04-23 to stop the character sheet from entering a React update loop when loading class-scoped spell options for newly created characters.
 - A Batch 4 senior-review pass on 2026-04-23 found several level-up data-integrity bugs that the additive save path makes reachable in normal play (silent spell/feat swap loss, skill PK collision on multiclass overlap, feature-option value-change collision, preserved-spell level misattribution, and a concurrency window in the per-level sync trigger). Batch 4.5 is scheduled before Batch 5 to close these.
 - Batch 4 delivered the end-to-end guided builder workflows that were blocking real character creation:
@@ -87,7 +88,7 @@ Known remaining PHB amendment notes after Batch 3 are now explicit rather than h
 - Battle Master, Hunter, Circle of the Land, and Four Elements still have combat-time or resource-tracking automation gaps
 - Arcane Trickster and Eldritch Knight still have subclass-feature automation gaps beyond spell legality
 
-The intended next step is Batch 6 content ingestion and admin tooling. Batch 4 / 4.5 closeout notes live in `output/batch-4-closeout-audit.md`; Batch Eberron closeout notes live in `output/batch-eberron-closeout-audit.md`.
+The intended next step is Batch 7 hardening, tests, authenticated QA, and setup clarity. Batch 4 / 4.5 closeout notes live in `output/batch-4-closeout-audit.md`; Batch Eberron closeout notes live in `output/batch-eberron-closeout-audit.md`; Batch 6 closeout notes live in `output/batch-6-closeout-audit.md`.
 
 This plan is written for a single implementation agent working inside the repo, not for a human team. That changes the shape of the backlog:
 
@@ -1251,15 +1252,15 @@ These items were explicitly deferred from Batch 5 or earlier review passes. They
 
 1. **Consolidate spellcasting derivation into `derived.ts`** (from Slice 5f). Move `DerivedSpellcastingSourceSummary` and the per-source spellcasting aggregate out of `src/lib/characters/build-context.ts` into `src/lib/characters/derived.ts`. No behavior change — architectural alignment only. After this change the sheet has a single derivation seam for all mechanical values.
 
-2. **Migrate hardcoded spell-grant rules off spell-name lookups** (from Slice 3m/3n review item #5). Replace the ~33 `{ spellName, spellSource }` entries in `src/lib/characters/feature-grants.ts` with a `feature_spell_grants` content table keyed on `spell_id`. Backfill from current rules, delete the hardcoded tables once parity is verified. Minimum viable gate: ship a test-time assertion that every hardcoded entry resolves to exactly one spell row so admin renames fail loudly.
+2. **Migrate hardcoded spell-grant rules off spell-name lookups** (from Slice 3m/3n review item #5) — delivered in Slice 6b on 2026-04-28. `feature_spell_grants` now stores feature-granted spells by `spell_id`, the previous hardcoded spell-name tables are gone from derivation, and creation/sheet/level-up contexts load the grant rows through the content API.
 
-3. **Finish languages/tools catalog cutover** (from Slice 3m/3n review item #6). `language_key` and `tool_key` columns already exist; Batch 6 should make them authoritative. Backfill remaining nulls, add uniqueness / not-null constraints where live data allows, update loaders and persistence helpers to read/write keys as the source of truth, and only then drop or retire the free-text `language` / `tool` columns.
+3. **Finish languages/tools catalog cutover** (from Slice 3m/3n review item #6) — delivered in Slice 6c on 2026-04-28. `language_key` and `tool_key` are now the authoritative character-choice identities; display names are canonicalized from the catalogs, and the old free-text primary keys are retired.
 
-4. **Finish character-access consolidation** (from Slice 3m/3n review item #9). `assertCharacterManageableByUser` now exists in `src/lib/auth/ownership.ts` and is already used by several peer routes. Batch 6 should finish the remaining route audit, especially `src/app/api/characters/[id]/route.ts` and `submit/route.ts`, and add focused tests for player-owner, campaign DM, admin, and unrelated-user behavior.
+4. **Finish character-access consolidation** (from Slice 3m/3n review item #9) — delivered in Slice 6d on 2026-04-28. `assertCharacterAccessibleByUser` now covers owner, campaign-DM, and admin character access; `assertCharacterOwnedByUser` names the stricter owner-only submit flow; and the primary character detail/update/delete and submit routes no longer carry inline ownership checks.
 
 5. **Split load-bearing modules past safe edit size** (from Slice 3m/3n review item #10). `src/lib/characters/feature-grants.ts` (~880 lines), `src/lib/characters/build-context.ts` (~1000 lines), `src/lib/legality/engine.ts` (~810 lines), and `src/components/character-sheet/CharacterSheet.tsx` should be segmented by concern. No behavior changes.
 
-6. **Null `owning_class_id` spell selection cleanup**. The 14 production rows written before Batch 4's class-scoped spell path have no `owning_class_id`. They load and display, but carry no class provenance in the DM audit panel. A targeted data migration or content-admin repair flow should attribute or mark them as pre-Batch-4 legacy rows.
+6. **Null `owning_class_id` spell selection cleanup** — delivered in Slice 6d on 2026-04-28. The 14 production rows written before Batch 4's class-scoped spell path are preserved and marked with `source_feature_key = 'legacy:pre_batch_4_spell_selection'` so DM audit output can show that their class provenance is intentionally legacy/unknown rather than silently missing.
 
 ### Scope
 
@@ -1280,24 +1281,18 @@ These items were explicitly deferred from Batch 5 or earlier review passes. They
 
 Each slice should fit in one Codex session and leave the repo coherent. Slices 6a–6d close carry-ins that would otherwise make import/admin work unstable. Slices 6e–6h build the content tooling. Slice 6i is the closeout gate.
 
-**Slice 6a — Spellcasting derivation seam**
+**Slice 6a — Spellcasting derivation seam** (delivered 2026-04-28)
 
 - Goal: move spellcasting mechanical output onto the canonical derived character shape with no behavior change.
-- Modify:
-  - `src/lib/characters/derived.ts`
-  - `src/lib/characters/build-context.ts`
-  - `src/components/character-sheet/SpellsCard.tsx`
-  - any sheet/page loader that still passes spellcasting from build context directly
-- Tests:
-  - update `test/sheet-derived-seam.test.ts` so `spellcasting` is asserted on `DerivedCharacter`
-  - keep the Slice 5l multiclass caster assertions passing
-  - add a guard that `SpellsCard` reads `derived.spellcasting` rather than `buildContext.spellcasting`
+- Delivered:
+  - `DerivedSpellcastingSourceSummary`, `DerivedSpellcastingSummary`, `DerivedCharacter`, and `deriveSpellcastingSummary()` are exported from `src/lib/characters/derived.ts`
+  - `src/lib/characters/build-context.ts` now delegates spellcasting output construction to the derived helper while retaining build-context normalization responsibilities
+  - sheet-facing consumers that type against `DerivedCharacter` now import that type from `derived.ts`; `SpellsCard` reads the same `derived.spellcasting` shape as the rest of the sheet
+  - `test/sheet-derived-seam.test.ts` guards the seam, and the existing Slice 5l multiclass caster assertions stayed green
 - Acceptance:
-  - `DerivedSpellcastingSourceSummary` and the aggregate spellcasting summary are exported from `derived.ts`
-  - the sheet has one derivation seam for AC, saves, skills, features, ASI/feat history, and spellcasting
-  - no spell DC, attack modifier, prepared/known count, or granted-spell behavior changes
+  - no spell DC, attack modifier, prepared/known count, granted-spell, or per-source multiclass behavior changed
 
-**Slice 6b — Feature spell grants as content**
+**Slice 6b — Feature spell grants as content** (delivered 2026-04-28)
 
 - Goal: replace spell-name feature-grant lookups with content rows keyed to `spells.id`.
 - Modify/create:
@@ -1305,17 +1300,18 @@ Each slice should fit in one Codex session and leave the repo coherent. Slices 6
   - `src/lib/characters/feature-grants.ts`
   - database types in `src/lib/types/database.ts`
   - tests around granted spells in `test/feature-grants.test.ts`
-- Suggested sequence:
-  - first add a parity test proving every current hardcoded `{ spellName, spellSource }` resolves to exactly one spell row
-  - add the table and seed/backfill rows from current hardcoded definitions
-  - switch derivation to consume rows through a small loader/normalizer
-  - remove the hardcoded spell-name table once parity and feature-grant tests pass
+- Delivered:
+  - `supabase/migrations/075_feature_spell_grants.sql` creates `feature_spell_grants`, backfills existing static species grants, migrates Circle of the Land terrain spell grants, and removes terrain spell-name effects from `feature_options`
+  - `src/lib/characters/feature-grants.ts` now resolves species and Circle terrain granted spells by `featureSpellGrant.spell_id` rather than spell names or source fallbacks
+  - `src/lib/types/database.ts`, `src/lib/content/feature-spell-grant-content.ts`, and `/api/content/feature-spell-grants` expose the content rows to the app
+  - creation, sheet edit, and level-up local derivation all pass loaded `featureSpellGrants` into `buildLocalCharacterContext`
+  - `test/feature-grants.test.ts` guards the migration shape, removal of name-based lookup tables, renamed-spell resolution by id, and Circle terrain grants from content rows
 - Acceptance:
   - admin renaming or duplicate spell seeding cannot silently break feature grants
   - domain/oath/species/feat-granted spells still render as granted, not player-selected
   - all current feature-grant tests pass against content-backed grants
 
-**Slice 6c — Language/tool key cutover**
+**Slice 6c — Language/tool key cutover** (delivered 2026-04-28)
 
 - Goal: make language/tool catalog keys authoritative for character choices.
 - Modify:
@@ -1325,16 +1321,18 @@ Each slice should fit in one Codex session and leave the repo coherent. Slices 6
   - `src/lib/characters/atomic-save.ts`
   - `src/lib/characters/language-tool-provenance.ts`
   - stale provenance view / detector if the retired text fields are referenced
-- Tests:
-  - add migration-text tests for not-null/unique/index behavior
-  - update `test/load-character.test.ts` and `test/atomic-save.test.ts` to assert key-first behavior
-  - keep creation and level-up language/tool persistence tests passing
+- Delivered:
+  - `supabase/migrations/076_language_tool_key_cutover.sql` backfills remaining `language_key` / `tool_key` values, fails loudly if unresolved rows remain, canonicalizes display text from catalogs, deduplicates by key, enforces not-null keys, and moves primary keys to `(character_id, language_key)` / `(character_id, tool_key)`
+  - `src/lib/characters/atomic-save.ts` and `src/lib/characters/choice-persistence.ts` now prefer catalog display names when a key is present, while still resolving keys from display names for legacy/simple inputs
+  - `src/lib/characters/load-character.ts` and `src/lib/legality/build-input.ts` hydrate language/tool display names from catalog keys before exposing choices to edit and legality flows
+  - `src/lib/content/language-content.ts` and `src/lib/content/tool-content.ts` expose key-to-name maps alongside the existing name-to-key maps
+  - `test/language-tool-key-cutover.test.ts`, `test/atomic-save.test.ts`, and `test/load-character.test.ts` guard the migration and key-first behavior
 - Acceptance:
   - new saves write catalog keys
   - loaders derive display names from catalogs or typed rows, not from free-text primary identity
   - existing rows are backfilled or explicitly quarantined before constraints tighten
 
-**Slice 6d — Access helper closeout and legacy spell attribution**
+**Slice 6d — Access helper closeout and legacy spell attribution** (delivered 2026-04-28)
 
 - Goal: close small data/access carry-ins before admin write surfaces expand.
 - Modify:
@@ -1347,11 +1345,17 @@ Each slice should fit in one Codex session and leave the repo coherent. Slices 6
   - route-source tests that every mutating character route uses the shared access helper or a deliberately stricter owner-only helper
   - owner / campaign-DM / admin / unrelated-user tests for update, submit, approve/request-changes, snapshots, and stat rolls
   - migration test documenting the chosen handling for the 14 legacy spell rows
+- Delivered:
+  - `src/lib/auth/ownership.ts` now exports `assertCharacterAccessibleByUser` for owner/campaign-DM/admin character access and `assertCharacterOwnedByUser` for submit's intentionally owner-only path
+  - `src/app/api/characters/[id]/route.ts` now gates load, update, and delete through the shared access helper instead of inline ownership checks
+  - `src/app/api/characters/[id]/submit/route.ts` now uses the named owner-only helper before legality checks and submission
+  - `supabase/migrations/077_legacy_spell_selection_attribution.sql` marks count-limited null-`owning_class_id` spell rows as `legacy:pre_batch_4_spell_selection` rather than guessing an owning class
+  - `test/character-access-closeout.test.ts` covers the helper roles, route-source guardrails, and the legacy spell attribution migration
 - Acceptance:
   - no inlined character-management permission logic remains in mutating character routes, except submit if intentionally owner-only and covered by a named helper
   - legacy null `owning_class_id` rows are either attributed or marked as pre-Batch-4 legacy so DM audit output is explicit
 
-**Slice 6e — Importer modularization and dry-run validator**
+**Slice 6e — Importer modularization and dry-run validator** (delivered 2026-04-28)
 
 - Goal: turn `scripts/seed-srd.ts` into a reusable import/validation harness before adding more content families.
 - Modify/create:
@@ -1369,11 +1373,16 @@ Each slice should fit in one Codex session and leave the repo coherent. Slices 6
 - Tests:
   - fixture-based validator tests for each failure class
   - one happy-path fixture that covers classes, subclasses, spells, languages, tools, option groups, equipment, and starting packages
+- Delivered:
+  - `scripts/content-import/validator.ts` defines a pure `validateContentImport()` dry-run validator over fixture-style content bundles
+  - `scripts/content-import/validate.ts` exposes `npm run content:validate -- --fixture path/to/content-import.json`
+  - `scripts/content-import/srd-seed.ts` now owns the legacy SRD seeding implementation, while `scripts/seed-srd.ts` is a thin orchestration entrypoint
+  - `test/content-import-validator.test.ts` covers the happy-path fixture and failure classes for missing references, invalid progression, orphaned option groups/options, duplicate option rows, spell-list mismatches, ambiguous/missing feature spell grants, and unresolved language/tool/equipment references
 - Acceptance:
   - content can be validated in dry-run mode before any insert/update
   - validator errors name the table/entity/key and suggested owner slice
 
-**Slice 6f — Admin CRUD for option groups, languages, and tools**
+**Slice 6f — Admin CRUD for option groups, languages, and tools** (delivered 2026-04-28)
 
 - Goal: make non-equipment Batch 3 content maintainable without SQL.
 - Modify:
@@ -1395,12 +1404,18 @@ Each slice should fit in one Codex session and leave the repo coherent. Slices 6
   - API schema tests for create/update/delete validation
   - source-code guard tests that admin panels call validation before publishing
   - UI convention guard that the new admin panel uses shared surfaces, shared focus treatment, and progressive disclosure for detailed validation
+- Delivered:
+  - `src/lib/content/admin-schemas.ts` now validates create/update/delete payloads for languages, tools, feature option groups, and feature options
+  - `/api/content/languages`, `/api/content/tools`, `/api/content/feature-option-groups`, and `/api/content/feature-options` now expose admin-only `POST`, `PUT`, and `DELETE` paths with audit logging
+  - `src/components/dm/ContentAdmin.tsx` now exposes admin tabs and editors for languages, tools, feature option groups, and feature options
+  - the admin save flow runs a 6e `validateContentImport()` preview before publishing and displays detailed findings inside progressive disclosure using shared surface utilities
+  - `test/content-admin-6f.test.ts` covers schemas, route guardrails, and UI validation-preview wiring
 - Acceptance:
   - a DM/admin can maintain feature option groups/options, languages, and tools through the admin UI
   - invalid keys, duplicate keys, and dangling group references are blocked before write
   - the admin UI feels like the same product as the polished dashboard/sheet, not a separate dense back-office tool
 
-**Slice 6g — Admin CRUD for equipment and starting packages**
+**Slice 6g — Admin CRUD for equipment and starting packages** (delivered 2026-04-29)
 
 - Goal: make item/armor/weapon/shield/starting-equipment content maintainable without SQL.
 - Modify:
@@ -1423,12 +1438,18 @@ Each slice should fit in one Codex session and leave the repo coherent. Slices 6
   - a fixture test proving a starting package resolves to concrete equipment rows
   - an AC regression that still passes after editing armor/shield content shape
   - UI convention guard that equipment editors do not introduce nested heavy cards, alert-heavy neutral states, or verbose implementation copy
+- Delivered:
+  - `src/lib/content/admin-schemas.ts` now validates create/update/delete payloads for equipment items, weapons, armor, shields, and starting equipment packages
+  - equipment content routes now use shared schema parsing for admin writes and deletes while preserving category checks and audit logging
+  - `src/lib/content/equipment-content.ts` exposes a compact resolver for starting package rows with concrete item keys, names, categories, quantities, choice groups, and notes
+  - `src/components/dm/ContentAdmin.tsx` now builds equipment validation bundles, maps package item IDs to stable item keys before preview/save, and shows a collapsed package preview with compact resolved rows
+  - `test/content-admin-6g.test.ts` covers equipment family schemas/routes, starting package resolution, AC derivation from edited armor/shield payloads, and the admin UI convention guard
 - Acceptance:
   - admin UI can maintain all Batch 3 equipment families
   - starting packages can be previewed and validated before publish
   - equipment editing stays scannable even when packages contain several alternatives or bundle choices
 
-**Slice 6h — Bulk source import and amendment workflow**
+**Slice 6h — Bulk source import and amendment workflow** (delivered 2026-04-29)
 
 - Goal: support repeatable source/amendment import without hidden SQL patches.
 - Modify/create:
@@ -1441,13 +1462,21 @@ Each slice should fit in one Codex session and leave the repo coherent. Slices 6
   - duplicate source/key conflict test
   - rejected import leaves no partial writes
   - UI convention guard that import diffs use non-color-only status labels and do not present neutral no-op rows as warnings
+- Delivered:
+  - `scripts/content-import/import-workflow.ts` plans validated import diffs with stable `Create`, `Update`, `No change`, and `Retire` rows plus amendment metadata
+  - `scripts/content-import/import.ts` adds `npm run content:import` for dry-run and explicit snapshot-backed apply using the same validated payload
+  - the Slice 6e validator now catches duplicate source keys as well as duplicate content keys
+  - equipment item and starting equipment package APIs preserve `amended` / `amendment_note` metadata on admin writes
+  - `src/components/dm/ContentAdmin.tsx` includes a calm import diff preview surface with collapsed validation findings
+  - `docs/architecture.md` documents the dry-run/apply workflow and amendment metadata expectations
+  - `test/content-import-6h.test.ts` covers fixture diff planning, duplicate conflicts, rejected-import atomicity, dry-run/apply parity, command/docs wiring, and UI copy guardrails
 - Acceptance:
   - importer can dry-run and then apply the same validated payload
   - import output is stable enough to paste into closeout notes
   - source amendments remain visible to campaign allowlisting and DM review
   - admin users can understand the import diff without reading raw payloads
 
-**Slice 6i — Batch 6 closeout gate**
+**Slice 6i — Batch 6 closeout gate** (delivered 2026-04-29)
 
 - Goal: prove Batch 6 made content/admin work safer and identify the next batch cleanly.
 - Deliver:
@@ -1459,6 +1488,10 @@ Each slice should fit in one Codex session and leave the repo coherent. Slices 6
   - content validator happy-path and failure fixtures
   - regression matrix covering a caster with feature-granted spells, a language/tool-heavy build, and an equipment-starting-package build
   - visual QA notes for the Batch 6 admin/content surfaces against the Batch 5.5 conventions
+- Delivered:
+  - `output/batch-6-closeout-audit.md` records delivered slices 6a-6i, Batch 5 carry-in closure/defer decisions, representative import dry-run output, an admin maintenance walkthrough, visual QA notes, and Batch 7 entry notes
+  - `test/batch-6-closeout.test.ts` pins the closeout artifact and roadmap handoff
+  - Batch 7 now inherits concrete hardening/usability work rather than open-ended content/admin cleanup
 - Acceptance:
   - all Batch 5 carry-ins are closed or explicitly deferred with owner/date/reason
   - content families added in Batch 3 can be maintained through admin UI or importer
@@ -1492,7 +1525,7 @@ Each slice should fit in one Codex session and leave the repo coherent. Slices 6
 - Admin UI supports all rules-significant content categories.
 - Validation catches structural content issues early.
 - All Batch 5 carry-ins are closed.
-- Batch 7 can focus on hardening/usability rather than hidden content-data cleanup.
+- Batch 7 can focus on hardening/usability rather than content-data cleanup left implicit.
 
 ## Batch 7: Hardening, Tests, and Usability
 
@@ -1503,6 +1536,16 @@ Make the app reliable enough for actual campaign use.
 ### Why
 
 A sophisticated builder that is hard to trust is not useful. The repo already has some legality tests, but broader behavioral coverage is needed.
+
+### Batch 7 entry notes
+
+Batch 7 starts from the Slice 6i closeout in `output/batch-6-closeout-audit.md`. Its first pass should stay concrete:
+
+- authenticated visual QA for dashboard, wizard identity/species/review steps, character sheet, DM review/audit, and Batch 6 admin/content screens
+- route and persistence integration tests for create, save draft, submit, level up, admin create/edit/retire flows, rejected import previews, and source allowlist behavior
+- setup documentation, `.env.example`, and a local demo-data path so browser QA is repeatable
+- module-splitting hardening only after current behavior is pinned by tests
+- multi-source skill provenance audit table only if authenticated DM review finds a specific missing-audit case
 
 ### Scope
 

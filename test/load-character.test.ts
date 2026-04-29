@@ -197,6 +197,85 @@ test('loadCharacterState rebuilds aggregate levels from per-level class history'
   )
 })
 
+test('loadCharacterState derives language and tool display names from catalog keys', async () => {
+  const supabase = createSupabaseMock({
+    [`characters:eq:${characterId}`]: {
+      data: {
+        id: characterId,
+        user_id: 'user-1',
+        campaign_id: 'campaign-1',
+        name: 'Aelar',
+        species_id: null,
+        background_id: null,
+        alignment: null,
+        experience_points: 0,
+        status: 'draft',
+        stat_method: 'point_buy',
+        base_str: 8,
+        base_dex: 14,
+        base_con: 13,
+        base_int: 15,
+        base_wis: 12,
+        base_cha: 10,
+        hp_max: 8,
+        character_type: 'pc',
+        dm_notes: null,
+        created_at: '',
+        updated_at: '',
+      },
+      error: null,
+    },
+    [`character_class_levels:eq:${characterId}`]: { data: [], error: null },
+    [`character_skill_proficiencies:eq:${characterId}`]: { data: [], error: null },
+    [`character_ability_bonus_choices:eq:${characterId}`]: { data: [], error: null },
+    [`character_asi_choices:eq:${characterId}`]: { data: [], error: null },
+    [`character_language_choices:eq:${characterId}`]: {
+      data: [{
+        character_id: characterId,
+        language: 'Old Common Label',
+        language_key: 'common',
+        character_level_id: null,
+        source_category: 'manual',
+        source_entity_id: null,
+        source_feature_key: null,
+        created_at: '',
+      }],
+      error: null,
+    },
+    [`character_tool_choices:eq:${characterId}`]: {
+      data: [{
+        character_id: characterId,
+        tool: 'Old Smith Label',
+        tool_key: 'smiths-tools',
+        character_level_id: null,
+        source_category: 'manual',
+        source_entity_id: null,
+        source_feature_key: null,
+        created_at: '',
+      }],
+      error: null,
+    },
+    [`character_feature_option_choices:eq:${characterId}`]: { data: [], error: null },
+    [`character_equipment_items:eq:${characterId}`]: { data: [], error: null },
+    [`character_spell_selections:eq:${characterId}`]: { data: [], error: null },
+    [`character_feat_choices:eq:${characterId}`]: { data: [], error: null },
+    [`character_stat_rolls:eq:${characterId}`]: { data: [], error: null },
+    'languages:in': { data: [{ key: 'common', name: 'Common' }], error: null },
+    'tools:in': { data: [{ key: 'smiths-tools', name: "Smith's tools" }], error: null },
+  })
+
+  const result = await loadCharacterState(supabase as never, characterId, {
+    buildLegalityInputImpl: async () => null,
+  })
+
+  assert.equal(result.status, 'success')
+  if (result.status !== 'success') return
+  assert.deepEqual(result.state.initialLanguageChoices, ['Common'])
+  assert.deepEqual(result.state.initialToolChoices, ["Smith's tools"])
+  assert.equal(result.state.initialTypedLanguageChoices[0]?.language, 'Common')
+  assert.equal(result.state.initialTypedToolChoices[0]?.tool, "Smith's tools")
+})
+
 test('loadCharacterState returns a hard failure when one parallel query errors', async () => {
   const supabase = createSupabaseMock({
     [`characters:eq:${characterId}`]: {
