@@ -156,9 +156,9 @@ WITH circle_land_grants AS (
   SELECT
     option.id AS source_entity_id,
     option.key AS terrain_key,
-    grant.value AS grant_value
+    spell_grant.value AS grant_value
   FROM public.feature_options option
-  CROSS JOIN LATERAL jsonb_array_elements(option.effects -> 'spell_grants') AS grant(value)
+  CROSS JOIN LATERAL jsonb_array_elements(option.effects -> 'spell_grants') AS spell_grant(value)
   WHERE option.group_key = 'circle_of_land:terrain:2014'
     AND jsonb_typeof(option.effects -> 'spell_grants') = 'array'
 ),

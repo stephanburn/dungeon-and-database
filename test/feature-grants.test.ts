@@ -62,6 +62,7 @@ test('feature spell grant migration stores spell ids instead of spell names', ()
   assert.match(migration, /species_trait:spellsmith:mending/)
   assert.match(migration, /subclass_feature:circle_of_the_land:forest:barkskin/)
   assert.doesNotMatch(migration, /spell_name text/i)
+  assert.doesNotMatch(migration, /\bAS\s+grant\b/i)
 })
 
 test('feature grant derivation no longer contains spell-name lookup tables', () => {
