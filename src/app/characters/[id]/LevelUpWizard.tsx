@@ -117,6 +117,13 @@ type LevelUpWizardProps = {
 
 type HpMode = 'fixed' | 'max' | 'manual'
 
+type LevelUpConflict = {
+  code: string
+  title: string
+  message: string
+  clearDraft: boolean
+}
+
 const LEVEL_UP_REVIEW_STEP_LABELS: Record<StepId, string> = {
   class: 'Class',
   subclass: 'Subclass',
@@ -144,6 +151,37 @@ const LEVEL_UP_CHECK_STEP_MAP: Record<string, StepId> = {
   feat_prerequisites: 'feat',
   feat_slots: 'feat',
   asi_choices: 'feat',
+}
+
+function getLevelUpConflict(code: unknown, fallbackMessage: string): LevelUpConflict | null {
+  if (code === 'stale_character') {
+    return {
+      code,
+      title: 'Character changed elsewhere',
+      message: fallbackMessage || 'This character changed in another tab or session. Refresh the sheet before saving this level-up.',
+      clearDraft: false,
+    }
+  }
+
+  if (code === 'stale_level_up') {
+    return {
+      code,
+      title: 'Level already changed',
+      message: fallbackMessage || 'This level-up is based on an older class level. Return to the refreshed sheet before trying again.',
+      clearDraft: true,
+    }
+  }
+
+  if (code === 'duplicate_level_up_choice') {
+    return {
+      code,
+      title: 'Duplicate level-up choice',
+      message: fallbackMessage || 'This level-up contains a duplicate choice. Review the selected spells, feats, features, and skills before saving again.',
+      clearDraft: false,
+    }
+  }
+
+  return null
 }
 
 function getAdjustedStats(
@@ -283,6 +321,7 @@ export function LevelUpWizard({
   const [draftHydrated, setDraftHydrated] = useState(false)
   const [draftRestored, setDraftRestored] = useState(false)
   const [showDraftRestoredNotice, setShowDraftRestoredNotice] = useState(false)
+  const [levelUpConflict, setLevelUpConflict] = useState<LevelUpConflict | null>(null)
   const activeInitialFeatureOptionChoices = useMemo(
     () => getActiveFeatureOptionChoices(initialFeatureOptionChoices),
     [initialFeatureOptionChoices]
@@ -1359,6 +1398,7 @@ export function LevelUpWizard({
   }
 
   function goBack() {
+    setLevelUpConflict(null)
     setStepIndex((value) => Math.max(0, value - 1))
   }
 
@@ -1368,14 +1408,24 @@ export function LevelUpWizard({
       toast({ title: 'Cannot continue', description: error, variant: 'destructive' })
       return
     }
+    setLevelUpConflict(null)
     setStepIndex((value) => Math.min(steps.length - 1, value + 1))
   }
 
   function goToStep(stepId: StepId) {
     const nextIndex = steps.findIndex((step) => step.id === stepId)
     if (nextIndex >= 0) {
+      setLevelUpConflict(null)
       setStepIndex(nextIndex)
     }
+  }
+
+  function returnToRefreshedSheet() {
+    if (levelUpConflict?.clearDraft) {
+      window.localStorage.removeItem(levelUpDraftStorageKey)
+    }
+    router.push(`/characters/${character.id}`)
+    router.refresh()
   }
 
   async function finishLevelUp() {
@@ -1388,6 +1438,7 @@ export function LevelUpWizard({
     }
 
     setWorking(true)
+    setLevelUpConflict(null)
     const controller = new AbortController()
     saveAbortControllerRef.current?.abort()
     saveAbortControllerRef.current = controller
@@ -1417,6 +1468,11 @@ export function LevelUpWizard({
 
       const json = await response.json()
       if (!response.ok) {
+        const conflict = getLevelUpConflict(json.code, json.error ?? '')
+        if (conflict) {
+          setLevelUpConflict(conflict)
+          return
+        }
         throw new Error(json.error ?? 'Unable to save the level-up draft.')
       }
 
@@ -1483,6 +1539,25 @@ export function LevelUpWizard({
                 <span>Restored your in-progress level-up draft for this character. Review each step before saving.</span>
                 <Button type="button" variant="ghost" size="sm" onClick={() => setShowDraftRestoredNotice(false)}>
                   Dismiss
+                </Button>
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {levelUpConflict && (
+            <Alert className="border-amber-400/20 bg-amber-400/10">
+              <AlertDescription className="flex flex-col gap-3 text-amber-50 sm:flex-row sm:items-start sm:justify-between">
+                <span>
+                  <span className="block font-medium">{levelUpConflict.title}</span>
+                  <span className="mt-1 block text-amber-50/85">{levelUpConflict.message}</span>
+                </span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="border-amber-300/30 bg-amber-300/10 text-amber-50 hover:bg-amber-300/15"
+                  onClick={returnToRefreshedSheet}
+                >
+                  Back to refreshed sheet
                 </Button>
               </AlertDescription>
             </Alert>

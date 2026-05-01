@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { ChevronDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -98,6 +98,7 @@ import type {
 import type { ArmorCatalogEntry, ShieldCatalogEntry } from '@/lib/content/equipment-content'
 import type { LegalityResult } from '@/lib/legality/engine'
 import type { SpellOption } from '@/lib/characters/wizard-helpers'
+import { mergeSpellOptionsStable, replaceSpellOptionsStable } from '@/lib/characters/spell-options'
 
 // ── Status display ─────────────────────────────────────────
 
@@ -730,6 +731,7 @@ export function CharacterSheet({
   const [updatedAt, setUpdatedAt] = useState(initial.updated_at)
   const [dmNotes, setDmNotes] = useState(initial.dm_notes ?? '')
   const [highlightedSection, setHighlightedSection] = useState<SectionId | null>(null)
+  const [saveConflict, setSaveConflict] = useState<{ code: string; message: string } | null>(null)
   const highlightTimerRef = useRef<number | null>(null)
   const initialFightingStyleKeys = useMemo(
     () => new Set(
@@ -841,16 +843,7 @@ export function CharacterSheet({
         const mergedById = new Map<string, SpellOption>()
         for (const spell of initialSelectedSpells) mergedById.set(spell.id, spell)
         for (const spell of Array.isArray(data) ? data : []) mergedById.set(spell.id, spell)
-        setSpellOptions((current) => {
-          const next = Array.from(mergedById.values())
-          if (
-            current.length === next.length
-            && current.every((spell, index) => spell.id === next[index]?.id)
-          ) {
-            return current
-          }
-          return next
-        })
+        setSpellOptions((current) => replaceSpellOptionsStable(current, Array.from(mergedById.values())))
       })
   }, [
     campaignId,
@@ -884,6 +877,7 @@ export function CharacterSheet({
 
   async function handleSave() {
     setSaving(true)
+    setSaveConflict(null)
     try {
       const canonicalFeatureOptionChoices = [
         ...featureOptionChoices.filter((choice) => (
@@ -994,6 +988,17 @@ export function CharacterSheet({
 
       const json = await res.json()
       if (!res.ok) {
+        if (
+          json.code === 'stale_character'
+          || json.code === 'optimistic_lock_required'
+          || json.code === 'duplicate_level_up_choice'
+        ) {
+          setSaveConflict({
+            code: json.code,
+            message: json.error ?? 'Refresh the character before saving again.',
+          })
+          return
+        }
         toast({ title: 'Save failed', description: json.error, variant: 'destructive' })
         return
       }
@@ -1819,13 +1824,11 @@ export function CharacterSheet({
     spell_selection_count: 'spells-feats',
   }
 
-  function mergeSpellOptions(options: SpellOption[]) {
+  const mergeSpellOptions = useCallback((options: SpellOption[]) => {
     setSpellOptions((current) => {
-      const mergedById = new Map(current.map((spell) => [spell.id, spell]))
-      for (const spell of options) mergedById.set(spell.id, spell)
-      return Array.from(mergedById.values())
+      return mergeSpellOptionsStable(current, options)
     })
-  }
+  }, [])
 
   function jumpToCheck(key: string) {
     const sectionId = checkSectionMap[key]
@@ -1870,6 +1873,22 @@ export function CharacterSheet({
         onSave={handleSave}
         onSubmit={handleSubmit}
       />
+
+      {saveConflict && (
+        <Alert className="border-amber-400/20 bg-amber-400/10">
+          <AlertDescription className="flex flex-col gap-3 text-amber-50 sm:flex-row sm:items-center sm:justify-between">
+            <span>{saveConflict.message}</span>
+            <Button
+              type="button"
+              variant="outline"
+              className="border-amber-300/30 bg-amber-300/10 text-amber-50 hover:bg-amber-300/15"
+              onClick={() => router.refresh()}
+            >
+              Refresh character
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* DM notes banner */}
       {status === 'changes_requested' && initial.dm_notes && (

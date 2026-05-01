@@ -84,10 +84,18 @@ import {
   buildCreationLanguageChoices,
   buildCreationSkillProficiencies,
   buildCreationToolChoices,
+  filterDuplicateSkillChoices,
+  getSkillChoiceDuplicateReason,
   mergeCreationLanguageSelections,
   mergeCreationSkillSelections,
   mergeCreationToolSelections,
 } from '@/lib/characters/creation-step-selections'
+import {
+  buildCreationStepList,
+  getAllowedStatMethodOptions,
+  normalizeStatMethodForCampaign,
+  type CreationStepId,
+} from '@/lib/characters/creation-flow'
 import type { FeatureOptionChoiceInput } from '@/lib/characters/choice-persistence'
 import {
   resolveStartingEquipment,
@@ -142,30 +150,7 @@ interface CharacterNewFormProps {
   isDm: boolean
 }
 
-type StepId =
-  | 'identity'
-  | 'species'
-  | 'background'
-  | 'classes'
-  | 'subclasses'
-  | 'stats'
-  | 'skills'
-  | 'equipment'
-  | 'spells-feats'
-  | 'review'
-
-const STEPS: Array<{ id: StepId; label: string }> = [
-  { id: 'identity', label: 'Identity' },
-  { id: 'species', label: 'Species' },
-  { id: 'background', label: 'Background' },
-  { id: 'classes', label: 'Classes' },
-  { id: 'subclasses', label: 'Subclasses' },
-  { id: 'stats', label: 'Ability Scores' },
-  { id: 'skills', label: 'Skills' },
-  { id: 'equipment', label: 'Equipment' },
-  { id: 'spells-feats', label: 'Spells + Feats' },
-  { id: 'review', label: 'Review' },
-]
+type StepId = CreationStepId
 
 type ReviewIssueGroup = {
   stepId: Exclude<StepId, 'review'>
@@ -643,7 +628,6 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
     }
   }, [statMethod, stats])
 
-  const currentStep = STEPS[stepIndex]
   const selectedSpecies = speciesList.find((species) => species.id === speciesId) ?? null
   const selectedBackground = backgroundList.find((background) => background.id === backgroundId) ?? null
   const firstClassId = levels[0]?.class_id ?? ''
@@ -831,12 +815,60 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
     })),
     [speciesSkillConfig]
   )
+  const backgroundSkillDuplicateSources = useMemo(
+    () => [
+      { label: 'species', skills: speciesSkillChoices },
+    ],
+    [speciesSkillChoices]
+  )
+  const classSkillDuplicateSources = useMemo(
+    () => [
+      { label: 'species', skills: speciesSkillChoices },
+      {
+        label: 'background',
+        skills: [
+          ...(selectedBackground?.skill_proficiencies ?? []),
+          ...backgroundSkillChoices,
+        ],
+      },
+    ],
+    [backgroundSkillChoices, selectedBackground?.skill_proficiencies, speciesSkillChoices]
+  )
+  const subclassSkillDuplicateSources = useMemo(
+    () => [
+      { label: 'species', skills: speciesSkillChoices },
+      {
+        label: 'background',
+        skills: [
+          ...(selectedBackground?.skill_proficiencies ?? []),
+          ...backgroundSkillChoices,
+        ],
+      },
+      { label: selectedClass?.name ? `${selectedClass.name} class skills` : 'class', skills: classSkillChoices },
+    ],
+    [
+      backgroundSkillChoices,
+      classSkillChoices,
+      selectedBackground?.skill_proficiencies,
+      selectedClass?.name,
+      speciesSkillChoices,
+    ]
+  )
   const backgroundSkillOptions = useMemo(
     () => (selectedBackground?.skill_choice_from ?? []).map((skill) => ({
       id: skill,
       label: skill.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase()),
+      disabledReason: getSkillChoiceDuplicateReason(skill, backgroundSkillDuplicateSources),
     })),
-    [selectedBackground]
+    [backgroundSkillDuplicateSources, selectedBackground]
+  )
+  const classSkillOptions = useMemo(
+    () => (selectedClass?.skill_choices?.from ?? []).map((skill) => ({
+      id: skill.toLowerCase(),
+      label: skill,
+      disabledReason: getSkillChoiceDuplicateReason(skill, classSkillDuplicateSources),
+    })),
+    [classSkillDuplicateSources, selectedClass?.skill_choices?.from]
   )
   const subclassLanguageOptions = useMemo(
     () => (subclassLanguageConfig?.options ?? []).map((language) => ({
@@ -849,8 +881,9 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
     () => Array.from(subclassSkillConfig?.from ?? []).map((skill) => ({
       id: skill,
       label: skill.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase()),
+      disabledReason: getSkillChoiceDuplicateReason(skill, subclassSkillDuplicateSources),
     })),
-    [subclassSkillConfig]
+    [subclassSkillConfig, subclassSkillDuplicateSources]
   )
   const subclassChoiceOptions = useMemo(
     () => (selectedClass ? (subclassMap[selectedClass.id] ?? []) : []).map((subclass) => ({
@@ -1116,6 +1149,17 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
   )
 
   const campaign = campaignContext?.campaign ?? campaigns.find((entry) => entry.id === campaignId) ?? null
+  const requiredStatMethod = campaign?.settings.stat_method ?? null
+  const statMethodOptions = useMemo(
+    () => getAllowedStatMethodOptions(requiredStatMethod),
+    [requiredStatMethod]
+  )
+
+  useEffect(() => {
+    if (!requiredStatMethod) return
+    setStatMethod((current) => normalizeStatMethodForCampaign(current, requiredStatMethod))
+  }, [requiredStatMethod])
+
   const creationHitDieRows = buildWizardHitDieRows(levels, classDetailMap)
   const creationHpMax = calculateCreationHpMax(creationHitDieRows, stats.con)
   const resolvedStartingEquipment = useMemo(
@@ -1358,6 +1402,32 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
 
     return cappedCantripChoiceCount >= requiredCantrips && cappedLeveledChoiceCount >= requiredLeveled
   }, [activeSpellcastingSource, cappedCantripChoiceCount, cappedLeveledChoiceCount])
+  const includeSubclassStep = useMemo(
+    () => levels.some((level) => {
+      const detail = classDetailMap[level.class_id]
+      return Boolean(detail && level.level >= detail.subclass_choice_level)
+    }),
+    [classDetailMap, levels]
+  )
+  const includeSpellsFeatsStep = Boolean(
+    (
+      activeSpellcastingSource
+      && (
+        (activeSpellcastingSource.cantripSelectionCap ?? 0) > 0
+        || (activeSpellcastingSource.leveledSpellSelectionCap ?? 0) > 0
+      )
+    )
+    || (derived?.featSlots ?? []).length > 0
+    || featureSpellDefinitions.length > 0
+    || featSpellDefinitions.length > 0
+  )
+  const visibleSteps = useMemo(
+    () => buildCreationStepList({
+      includeSubclassStep,
+      includeSpellsFeatsStep,
+    }),
+    [includeSpellsFeatsStep, includeSubclassStep]
+  )
   const reviewSummaryItems = useMemo(() => {
     if (!derived) return []
 
@@ -1514,15 +1584,24 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
   ])
   const completedSteps = useMemo(
     () => getContiguouslyCompletedSteps(
-      STEPS.map((step) => step.id),
+      visibleSteps.map((step) => step.id),
       stepCompletion
     ),
-    [stepCompletion]
+    [stepCompletion, visibleSteps]
   )
   const maxReachableStepIndex = useMemo(
-    () => Math.min(completedSteps.length + 1, STEPS.length - 1),
-    [completedSteps.length]
+    () => Math.min(completedSteps.length + 1, visibleSteps.length - 1),
+    [completedSteps.length, visibleSteps.length]
   )
+  const currentStepIndex = Math.min(stepIndex, visibleSteps.length - 1)
+  const currentStep: { id: StepId; label: string } =
+    visibleSteps[currentStepIndex] ?? { id: 'identity', label: 'Identity' }
+
+  useEffect(() => {
+    if (stepIndex > visibleSteps.length - 1) {
+      setStepIndex(Math.max(0, visibleSteps.length - 1))
+    }
+  }, [stepIndex, visibleSteps.length])
 
   useEffect(() => {
     if (!resumeCharacterId || !draftHydrated || draftStepInitialized) return
@@ -1530,8 +1609,8 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
     const classIds = Array.from(new Set(levels.map((level) => level.class_id).filter(Boolean)))
     if (classIds.some((classId) => !classDetailMap[classId])) return
 
-    const firstIncompleteIndex = STEPS.findIndex((step) => !stepCompletion[step.id])
-    setStepIndex(firstIncompleteIndex >= 0 ? firstIncompleteIndex : STEPS.length - 1)
+    const firstIncompleteIndex = visibleSteps.findIndex((step) => !stepCompletion[step.id])
+    setStepIndex(firstIncompleteIndex >= 0 ? firstIncompleteIndex : visibleSteps.length - 1)
     setDraftStepInitialized(true)
   }, [
     classDetailMap,
@@ -1541,6 +1620,7 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
     levels,
     resumeCharacterId,
     stepCompletion,
+    visibleSteps,
   ])
 
   useEffect(() => {
@@ -1702,6 +1782,14 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
         return null
       case 'background':
         if (!backgroundId) return 'Choose a background to continue.'
+        {
+          const duplicateSkill = backgroundSkillChoices.find((skill) =>
+            getSkillChoiceDuplicateReason(skill, backgroundSkillDuplicateSources)
+          )
+          if (duplicateSkill) {
+            return `${duplicateSkill} is already selected from another source. Choose a different background skill.`
+          }
+        }
         if (backgroundSkillChoices.length < (selectedBackground?.skill_choice_count ?? 0)) {
           return `Choose ${selectedBackground?.skill_choice_count ?? 0} background skill${(selectedBackground?.skill_choice_count ?? 0) === 1 ? '' : 's'} to continue.`
         }
@@ -1760,6 +1848,21 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
         return null
       }
       case 'skills':
+        {
+          const duplicateClassSkill = classSkillChoices.find((skill) =>
+            getSkillChoiceDuplicateReason(skill, classSkillDuplicateSources)
+          )
+          if (duplicateClassSkill) {
+            return `${duplicateClassSkill} is already selected from another source. Choose a different class skill.`
+          }
+
+          const duplicateSubclassSkill = subclassSkillChoices.find((skill) =>
+            getSkillChoiceDuplicateReason(skill, subclassSkillDuplicateSources)
+          )
+          if (duplicateSubclassSkill) {
+            return `${duplicateSubclassSkill} is already selected from another source. Choose a different subclass skill.`
+          }
+        }
         if (classSkillChoices.length < (selectedClass?.skill_choices?.count ?? 0)) {
           return `Choose ${selectedClass?.skill_choices?.count ?? 0} class skill${(selectedClass?.skill_choices?.count ?? 0) === 1 ? '' : 's'} to continue.`
         }
@@ -1995,7 +2098,7 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
         await persistDraft(id, controller.signal)
       }
 
-      if (stepIndex < STEPS.length - 1) {
+      if (stepIndex < visibleSteps.length - 1) {
         setStepIndex((value) => value + 1)
       }
     } catch (error) {
@@ -2017,7 +2120,7 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
   }
 
   function goToStep(stepId: StepId) {
-    const nextIndex = STEPS.findIndex((step) => step.id === stepId)
+    const nextIndex = visibleSteps.findIndex((step) => step.id === stepId)
     if (nextIndex >= 0 && nextIndex <= maxReachableStepIndex) {
       setStepIndex(nextIndex)
       return
@@ -2074,12 +2177,12 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
                 </p>
               </div>
               <p className="text-sm text-neutral-500">
-                Step {stepIndex + 1} of {STEPS.length}: {currentStep.label}
+                Step {currentStepIndex + 1} of {visibleSteps.length}: {currentStep.label}
               </p>
             </div>
 
             <ol aria-label="Creation progress" className="flex flex-wrap gap-2">
-              {STEPS.map((step, index) => {
+              {visibleSteps.map((step, index) => {
                 const locked = index > maxReachableStepIndex
                 const done = index < completedSteps.length
                 const stepStateLabel = index === stepIndex
@@ -2274,12 +2377,25 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
                   emptyMessage="No backgrounds are available for this campaign allowlist."
                 />
 
+                {selectedBackground && (
+                  <Alert className="border-white/10 bg-white/[0.03]">
+                    <AlertDescription className="text-neutral-300">
+                      {selectedBackground.skill_proficiencies.length > 0
+                        ? `${selectedBackground.name} grants ${selectedBackground.skill_proficiencies.join(', ')}.`
+                        : `${selectedBackground.name} has no fixed skill grants modeled in this source.`}
+                      {selectedBackground.skill_choice_count === 0
+                        ? ' There are no extra flexible background skill picks.'
+                        : ''}
+                    </AlertDescription>
+                  </Alert>
+                )}
+
                 <GuidedChooseMany
                   title="Background Skills"
                   description={`Choose ${selectedBackground?.skill_choice_count ?? 0} skill${(selectedBackground?.skill_choice_count ?? 0) === 1 ? '' : 's'} granted by this background.`}
                   options={backgroundSkillOptions}
                   selectedIds={backgroundSkillChoices}
-                  onChange={setBackgroundSkillChoices}
+                  onChange={(ids) => setBackgroundSkillChoices(filterDuplicateSkillChoices(ids, backgroundSkillDuplicateSources))}
                   selectionLimit={selectedBackground?.skill_choice_count ?? 0}
                   emptyMessage="This background has no flexible skill choices."
                 />
@@ -2406,13 +2522,12 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
                 <GuidedChooseOne
                   title="Ability Score Method"
                   description="Pick the method this character is using for base ability scores."
-                  options={[
-                    { id: 'point_buy', label: 'Point Buy', description: 'Spend exactly 27 points across scores from 8 to 15.' },
-                    { id: 'standard_array', label: 'Standard Array', description: 'Assign 15, 14, 13, 12, 10, and 8 exactly once each.' },
-                    { id: 'rolled', label: 'Rolled', description: 'Roll six sets of 4d6 and drop the lowest die in each set.' },
-                  ]}
+                  options={statMethodOptions}
                   selectedId={statMethod}
-                  onChange={(value) => setStatMethod((value ?? 'point_buy') as StatMethod)}
+                  onChange={(value) => setStatMethod(normalizeStatMethodForCampaign(
+                    (value ?? 'point_buy') as StatMethod,
+                    requiredStatMethod
+                  ))}
                 />
 
                 {statMethod === 'rolled' && (
@@ -2511,12 +2626,9 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
                 <GuidedChooseMany
                   title="Class Skills"
                   description={`Choose ${selectedClass?.skill_choices?.count ?? 0} skill${(selectedClass?.skill_choices?.count ?? 0) === 1 ? '' : 's'} granted by ${selectedClass?.name ?? 'this class'}.`}
-                  options={(selectedClass?.skill_choices?.from ?? []).map((skill) => ({
-                    id: skill.toLowerCase(),
-                    label: skill,
-                  }))}
+                  options={classSkillOptions}
                   selectedIds={classSkillChoices}
-                  onChange={setClassSkillChoices}
+                  onChange={(ids) => setClassSkillChoices(filterDuplicateSkillChoices(ids, classSkillDuplicateSources))}
                   selectionLimit={selectedClass?.skill_choices?.count ?? 0}
                   emptyMessage="This class has no flexible skill choices."
                 />
@@ -2546,7 +2658,7 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
                   description={`Choose ${subclassSkillConfig?.count ?? 0} skill${(subclassSkillConfig?.count ?? 0) === 1 ? '' : 's'} that gain expertise from ${selectedSubclass?.name ?? 'this subclass'}.`}
                   options={subclassSkillOptions}
                   selectedIds={subclassSkillChoices}
-                  onChange={setSubclassSkillChoices}
+                  onChange={(ids) => setSubclassSkillChoices(filterDuplicateSkillChoices(ids, subclassSkillDuplicateSources))}
                   selectionLimit={subclassSkillConfig?.count ?? 0}
                   emptyMessage="This subclass has no extra skill picks at level 1."
                 />

@@ -15,7 +15,7 @@ This roadmap now has meaningful implementation behind it.
 - Batch 5.5 is now effectively complete and closed out by Slice `5.5h` on 2026-04-25. Slice `5.5a` landed the shared UI hierarchy, surface, radius, and focus conventions. Slice `5.5b` shortened high-traffic player-facing copy and removed implementation language. Slice `5.5c` reduced wizard summary weight and made simple guided choices render as compact rows. Slice `5.5d` refined login and dashboard entry states. Slice `5.5e` made guided creation more momentum-oriented. Slice `5.5f` compacted the character sheet header and simplified section toggles. Slice `5.5g` made validation, DM audit, and stale-provenance states more repair-oriented and calmer by default. Slice `5.5h` closed the polish pass with visual/accessibility QA notes and a Batch 6 handoff.
 - Batch Eberron is now effectively complete and closed out by Slice `E7` on 2026-04-26. Slice E1 locked the audit/guardrails, Slice E2 added the missing species and lineages, Slice E3 cleaned up dragonmarked lineage metadata, stale notes, and legacy dragonmarked rows/code by deleting any characters still tied to the old rows before purging them, Slice E4 added House Agent, Revenant Blade, double-bladed scimitar support, and elf-lineage feat prerequisite checks, Slice E5 modeled the full ERftLW Artificer infusion roster as repeating feature options with minimum-level prerequisites, count legality, and sheet/wizard surfaces, Slice E6 added an automated ERftLW regression matrix covering representative creation, legality, derived sheet, source allowlist, and DM-review paths, and Slice E7 recorded `output/batch-eberron-closeout-audit.md` with the Batch 6 handoff and the remaining ERftLW gaps outside the current app domain.
 - Batch 6 is now effectively complete and closed out by Slice `6i` on 2026-04-29. Slice `6a` moved spellcasting summaries and per-source spellcasting output onto `derived.ts`. Slice `6b` moved feature-granted spells into `feature_spell_grants` rows keyed to `spells.id`. Slice `6c` made character language/tool catalog keys authoritative. Slice `6d` consolidated character route access checks and marked pre-Batch-4 null-class spell selections for explicit DM audit provenance. Slice `6e` introduced the reusable dry-run content validator. Slice `6f` and `6g` added audited admin CRUD and validation-preview coverage for the Batch 3 content families. Slice `6h` added stable bulk import dry-run/apply planning and amendment metadata. Slice `6i` recorded `output/batch-6-closeout-audit.md` with Batch 7 entry notes.
-- Batch 7 is in progress through Slice `7e` as of 2026-05-01. Slices `7a`-`7d` landed repeatable setup/demo QA scaffolding, route/persistence coverage, representative build regression coverage, and schema/import/migration validation. Slice `7e` recorded `output/batch-7-visual-qa.md`, including exact routes/states, authenticated QA blockers, and product frictions assigned to Slice `7f`. The next gate is the user hands-on product trial before any 7f repairs.
+- Batch 7 is in progress through `7UserTest1` as of 2026-05-01. Slices `7a`-`7d` landed repeatable setup/demo QA scaffolding, route/persistence coverage, representative build regression coverage, and schema/import/migration validation. Slice `7e` recorded `output/batch-7-visual-qa.md`, including exact routes/states, authenticated QA blockers, and product frictions assigned to Slice `7f`. The first user trial surfaced a level-up/save conflict plus React maximum-update-depth crash, along with creation-flow friction around scroll position, oversized choice lists, validation timing, unclear copy, and unhelpful "clear" legality detail. `7UserTest1` has repaired the blocker path and left broader presentation work for `7f`.
 - A post-Batch-4 production hotfix shipped on 2026-04-23 to stop the character sheet from entering a React update loop when loading class-scoped spell options for newly created characters.
 - A Batch 4 senior-review pass on 2026-04-23 found several level-up data-integrity bugs that the additive save path makes reachable in normal play (silent spell/feat swap loss, skill PK collision on multiclass overlap, feature-option value-change collision, preserved-spell level misattribution, and a concurrency window in the per-level sync trigger). Batch 4.5 is scheduled before Batch 5 to close these.
 - Batch 4 delivered the end-to-end guided builder workflows that were blocking real character creation:
@@ -1574,8 +1574,9 @@ As of 2026-05-01, Slices `7a`-`7e` have landed:
 - `7c` added the representative Batch 7 regression matrix for derived/reload/review-state behavior.
 - `7d` added schema, migration, content validation, import planning, and rejected-import guard coverage through migration `077`.
 - `7e` added `output/batch-7-visual-qa.md` with route/state QA notes, tooling/setup blockers, and concrete `7f` assignments.
+- `7UserTest1` repaired the first user-trial blocker: stable spell-option state prevents the React `#185` loop, stale save/level-up conflicts now show inline recovery, duplicate skill choices and disallowed stat methods are blocked before save/review, and level-1 no-op subclass/spell/feat steps are skipped.
 
-The next step is the stop-point user hands-on product trial. Slice `7f` should not begin until that trial is recorded and triaged in `output/batch-7-user-review.md`.
+The first stop-point user trial is recorded in `output/batch-7-user-review.md`. Slice `7f` can now begin against the remaining visual-density, copy, navigation, legality-detail, and source-label findings, with a short browser confirmation pass still needed on the exact original level-up/save flow.
 
 ### Slices
 
@@ -1714,7 +1715,104 @@ The next step is the stop-point user hands-on product trial. Slice `7f` should n
   - triage each finding as `fix in 7f`, `defer with rationale`, or `out of scope for Batch 7`
 - Gate:
   - do not start Slice 7f until the user review findings are triaged
+  - do not start Slice 7f until the `7UserTest1` level-up conflict/crash plan below has either been completed or explicitly split into a blocking hotfix
   - do not start Slice 7g until fixed user-review findings have had a short confirmation pass
+
+**7UserTest1 — First user trial triage and level-up crash repair** (delivered 2026-05-01)
+
+- Goal: turn the first hands-on trial findings into reproducible bugs and a bounded repair queue before the broader 7f usability slice.
+- Delivered:
+  - added `test/ut1-user-test-regressions.test.ts` to pin the user-trial blocker fixes
+  - added stable spell-option merge/replace helpers and used them from `CharacterSheet` and `SpellsCard`
+  - stabilized `FeatureSpellChoicesCard` parent callbacks by making sheet spell-option merging `useCallback` based and equality-preserving
+  - added inline stale/conflict recovery for sheet saves and level-up saves instead of relying only on toasts
+  - made creation step visibility dynamic so level-1 builds skip subclass and no-op spells/feats steps
+  - made campaign-required stat methods disable disallowed choices before review
+  - blocked duplicate species/background/class/subclass skill choices before save
+  - clarified background fixed-skill vs flexible-skill copy; Soldier has fixed PHB skills, while Urban Bounty Hunter is not present in tracked migrations
+  - verified with targeted tests, `node node_modules/next/dist/bin/next build`, and `npm test`
+- Review evidence:
+  - full first-trial notes live in `output/batch-7-user-review.md`
+  - login via magic link worked, but the email itself felt unbranded and suspiciously generic
+  - dashboard and campaign settings worked, but the product felt stark, low-color, and hard to navigate back from at the bottom of long pages
+  - campaign settings showed confusing source/member presentation, including an apparent duplicated `Player's Handbook` entry
+  - creation used oversized campaign/species/background/class choice blocks where a dropdown, denser list, or two-column layout would scan better
+  - step transitions often left the user at the bottom of the page, forcing repeated manual scroll-to-top
+  - `Current picks N items` read as confusing rather than helpful context
+  - species/background/class/skill steps exposed verbose or irrelevant rows, including `skill acrobatics`-style labels, long single-column skill lists, subclass content for a level-1 character, and spell/feat/ASI copy when there was nothing for the selected build to choose
+  - duplicate skill choices were allowed until save, then the toast overlapped the save/continue area
+  - campaign-required point buy was not enforced at ability-score selection time, so review later blocked the build after standard array had been allowed
+  - review showed many `Clear` legality badges that did not add useful detail
+  - sheet/content labels such as `amended` and implementation-gap notes made the product feel unfinished rather than trustworthy
+  - level-up save against `/api/characters/70a78581-bbf0-442f-a3fd-ad60ab6ffb34` returned HTTP `409`
+  - the browser console then reported minified React error `#185`
+  - local React 18 maps error `#185` to the maximum update-depth guard, which means a component is repeatedly setting state until React stops rendering
+- Current interpretation:
+  - the `409` is expected server-side conflict behavior, but the UI must handle it calmly and must not enter a render/update loop
+  - `/api/characters/[id]` can return `409` as `stale_character` when `existing.updated_at !== expected_updated_at`
+  - the same route can return `409` as `stale_level_up` when the saved `level_up.previous_level` no longer matches the current class level
+  - the console excerpt does not include the response JSON, so the first task is to determine which conflict code fired
+  - likely React loop suspects are level-up effects and child-card callbacks that set state from unstable array/object dependencies, especially around spell/feat option loading and restored level-up drafts
+  - many non-crash findings are real 7f usability work, but the level-up crash, invalid-choice timing, and wrong-step visibility are blocking enough to investigate inside `7UserTest1`
+- Modify/create:
+  - update `output/batch-7-user-review.md` with the first user trial transcript, exact route, character ID, action sequence, visible result, network response body, and console stack
+  - keep `output/batch-7-user-review.md` trackable alongside the other Batch 7 output artifacts
+  - add or update targeted tests only after each failing shape is reproduced
+  - fix only the level-up conflict handling, maximum-update-depth root cause, invalid-choice timing, and clearly wrong step visibility in this slice
+  - leave broader visual density, color, wording, email branding, and content-completeness polish in 7f unless it blocks reproduction or repair of the crash path
+- Investigation steps:
+  - reproduce the level-up flow in a non-minified local dev environment so React names the component or effect causing error `#185`
+  - capture the failed `PUT /api/characters/:id` response JSON and record whether the code is `stale_character`, `stale_level_up`, or `duplicate_level_up_choice`
+  - capture the request payload fields that matter for conflict diagnosis: `expected_updated_at`, `level_up.class_id`, `level_up.previous_level`, `level_up.new_level`, and selected spell/feat/feature rows
+  - query the same character's current `updated_at` and class-level rows after the failure to determine whether the user was saving from stale page data, an already-applied level-up, or a payload assembled from stale local draft state
+  - inspect `LevelUpWizard` effects that write local draft state, restore drafts, trim feature options, trim feat spell choices, and adjust `stepIndex`
+  - inspect `SpellsCard`, `FeatSpellChoicesCard`, and `FeatureSpellChoicesCard` for effects that depend on newly-created arrays/objects or call parent setters after each render
+  - reproduce the creation flow from the transcript with the same campaign and build choices: Changeling, Urban Bounty Hunter or Soldier, Rogue, standard array, overlapping skill choices, rapier/shortbow/dungeoneer's pack, review, open sheet, save, level up
+  - verify campaign settings for the reviewed campaign and determine whether duplicate `Player's Handbook` display comes from duplicate allowlist rows, duplicated source labels, or visual grouping
+  - verify background seed data for Urban Bounty Hunter and Soldier to decide whether missing skill choices are a data bug, a source-amendment gap, or a misleading UI message
+  - verify campaign stat-method rules so unavailable methods are disabled before review rather than rejected at review time
+  - inspect wizard step visibility rules so level-1 builds do not surface subclass or spells/feats/ASI steps when no choice is possible
+- Test plan:
+  - add a route-level test for the exact `409` body once the conflict code is known, if existing 7b tests do not already cover the user-visible case
+  - add a client/static guard test that ensures level-up conflict responses are handled as a user-facing stale-state path rather than only generic `Save failed` toast text
+  - add a focused component or static regression test for the root cause of error `#185`, such as stable effect dependencies, equality-checked state setters, or memoized spell/feature option props
+  - add a wizard guard test that duplicate skill selections are prevented or surfaced before save
+  - add a wizard guard test that campaign-disallowed stat methods are disabled or hidden before review
+  - add a wizard guard test that irrelevant level-1 subclass and no-op spell/feat/ASI steps are skipped, or have copy that explains why there is no action
+  - add a convention/copy test that repair-critical toasts or inline errors cannot cover the primary continue/save action
+  - rerun `node --import tsx --test test/route-persistence-7b.test.ts`
+  - rerun `node --import tsx --test test/client-submit-safety.test.ts test/creation-step-selections.test.ts`
+  - rerun `node --import tsx --test test/ui-polish-conventions.test.ts`
+  - rerun `npm test` before committing
+- Fix plan after root cause is known:
+  - if the `409` is `stale_character`, keep the server behavior and update the level-up UI to show an inline stale-state panel with a refresh/back-to-sheet action
+  - if the `409` is `stale_level_up`, clear the local level-up draft for that character only after warning the user that the level has already changed, then send them back to the refreshed sheet
+  - if the conflict comes from duplicate or stale level-up choices, keep the exact choice rows visible and guide the user to the relevant review step rather than discarding selections silently
+  - if React error `#185` comes from unstable effect dependencies, memoize the arrays/objects passed to child cards or make the child effects depend on stable scalar keys
+  - if React error `#185` comes from setters that always return new arrays/objects, add equality checks and return the previous state when no semantic value changed
+  - if React error `#185` comes from parent-child callback loops, stabilize callbacks with `useCallback` or move derived option state so the child does not call the parent setter on every render
+  - if duplicate skills are created by overlapping species/background/class choices, disable already-owned choices or show the owning source inline before save
+  - if point buy is campaign-required, restrict the ability-score method control to point buy at selection time and keep review focused on actionable issues
+  - if subclass or spells/feats/ASI steps have no choices for the current build, skip them or show a compact non-action summary instead of a full step
+  - if `Current picks` is meant as progress context, rename or relocate it so it reads as selected-summary disclosure rather than a mysterious counter
+  - if `amended` content labels or implementation-gap notes are necessary, move them behind calmer details and use user-facing limitation copy rather than implementation language
+- Triage for 7f after blocker fixes:
+  - login email branding and trust copy
+  - dashboard and campaign-settings visual warmth/color
+  - bottom-of-page return navigation and sticky local actions
+  - dense campaign/species/background/class selection layouts
+  - two-column or grouped skills layout
+  - legality detail that hides or de-emphasizes all-clear checks
+  - source/amendment wording and incomplete-automation copy
+- Acceptance:
+  - `output/batch-7-user-review.md` records the trial finding with route, role, character ID, action sequence, network response code/body, console error, severity, and desired outcome
+  - all transcript findings are triaged as `fix in 7UserTest1`, `fix in 7f`, `defer with rationale`, or `out of scope for Batch 7`
+  - the level-up 409 conflict has a known code path and a deliberate user-facing recovery state
+  - the React `#185` crash has a reproduced root cause and an automated or static regression guard
+  - the duplicate-skill and campaign-stat-method failures are caught before final save/review
+  - level-1 creation does not force the user through irrelevant choice steps
+  - a user can retry the same level-up path without seeing a render loop
+  - Slice `7f` starts only after this crash/conflict plan is resolved or explicitly promoted to a blocking hotfix
 
 **Slice 7f — Bounded usability repairs**
 
@@ -1810,11 +1908,12 @@ The next step is the stop-point user hands-on product trial. Slice `7f` should n
 4. 7d: seed, import, and migration validation.
 5. 7e: authenticated visual and accessibility-oriented QA.
 6. Stop point: user hands-on product review, with findings triaged before repairs begin.
-7. 7f: bounded usability repairs from QA and user-review findings.
-8. Confirmation pass: user checks the fixed review findings before module splitting begins.
-9. 7g: behavior-preserving module splitting.
-10. 7h: conditional multi-source skill provenance audit, only if triggered by DM-review evidence.
-11. 7i: closeout gate.
+7. 7UserTest1: first user-trial level-up/save 409 plus React `#185` blocker repair. (Done)
+8. 7f: bounded usability repairs from QA and remaining user-review findings. (Next)
+9. Confirmation pass: user checks the fixed review findings before module splitting begins.
+10. 7g: behavior-preserving module splitting.
+11. 7h: conditional multi-source skill provenance audit, only if triggered by DM-review evidence.
+12. 7i: closeout gate.
 
 ### Risks
 

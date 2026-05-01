@@ -26,6 +26,31 @@ function dedupe(values: string[]) {
   return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)))
 }
 
+export type SkillChoiceBlocker = {
+  label: string
+  skills: string[]
+}
+
+export function getSkillChoiceDuplicateReason(skill: string, sources: SkillChoiceBlocker[]) {
+  const normalized = normalizeSkillKey(skill)
+  const source = sources.find((entry) => (
+    entry.skills.some((sourceSkill) => normalizeSkillKey(sourceSkill) === normalized)
+  ))
+
+  return source ? `Already selected from ${source.label}.` : null
+}
+
+export function filterDuplicateSkillChoices(skills: string[], sources: SkillChoiceBlocker[]) {
+  const seen = new Set<string>()
+
+  return skills.filter((skill) => {
+    const normalized = normalizeSkillKey(skill)
+    if (seen.has(normalized)) return false
+    seen.add(normalized)
+    return !getSkillChoiceDuplicateReason(skill, sources)
+  })
+}
+
 export function mergeCreationSkillSelections(args: {
   speciesSkillChoices: string[]
   backgroundSkillChoices: string[]

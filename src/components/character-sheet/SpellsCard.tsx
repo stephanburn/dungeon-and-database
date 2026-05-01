@@ -1,10 +1,11 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import type { DerivedCharacter } from '@/lib/characters/derived'
 import type { Spell } from '@/lib/types/database'
+import { replaceSpellOptionsStable } from '@/lib/characters/spell-options'
 
 const LEVEL_LABELS: Record<number, string> = {
   0: 'Cantrips',
@@ -60,23 +61,32 @@ export function SpellsCard({
 }: SpellsCardProps) {
   const [spells, setSpells] = useState<SpellOption[]>([])
   const [search, setSearch] = useState('')
+  const subclassIdsKey = useMemo(() => subclassIds.join('|'), [subclassIds])
+  const expandedClassIdsKey = useMemo(() => expandedClassIds.join('|'), [expandedClassIds])
+  const spellChoicesKey = useMemo(() => spellChoices.join('|'), [spellChoices])
 
   useEffect(() => {
-    if (!classId) return
+    if (!classId) {
+      setSpells((current) => replaceSpellOptionsStable(current, []))
+      return
+    }
     const params = new URLSearchParams({
       class_id: classId,
       campaign_id: campaignId,
       class_level: String(classLevel),
     })
     if (speciesId) params.set('species_id', speciesId)
-    for (const subclassId of subclassIds) params.append('subclass_id', subclassId)
-    for (const expandedClassId of expandedClassIds) params.append('expanded_class_id', expandedClassId)
-    for (const spellId of spellChoices) params.append('selected_spell_id', spellId)
+    for (const subclassId of subclassIdsKey ? subclassIdsKey.split('|') : []) params.append('subclass_id', subclassId)
+    for (const expandedClassId of expandedClassIdsKey ? expandedClassIdsKey.split('|') : []) params.append('expanded_class_id', expandedClassId)
+    for (const spellId of spellChoicesKey ? spellChoicesKey.split('|') : []) params.append('selected_spell_id', spellId)
 
     fetch(`/api/content/spells?${params.toString()}`)
       .then(r => r.json())
-      .then(data => setSpells(Array.isArray(data) ? data : []))
-  }, [classId, campaignId, classLevel, speciesId, subclassIds, expandedClassIds, spellChoices])
+      .then(data => {
+        const nextSpells = Array.isArray(data) ? data : []
+        setSpells((current) => replaceSpellOptionsStable(current, nextSpells))
+      })
+  }, [classId, campaignId, classLevel, speciesId, subclassIdsKey, expandedClassIdsKey, spellChoicesKey])
 
   const visibleSpells = spells.filter((spell) => spell.level === 0 || maxSpellLevel === undefined || spell.level <= maxSpellLevel)
   const filtered = search.trim()
