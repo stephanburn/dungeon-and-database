@@ -110,6 +110,24 @@ export function getPreservedLevelUpSpellSelections(
     }))
 }
 
+export function filterChoiceRecordByAllowedKeysStable(
+  choices: Record<string, string>,
+  allowedKeys: ReadonlySet<string>
+): Record<string, string> {
+  let changed = false
+  const nextEntries: Array<[string, string]> = []
+
+  for (const [key, value] of Object.entries(choices)) {
+    if (allowedKeys.has(key)) {
+      nextEntries.push([key, value])
+    } else {
+      changed = true
+    }
+  }
+
+  return changed ? Object.fromEntries(nextEntries) : choices
+}
+
 export function getLevelUpResumeStepIndex<TStep extends string>(
   orderedSteps: readonly TStep[],
   completed: Partial<Record<TStep, boolean>>

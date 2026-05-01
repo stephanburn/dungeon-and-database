@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -79,6 +79,7 @@ import {
 import { getFixedHpGainValue } from '@/lib/characters/derived'
 import {
   buildLevelUpClassOptions,
+  filterChoiceRecordByAllowedKeysStable,
   getEditableLevelUpSpellChoiceIds,
   getLevelUpFeatureOptionStepDefinitions,
   getLevelUpResumeStepIndex,
@@ -86,6 +87,7 @@ import {
   isSubclassSelectionRequired,
   summarizeLevelUpSpellChanges,
 } from '@/lib/characters/level-up-flow'
+import { replaceSpellOptionsStable } from '@/lib/characters/spell-options'
 
 type CharacterWithRelations = Character & {
   species: Species | null
@@ -817,7 +819,7 @@ export function LevelUpWizard({
       : null,
     [character.background, featList]
   )
-  const currentContext = buildLocalCharacterContext({
+  const currentContext = useMemo(() => buildLocalCharacterContext({
     campaign,
     allowedSources,
     allSourceRuleSets,
@@ -849,7 +851,28 @@ export function LevelUpWizard({
     featureOptionRows,
     featureSpellGrants,
     featureOptionChoices: activeInitialFeatureOptionChoices,
-  })
+  }), [
+    activeInitialFeatureOptionChoices,
+    allowedSources,
+    allSourceRuleSets,
+    baseLevels,
+    campaign,
+    character,
+    classDetailMap,
+    featList,
+    featureOptionRows,
+    featureSpellGrants,
+    initialAbilityBonusChoices,
+    initialAsiChoices,
+    initialFeatChoices,
+    initialLanguageChoices,
+    initialSkillProficiencies,
+    initialSpellChoices,
+    initialSpellSelections,
+    initialToolChoices,
+    mergedSpellOptions,
+    subclassMap,
+  ])
 
   const preservedNonEditableSpellSelections = useMemo(
     () => getPreservedLevelUpSpellSelections(initialSpellSelections, selectedClassId),
@@ -957,14 +980,13 @@ export function LevelUpWizard({
     () => getFeatSpellChoiceDefinitions(nextActiveFeatSpellFeats),
     [nextActiveFeatSpellFeats]
   )
+  const handleFeatSpellOptionsLoaded = useCallback((options: SpellOption[]) => {
+    setFeatSpellOptions((current) => replaceSpellOptionsStable(current, options))
+  }, [])
 
   useEffect(() => {
     const allowedKeys = new Set(nextFeatSpellDefinitions.map((definition) => definition.sourceFeatureKey))
-    setFeatSpellChoices((prev) =>
-      Object.fromEntries(
-        Object.entries(prev).filter(([sourceFeatureKey]) => allowedKeys.has(sourceFeatureKey))
-      )
-    )
+    setFeatSpellChoices((prev) => filterChoiceRecordByAllowedKeysStable(prev, allowedKeys))
   }, [nextFeatSpellDefinitions])
 
   const hitDie = selectedClassDetail?.hit_die ?? 0
@@ -1034,7 +1056,7 @@ export function LevelUpWizard({
     ],
   })
 
-  const currentDerived = deriveLocalCharacter(currentContext)
+  const currentDerived = useMemo(() => deriveLocalCharacter(currentContext), [currentContext])
   const nextDerived = deriveLocalCharacter(nextContext)
   const persistedNextSpellSelections = buildCombinedSpellSelections({
     classSpellChoices: spellChoices,
@@ -1595,25 +1617,41 @@ export function LevelUpWizard({
 
               <div className="space-y-2">
                 <Label className="text-neutral-300">Which class gets the new level?</Label>
-                <Select value={selectedClassId} onValueChange={setSelectedClassId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Choose class" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {classOptions.map((option) => {
-                      return (
-                        <SelectItem
-                          key={option.classId}
-                          value={option.classId}
-                          disabled={option.disabled}
-                          className="text-neutral-200"
-                        >
-                          {option.label}
-                        </SelectItem>
-                      )
-                    })}
-                  </SelectContent>
-                </Select>
+                <div className="grid gap-2" role="radiogroup" aria-label="Class to level up">
+                  {classOptions.length === 0 && (
+                    <div className="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-3 text-sm text-neutral-500">
+                      Loading class options...
+                    </div>
+                  )}
+                  {classOptions.map((option) => {
+                    const selected = option.classId === selectedClassId
+                    return (
+                      <button
+                        key={option.classId}
+                        type="button"
+                        role="radio"
+                        aria-checked={selected}
+                        disabled={option.disabled}
+                        onClick={() => {
+                          setLevelUpConflict(null)
+                          setSelectedClassId(option.classId)
+                        }}
+                        className={`rounded-xl border px-3 py-3 text-left text-sm transition-colors ${
+                          selected
+                            ? 'border-blue-400/30 bg-blue-400/10 text-blue-50'
+                            : option.disabled
+                              ? 'cursor-not-allowed border-white/8 bg-white/[0.02] text-neutral-600'
+                              : 'border-white/10 bg-white/[0.03] text-neutral-300 hover:border-white/18 hover:bg-white/[0.05]'
+                        }`}
+                      >
+                        <span className="font-medium">{option.label}</span>
+                        {option.invalidReason && (
+                          <span className="mt-1 block text-xs text-amber-200/80">{option.invalidReason}</span>
+                        )}
+                      </button>
+                    )
+                  })}
+                </div>
               </div>
 
               {selectedClassDetail && (
@@ -1787,7 +1825,7 @@ export function LevelUpWizard({
                 selectedChoices={featSpellChoices}
                 canEdit
                 onChange={setFeatSpellChoices}
-                onOptionsLoaded={setFeatSpellOptions}
+                onOptionsLoaded={handleFeatSpellOptionsLoaded}
               />
             </div>
           )}

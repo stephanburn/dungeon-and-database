@@ -12,6 +12,7 @@ import {
   getSkillChoiceDuplicateReason,
 } from '@/lib/characters/creation-step-selections'
 import { mergeSpellOptionsStable, replaceSpellOptionsStable } from '@/lib/characters/spell-options'
+import { filterChoiceRecordByAllowedKeysStable } from '@/lib/characters/level-up-flow'
 
 test('UT1: spell option merging preserves array identity when nothing meaningful changed', () => {
   const current = [
@@ -97,4 +98,31 @@ test('UT1: clients expose inline conflict recovery and avoid unstable spell-opti
   assert.match(levelUpSource, /levelUpConflict/)
   assert.match(levelUpSource, /code === 'stale_character'/)
   assert.match(levelUpSource, /code === 'stale_level_up'/)
+})
+
+test('UT1: level-up page avoids mount-time update loops', () => {
+  const choices = {
+    'feat_spell:one': 'spell-one',
+    'feat_spell:two': 'spell-two',
+  }
+
+  assert.equal(
+    filterChoiceRecordByAllowedKeysStable(choices, new Set(['feat_spell:one', 'feat_spell:two'])),
+    choices
+  )
+  assert.deepEqual(
+    filterChoiceRecordByAllowedKeysStable(choices, new Set(['feat_spell:two'])),
+    { 'feat_spell:two': 'spell-two' }
+  )
+
+  const levelUpSource = fs.readFileSync(
+    path.join(process.cwd(), 'src/app/characters/[id]/LevelUpWizard.tsx'),
+    'utf8'
+  )
+
+  assert.doesNotMatch(levelUpSource, /<Select value=\{selectedClassId\}/)
+  assert.match(levelUpSource, /setFeatSpellChoices\(\(prev\) => filterChoiceRecordByAllowedKeysStable/)
+  assert.match(levelUpSource, /const currentContext = useMemo/)
+  assert.match(levelUpSource, /const currentDerived = useMemo/)
+  assert.match(levelUpSource, /const handleFeatSpellOptionsLoaded = useCallback/)
 })

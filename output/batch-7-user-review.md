@@ -10,7 +10,7 @@ First hands-on product trial after Slice 7e. The reviewer logged out, tested mag
 
 | ID | Severity | Route / State | Observation | Desired outcome | Triage |
 | --- | --- | --- | --- | --- | --- |
-| UT1-001 | P0 | `PUT /api/characters/70a78581-bbf0-442f-a3fd-ad60ab6ffb34` during level-up save | Network request returned `409`, then the browser showed "Application error" and console reported minified React error `#185`. React 18 maps `#185` to maximum update depth. | The save conflict should show a recoverable stale-state message and must not crash or enter a render loop. | Fixed in `7UserTest1`; browser confirmation pending. |
+| UT1-001 | P0 | `PUT /api/characters/70a78581-bbf0-442f-a3fd-ad60ab6ffb34` during level-up save and `/characters/[id]/level-up` entry | Network request returned `409`, then the browser showed "Application error" and console reported minified React error `#185`. The first retry still crashed when clicking level up. React 18 maps `#185` to maximum update depth. | The save conflict should show a recoverable stale-state message, and entering level-up must not crash or enter a render loop. | Fixed in `7UserTest1` follow-up; browser confirmation pending. |
 
 Console excerpt:
 
@@ -72,7 +72,8 @@ Fix before broader 7f:
 
 Completed on 2026-05-01.
 
-- Root cause found for the React `#185` render loop: feature-spell cards could call a parent spell-option setter from an effect while the parent supplied a freshly-created callback; the setter returned a new spell array even when nothing changed. `CharacterSheet` now uses a stable `useCallback`, and shared stable merge/replace helpers return the existing array when spell options are semantically unchanged.
+- Initial root cause found for one React `#185` render-loop path: feature-spell cards could call a parent spell-option setter from an effect while the parent supplied a freshly-created callback; the setter returned a new spell array even when nothing changed. `CharacterSheet` now uses a stable `useCallback`, and shared stable merge/replace helpers return the existing array when spell options are semantically unchanged.
+- Follow-up root cause after the live retry still crashed on level-up entry: the level-up wizard mounted a Radix `Select` for the initial class choice, and the minified stack mapped into Radix's composed-ref helper during a maximum-update-depth failure. The wizard now renders the initial class choice as a button radiogroup instead of hidden Select content, stabilizes its current build context with `useMemo`, uses an equality-preserving feat-spell cleanup setter, and passes a stable feat-spell options callback.
 - `SpellsCard` now keys fetch effects by stable scalar keys for subclass IDs, expanded class IDs, and selected spell IDs, and uses a stable replace helper for fetched spell options.
 - Level-up `409` responses with `stale_character`, `stale_level_up`, or `duplicate_level_up_choice` now show inline recovery instead of only a destructive toast. `stale_level_up` can clear the local draft when the user returns to the refreshed sheet.
 - Sheet save conflicts now show inline refresh recovery for stale edit-token responses, keeping the primary action area clear.
