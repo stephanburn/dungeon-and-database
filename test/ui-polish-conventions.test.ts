@@ -214,7 +214,8 @@ test('batch 5.5 closeout records visual QA, accessibility notes, and the batch 6
   assert.match(roadmap, /Batch 5\.5 handoff/)
   assert.match(roadmap, /Batch 6 admin\/content surfaces should be built as restrained work tools/)
   assert.match(roadmap, /UI convention guard/)
-  assert.match(roadmap, /authenticated visual QA pass deferred from Slice 5\.5h/)
+  assert.match(roadmap, /surfaces deferred from Slice 5\.5h and Batch 6/)
+  assert.match(roadmap, /Slice 7e — Authenticated visual and accessibility-oriented QA/)
 
   for (const phrase of [
     'Login',
@@ -227,5 +228,29 @@ test('batch 5.5 closeout records visual QA, accessibility notes, and the batch 6
     'Batch 7 polish debt',
   ]) {
     assert.match(closeout, new RegExp(phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+  }
+})
+
+test('batch 7 visual QA records required routes, tooling blockers, and 7f decisions', () => {
+  const qa = read('output/batch-7-visual-qa.md')
+
+  for (const phrase of [
+    'Route and State Matrix',
+    'Findings',
+    '7f Assignment List',
+    '/login',
+    '/characters/new',
+    '/characters/2d4c52d3-57cb-4d8f-91d3-f082082555fb',
+    '/characters/5bb84c28-fdd3-483d-b459-8556298451af',
+    '/characters/1bb80d26-f930-4590-b1fc-951a7c8585e8',
+    '/dm/dashboard',
+    '/dm/content',
+    'in-app browser',
+    'seed-demo',
+    'Fix in 7f',
+    'Defer with rationale',
+    'broad visual redesign',
+  ]) {
+    assert.match(qa, new RegExp(phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'))
   }
 })

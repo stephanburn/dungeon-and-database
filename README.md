@@ -124,7 +124,7 @@ The repo directly references these variables:
 - `SUPABASE_SERVICE_ROLE_KEY`
 
 Use `.env.example` as the starting point for `.env.local`.
-`SUPABASE_SERVICE_ROLE_KEY` is required for the SRD seed script.
+`SUPABASE_SERVICE_ROLE_KEY` is required for the SRD and demo seed scripts.
 
 ### Run the app
 
@@ -144,6 +144,34 @@ npm run seed-srd
 ```
 
 This script reads `NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` from the environment.
+
+### Demo authenticated QA
+
+After bootstrap and SRD seeding, create deterministic QA users, a campaign, allowlisted sources, and character review states:
+
+```bash
+npm run seed-srd
+npm run seed-demo
+npm run dev
+```
+
+`npm run seed-demo` creates or refreshes these accounts with the password `DemoPassw0rd!`:
+
+- `demo-admin@dungeon-and-database.local`
+- `demo-dm@dungeon-and-database.local`
+- `demo-player@dungeon-and-database.local`
+
+If the database already has a singleton admin, the script preserves that account and prints a magic-link path for `/dm/content` so admin QA can still start from a known path.
+
+The fixture gives the DM campaign `PHB` plus `ERftLW`, joins the player to it, and creates draft, submitted, and changes-requested characters. It also prints a rejected import fixture for the `/dm/content` Import diff preview so admin QA can inspect validation findings without applying writes.
+
+Useful start routes:
+
+- `/login`
+- `/dm/dashboard`
+- `/dm/content`
+- `/characters/new`
+- character URLs printed by `npm run seed-demo`
 
 ## Migrations Workflow
 

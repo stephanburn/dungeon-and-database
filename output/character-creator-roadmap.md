@@ -15,6 +15,7 @@ This roadmap now has meaningful implementation behind it.
 - Batch 5.5 is now effectively complete and closed out by Slice `5.5h` on 2026-04-25. Slice `5.5a` landed the shared UI hierarchy, surface, radius, and focus conventions. Slice `5.5b` shortened high-traffic player-facing copy and removed implementation language. Slice `5.5c` reduced wizard summary weight and made simple guided choices render as compact rows. Slice `5.5d` refined login and dashboard entry states. Slice `5.5e` made guided creation more momentum-oriented. Slice `5.5f` compacted the character sheet header and simplified section toggles. Slice `5.5g` made validation, DM audit, and stale-provenance states more repair-oriented and calmer by default. Slice `5.5h` closed the polish pass with visual/accessibility QA notes and a Batch 6 handoff.
 - Batch Eberron is now effectively complete and closed out by Slice `E7` on 2026-04-26. Slice E1 locked the audit/guardrails, Slice E2 added the missing species and lineages, Slice E3 cleaned up dragonmarked lineage metadata, stale notes, and legacy dragonmarked rows/code by deleting any characters still tied to the old rows before purging them, Slice E4 added House Agent, Revenant Blade, double-bladed scimitar support, and elf-lineage feat prerequisite checks, Slice E5 modeled the full ERftLW Artificer infusion roster as repeating feature options with minimum-level prerequisites, count legality, and sheet/wizard surfaces, Slice E6 added an automated ERftLW regression matrix covering representative creation, legality, derived sheet, source allowlist, and DM-review paths, and Slice E7 recorded `output/batch-eberron-closeout-audit.md` with the Batch 6 handoff and the remaining ERftLW gaps outside the current app domain.
 - Batch 6 is now effectively complete and closed out by Slice `6i` on 2026-04-29. Slice `6a` moved spellcasting summaries and per-source spellcasting output onto `derived.ts`. Slice `6b` moved feature-granted spells into `feature_spell_grants` rows keyed to `spells.id`. Slice `6c` made character language/tool catalog keys authoritative. Slice `6d` consolidated character route access checks and marked pre-Batch-4 null-class spell selections for explicit DM audit provenance. Slice `6e` introduced the reusable dry-run content validator. Slice `6f` and `6g` added audited admin CRUD and validation-preview coverage for the Batch 3 content families. Slice `6h` added stable bulk import dry-run/apply planning and amendment metadata. Slice `6i` recorded `output/batch-6-closeout-audit.md` with Batch 7 entry notes.
+- Batch 7 is in progress through Slice `7e` as of 2026-05-01. Slices `7a`-`7d` landed repeatable setup/demo QA scaffolding, route/persistence coverage, representative build regression coverage, and schema/import/migration validation. Slice `7e` recorded `output/batch-7-visual-qa.md`, including exact routes/states, authenticated QA blockers, and product frictions assigned to Slice `7f`. The next gate is the user hands-on product trial before any 7f repairs.
 - A post-Batch-4 production hotfix shipped on 2026-04-23 to stop the character sheet from entering a React update loop when loading class-scoped spell options for newly created characters.
 - A Batch 4 senior-review pass on 2026-04-23 found several level-up data-integrity bugs that the additive save path makes reachable in normal play (silent spell/feat swap loss, skill PK collision on multiclass overlap, feature-option value-change collision, preserved-spell level misattribution, and a concurrency window in the per-level sync trigger). Batch 4.5 is scheduled before Batch 5 to close these.
 - Batch 4 delivered the end-to-end guided builder workflows that were blocking real character creation:
@@ -1549,57 +1550,291 @@ Batch 7 starts from the Slice 6i closeout in `output/batch-6-closeout-audit.md`.
 
 ### Scope
 
-- Unit tests
-- Integration tests
-- Seed and migration validation
-- Authenticated visual QA and production-readiness UX hardening
+- Repeatable local setup for authenticated browser QA.
+- Route and persistence integration coverage for player, DM, and admin workflows.
+- Fixture-based regression builds that pin representative derived output before refactors.
+- Seed, import, and migration validation around the current normalized schema.
+- Authenticated visual, keyboard, and screen-reader-oriented QA.
+- Bounded usability repairs tied to concrete QA findings.
+- Structural module splitting only after current behavior is pinned by tests.
+- Conditional multi-source skill provenance audit work only if authenticated DM review exposes a real missing-audit case.
 
-### Tasks
+### Review
 
-- Expand derivation tests for:
-  - multiclass progression
-  - pact and non-pact spellcasting
-  - ASI / feat resolution
-  - proficiency aggregation
-  - AC calculation
-  - spell limits by mode
-- Add route and persistence integration tests:
-  - create character
-  - save draft
-  - level up
-  - choose feat
-  - choose feature options
-  - choose spells
-  - reload and verify persisted state
-- Add fixture-based regression builds.
-- Add migration tests for backfilling from current schema to normalized schema.
-- Improve UX around partial completion:
-  - incomplete-step warnings
-  - save state indicators
-  - clear blocked-state explanations
-- Run the authenticated visual QA pass deferred from Slice 5.5h:
-  - dashboard
-  - wizard identity/species/review steps
-  - character sheet
-  - DM dashboard and review/audit surfaces
-  - Batch 6 content/admin screens
-- Extend keyboard and screen-reader-oriented checks over the authenticated surfaces:
-  - login
-  - wizard controls
-  - sheet collapsibles
-  - Save/Submit
-  - validation jump links
-  - admin create/edit/retire flows
-- Keep Batch 7 polish bounded to specific friction found during authenticated QA, Batch 6 admin closeout, or usability testing. Do not re-open the visual system without a concrete regression.
-- Add `.env.example` and setup documentation.
-- Treat language/tool key cutover, character-access consolidation, feature-grant content migration, and module splitting as Batch 6 prerequisites. Batch 7 should only revisit them if the Batch 6 closeout audit explicitly defers a residual with rationale.
+Batch 7 should not be treated as a general "make it nicer" pass. The app has enough content/admin capability to be useful, so this batch should make that capability trustworthy: repeatable setup, reliable route behavior, representative regression builds, authenticated browser evidence, and behavior-preserving module hardening.
+
+The safest split is to establish the QA/test harness first, then pin the player/DM/admin workflows, then run authenticated visual and accessibility-oriented checks, then repair only observed friction, then split large files while tests protect behavior. Optional schema work belongs late in the batch because the Batch 6 closeout explicitly kept multi-source skill provenance as a Path B decision unless DM review proves otherwise.
+
+### Progress
+
+As of 2026-05-01, Slices `7a`-`7e` have landed:
+
+- `7a` completed the setup/demo QA path with env/docs/doctor updates, `scripts/seed-demo.ts`, and setup guard tests.
+- `7b` added route and persistence boundary coverage for player, DM, admin, allowlist, review, and content-admin workflows.
+- `7c` added the representative Batch 7 regression matrix for derived/reload/review-state behavior.
+- `7d` added schema, migration, content validation, import planning, and rejected-import guard coverage through migration `077`.
+- `7e` added `output/batch-7-visual-qa.md` with route/state QA notes, tooling/setup blockers, and concrete `7f` assignments.
+
+The next step is the stop-point user hands-on product trial. Slice `7f` should not begin until that trial is recorded and triaged in `output/batch-7-user-review.md`.
+
+### Slices
+
+**Slice 7a — Local setup and authenticated QA fixture**
+
+- Goal: make browser QA repeatable without relying on a private existing session.
+- Modify/create:
+  - audit and update `.env.example` so it has every required key, no secrets, and clear placeholder values
+  - update `SETUP.md` and `README.md` with a short demo-QA path after normal bootstrap
+  - add `scripts/seed-demo.ts` and an `npm run seed-demo` script that creates deterministic demo player/DM/admin data through the service-role client
+  - extend `scripts/doctor.sh` to warn on placeholder Supabase keys and missing local demo prerequisites without printing secret values
+  - add `test/setup-demo-qa.test.ts` to pin env-key coverage, docs references, script wiring, and no-secret placeholders
+- Demo fixture should create or document:
+  - one admin-capable account path for `/dm/content`
+  - one DM-owned campaign with PHB plus ERftLW source allowlist
+  - one player campaign membership
+  - one draft character, one submitted character, and one approved or changes-requested character
+  - one content-admin scenario that can preview a rejected import without applying writes
+- Acceptance:
+  - a fresh checkout can run bootstrap, fill `.env.local`, run doctor, seed SRD/demo data, and start `npm run dev`
+  - the roadmap no longer asks for "add `.env.example`" generically; the work is framed as making the existing setup and demo path complete
+  - authenticated QA can start from known URLs, known roles, and known character states
+
+**Slice 7b — Route and persistence integration harness**
+
+- Goal: test the real workflow boundaries that users depend on before deeper refactors.
+- Modify/create:
+  - add `test/helpers/route-test-context.ts` or equivalent Supabase-route mock helpers for authenticated route tests
+  - if direct route imports stay brittle, extract thin injectable service functions from route files while leaving production route behavior unchanged
+  - add route/persistence tests for `src/app/api/characters/route.ts`
+  - add route/persistence tests for `src/app/api/characters/[id]/route.ts`
+  - add route/persistence tests for `src/app/api/characters/[id]/submit/route.ts`
+  - add route/persistence tests for `src/app/api/characters/[id]/approve/route.ts` and `request-changes/route.ts`
+  - add route/persistence tests for `src/app/api/campaigns/[id]/allowlist/route.ts`
+  - add admin content route tests for the Batch 6 families under `src/app/api/content/*`
+- Test cases:
+  - player can create a character only inside a joined campaign
+  - DM/admin campaign access follows the shared ownership helpers
+  - save draft persists levels, spells, feats, feature options, language/tool keys, ASIs, ability-bonus choices, and equipment rows through the atomic path
+  - stale edit tokens and stale level-up tokens return stable conflict responses
+  - submit blocks characters with blocking legality errors and captures a snapshot on success
+  - approve/request-changes enforce DM campaign ownership and capture review state cleanly
+  - source allowlist replacement deletes missing rows, inserts requested rows, and rejects unauthorized writes
+  - admin create/edit/retire flows write audit logs for languages, tools, feature option groups/options, equipment items, weapons, armor, shields, and starting equipment packages
+  - rejected import previews report findings without partial writes
+- Acceptance:
+  - player, DM, and admin route behavior is covered at the request/response boundary
+  - persistence tests verify reload shape, not just write calls
+  - no route test needs a real private auth session
+
+**Slice 7c — Representative build regression matrix**
+
+- Goal: pin high-value derived behavior and reload behavior before module splitting.
+- Modify/create:
+  - add `test/batch-7-regression-matrix.test.ts`
+  - add focused fixture helpers only if existing helpers cannot express the matrix clearly
+  - extend existing derivation/legality tests instead of duplicating them when the behavior already has a natural home
+- Matrix builds:
+  - single-class wizard with spellbook, prepared spells, and subclass timing
+  - multiclass pact/non-pact caster with separate pact slots and normal slots
+  - martial build with ASI allocation, feat choice, and feature-option choice
+  - Eberron dragonmarked lineage with feature-granted spells and source allowlist filtering
+  - language/tool-heavy build with catalog keys, display labels, and provenance
+  - starting-equipment package build with concrete equipment rows and resolved quantities
+  - review-state build that moves through draft, submitted, changes_requested, and approved surfaces
+- Assertions:
+  - total level, proficiency bonus, AC, saves, skill bonuses, spell limits, and spellcasting summaries match expected values
+  - persisted choices reload through `loadCharacterState()` with the same typed rows and derived output
+  - legality warnings/errors stay stable for known invalid and valid fixture states
+  - source allowlist differences hide or show source-scoped content predictably
+- Acceptance:
+  - the matrix can be run with `node --import tsx --test test/batch-7-regression-matrix.test.ts`
+  - every large-module split in Slice 7f has this matrix as a before/after guard
+
+**Slice 7d — Seed, import, and migration validation**
+
+- Goal: prove the current schema and content-maintenance paths are safe enough for ongoing work.
+- Modify/create:
+  - add `test/batch-7-schema-validation.test.ts` or extend existing migration/content tests with Batch 7 checks
+  - update `docs/architecture.md` only where it helps explain the stable schema/import contract
+  - keep new migrations out of this slice unless a test exposes an actual schema defect
+- Test cases:
+  - migration list includes the current normalized character, language/tool, equipment, feature-option, feature-spell-grant, and legacy spell-attribution migrations through `077`
+  - required normalized tables and uniqueness expectations are documented in test fixtures
+  - content validator still rejects duplicate source keys, duplicate content keys, orphaned feature options, and unresolved package items
+  - `content:import` dry-run/apply planning remains stable for create/update/no-op/retire rows
+  - rejected imports leave the target snapshot unchanged
+- Acceptance:
+  - seed/import/migration confidence is documented by tests, not just closeout prose
+  - any schema defect found here becomes a small corrective slice before visual QA
+
+**Slice 7e — Authenticated visual and accessibility-oriented QA**
+
+- Goal: inspect the actual authenticated product, including the surfaces deferred from Slice 5.5h and Batch 6.
+- Modify/create:
+  - create `output/batch-7-visual-qa.md`
+  - use the in-app browser for the first authenticated pass and record exact routes/states; add automated screenshot tooling only after Slice 7a provides stable demo credentials
+  - add or update tests only for objective guardrails discovered during the pass
+- Required surfaces:
+  - login and post-login dashboard
+  - guided creation identity, species, class/spells/features where available, and review steps
+  - character sheet header, stats, spells, feature options, languages/tools, equipment, and legality areas
+  - level-up wizard entry, save, stale-state, and review paths
+  - DM dashboard, character review/audit, request changes, and approve flows
+  - `/dm/content` admin CRUD and import diff preview from Batch 6
+- Checks:
+  - keyboard path for login, wizard controls, sheet collapsibles, Save/Submit, validation jump links, tabs, dialogs, and admin create/edit/retire flows
+  - visible focus state on every interactive control
+  - blocked states explain the next repair action without implementation language
+  - warning/error states use text labels and do not rely on color alone
+  - no nested cards, layout jumps, or oversized copy regressions against Batch 5.5 conventions
+- Acceptance:
+  - every finding is recorded with route, role, state, and concrete fix/defer decision
+  - every fixable product friction discovered here is assigned to Slice 7f
+  - broad visual-system redesign remains out of scope
+
+**Stop point — User hands-on product review**
+
+- Timing: after Slice 7e is accepted and before Slice 7f begins.
+- Purpose: let a real user judge look and feel, usability, and functional confidence while the repair slice is still open and before internal module splitting makes product feedback more expensive to absorb.
+- Preconditions:
+  - Slice 7a demo/auth path works for player, DM, and admin roles
+  - Slice 7b and 7c route/regression coverage is green enough that review friction is likely product friction rather than broken setup
+  - `output/batch-7-visual-qa.md` has the agent QA findings from Slice 7e
+- Review script:
+  - log in and scan the dashboard
+  - create a character through identity, species, class/spells/features where available, and review
+  - save a draft, trigger or inspect validation issues, and submit when valid
+  - inspect the character sheet for readability, trust, and missing explanations
+  - run a level-up path and review stale/blocked/save states
+  - review the submitted character as DM, request changes, and approve
+  - use `/dm/content` enough to judge create/edit/retire and import-preview clarity
+- Deliver:
+  - create `output/batch-7-user-review.md`
+  - record findings with route, role, state, severity, and desired outcome
+  - triage each finding as `fix in 7f`, `defer with rationale`, or `out of scope for Batch 7`
+- Gate:
+  - do not start Slice 7f until the user review findings are triaged
+  - do not start Slice 7g until fixed user-review findings have had a short confirmation pass
+
+**Slice 7f — Bounded usability repairs**
+
+- Goal: fix only the friction found in Slice 7e, the user hands-on product review, or already named by Batch 6 closeout.
+- Likely file areas:
+  - `src/components/wizard/WizardStepFrame.tsx`
+  - `src/app/characters/new/CharacterNewForm.tsx`
+  - `src/app/characters/[id]/LevelUpWizard.tsx`
+  - `src/components/character-sheet/CharacterSheet.tsx`
+  - `src/components/character-sheet/*Card.tsx`
+  - `src/components/dm/DmReviewPanel.tsx`
+  - `src/components/dm/StaleProvenancePanel.tsx`
+  - `src/components/dm/ContentAdmin.tsx`
+  - `src/app/login/page.tsx`
+- Repair categories:
+  - incomplete-step warnings that identify the missing choice and where to fix it
+  - save-state indicators for in-progress, saved, blocked, stale, and failed saves
+  - clear blocked-state explanations for submit, level-up, source allowlist, and admin import failures
+  - validation jump links or focus movement where a user otherwise has to hunt
+  - admin preview copy that separates neutral no-op rows from warnings/errors
+- Tests:
+  - update `test/ui-polish-conventions.test.ts`
+  - add `test/batch-7-usability-copy.test.ts` for specific copy/focus/guardrail strings where static tests are useful
+  - rerun the relevant authenticated QA checks from `output/batch-7-visual-qa.md`
+  - rerun the relevant scenarios from `output/batch-7-user-review.md`
+- Acceptance:
+  - each UI change maps back to an observed Slice 7e finding, user-review finding, or explicit Batch 7 entry note
+  - the app explains invalid states clearly without adding generic instructional text to every surface
+  - fixed user-review findings receive a short confirmation pass before Slice 7g begins
+  - Batch 5.5 hierarchy, radius, focus, copy, and progressive-disclosure conventions still hold
+
+**Slice 7g — Behavior-preserving module splitting**
+
+- Goal: reduce risk in oversized load-bearing modules after tests pin behavior.
+- Modify/create:
+  - split `src/lib/characters/build-context.ts` by loader normalization, content indexing, and context assembly while keeping the public `buildCharacterContext` entry stable
+  - split `src/lib/characters/derived.ts` into focused ability/proficiency/spellcasting/equipment/review helpers with a stable re-export surface
+  - split `src/lib/characters/feature-grants.ts` by spell grants, proficiencies, feature options, and source filtering
+  - split `src/lib/legality/engine.ts` into focused checks for levels, abilities, proficiencies, spells, feats/ASI, and equipment
+  - split `src/components/character-sheet/CharacterSheet.tsx` only along existing rendered sections and card boundaries; do not redesign the sheet in this slice
+- Process:
+  - run the targeted tests for a module before editing it
+  - move one concern at a time
+  - keep exports stable or add compatibility re-exports before updating import sites
+  - run the targeted tests after each concern move
+- Acceptance:
+  - no user-facing behavior changes are introduced by this slice
+  - the Batch 7 regression matrix, existing derivation/legality tests, and route/persistence tests pass before and after the split
+  - large files become easier to edit because each new file has one clear responsibility
+
+**Slice 7h — Conditional multi-source skill provenance audit**
+
+- Goal: add a separate audit table only if Slice 7e proves the current skill provenance display is insufficient for DM review.
+- Trigger condition:
+  - a real authenticated DM review case shows the same skill coming from multiple modeled sources and the current Path B display cannot explain the selected source, replacement, or expertise provenance clearly enough for review
+- If triggered, modify/create:
+  - add migration `supabase/migrations/078_character_skill_proficiency_sources.sql`
+  - add a typed loader/save layer for `character_skill_proficiency_sources`
+  - update `src/lib/characters/atomic-save.ts`, `choice-persistence.ts`, `build-context.ts`, `derived.ts`, and `skill-provenance.ts`
+  - update `src/components/character-sheet/SkillsCard.tsx` and `src/components/dm/DmReviewPanel.tsx`
+  - add `test/multi-source-skill-provenance.test.ts`
+- If not triggered:
+  - record the decision in `output/batch-7-closeout-audit.md`
+  - keep the Slice 5c Path B approach and avoid adding schema solely for theoretical completeness
+- Acceptance:
+  - either the new audit table is covered end to end by migration/save/load/derived/DM-review tests, or the closeout records why it remains unnecessary
+
+**Slice 7i — Batch 7 closeout gate**
+
+- Goal: prove Batch 7 made the app more trustworthy and identify the next batch cleanly.
+- Deliver:
+  - `output/batch-7-closeout-audit.md`
+  - updated `Current Status` and next-batch entry notes in this roadmap
+  - final status of every Slice 7a-7h item
+  - visual QA summary with fixed/deferred findings
+  - user hands-on review summary with fixed/deferred findings
+  - route/persistence and regression-matrix coverage summary
+  - module-splitting summary with before/after file responsibilities
+- Verification:
+  - `npm test`
+  - `npm run build`
+  - `npm run doctor` where local credentials are available, or a documented reason if credential-dependent checks cannot run
+  - targeted route/persistence, Batch 7 regression matrix, content import, and visual-QA checks
+- Acceptance:
+  - Batch 7 residuals have owner/date/reason, not loose follow-ups
+  - the next batch starts from a concrete handoff rather than broad "hardening" language
+
+### Suggested Order
+
+1. 7a: local setup and authenticated QA fixture.
+2. 7b: route and persistence integration harness.
+3. 7c: representative build regression matrix.
+4. 7d: seed, import, and migration validation.
+5. 7e: authenticated visual and accessibility-oriented QA.
+6. Stop point: user hands-on product review, with findings triaged before repairs begin.
+7. 7f: bounded usability repairs from QA and user-review findings.
+8. Confirmation pass: user checks the fixed review findings before module splitting begins.
+9. 7g: behavior-preserving module splitting.
+10. 7h: conditional multi-source skill provenance audit, only if triggered by DM-review evidence.
+11. 7i: closeout gate.
+
+### Risks
+
+- Authenticated QA will stay one-off unless Slice 7a creates deterministic roles and states first.
+- Route tests can become brittle if they mock Supabase too shallowly; assert final response and reload shape, not only individual query calls.
+- Visual QA can sprawl into redesign. Keep fixes tied to named findings and Batch 5.5 conventions.
+- Module splitting before coverage will hide regressions in import/export churn.
+- The optional skill-provenance table can become schema overreach. Add it only when a real DM audit workflow cannot be explained by existing provenance rows.
 
 ### Exit Criteria
 
-- Representative build archetypes persist and reload accurately.
-- Derived outputs are stable across refactors.
-- The app explains invalid states clearly.
-- Authenticated player, DM, and admin surfaces continue to follow the Batch 5.5 visual hierarchy, focus, copy, and progressive-disclosure conventions.
+- A repeatable local demo-auth path exists for player, DM, and admin QA.
+- Route and persistence tests cover create, save draft, submit, review, level-up, source allowlist, admin CRUD, rejected import preview, and reload behavior.
+- Representative build archetypes persist, reload, and derive accurately across the Batch 7 regression matrix.
+- Seed, import, and migration validation are covered by tests.
+- Authenticated player, DM, and admin surfaces have recorded visual/keyboard/accessibility-oriented QA results.
+- User hands-on review findings are recorded, triaged, and either fixed in 7f or explicitly deferred with rationale.
+- The app explains invalid and blocked states clearly, with fixes tied to concrete QA findings.
+- Derived outputs remain stable across behavior-preserving module splits.
+- Multi-source skill provenance is either implemented from a proven DM-review gap or explicitly kept deferred with rationale.
 
 ## Implementation Strategy for Codex
 

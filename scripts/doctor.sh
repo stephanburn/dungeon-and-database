@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 PROJECT_REF="cqpyvaynpzgyjerfesmz"
 EXPECTED_NODE_MAJOR=""
 FAILURES=0
+WARNINGS=0
 
 cd "$ROOT_DIR"
 
@@ -15,6 +16,31 @@ record_failure() {
 
 record_ok() {
   echo "OK: $1"
+}
+
+record_warning() {
+  echo "WARN: $1"
+  WARNINGS=$((WARNINGS + 1))
+}
+
+env_value_for() {
+  local key="$1"
+  grep -E "^${key}=" .env.local | tail -n 1 | cut -d= -f2- | sed -e 's/^"//' -e 's/"$//'
+}
+
+warn_placeholder_env() {
+  local key="$1"
+  local value
+  value="$(env_value_for "$key")"
+
+  if [[ "$value" == "https://your-project-ref.supabase.co" ||
+        "$value" == "replace-with-your-supabase-anon-key" ||
+        "$value" == "replace-with-your-supabase-service-role-key" ||
+        "$value" == *"your-project-ref"* ||
+        "$value" == *"replace-with-"* ||
+        "$value" == *"paste-your-"* ]]; then
+    record_warning "$key still uses a placeholder value in .env.local"
+  fi
 }
 
 if [[ -f .nvmrc ]]; then
@@ -55,12 +81,25 @@ if [[ -f .env.local ]]; then
   for key in NEXT_PUBLIC_SUPABASE_URL NEXT_PUBLIC_SUPABASE_ANON_KEY SUPABASE_SERVICE_ROLE_KEY; do
     if grep -Eq "^${key}=" .env.local; then
       record_ok "$key is set in .env.local"
+      warn_placeholder_env "$key"
     else
       record_failure "$key is missing from .env.local"
     fi
   done
 else
   record_failure ".env.local is missing"
+fi
+
+if [[ -f scripts/seed-demo.ts ]]; then
+  record_ok "scripts/seed-demo.ts exists"
+else
+  record_failure "scripts/seed-demo.ts is missing"
+fi
+
+if node -e "const scripts=require('./package.json').scripts||{}; process.exit(scripts['seed-srd']&&scripts['seed-demo']?0:1)" >/dev/null 2>&1; then
+  record_ok "Demo seed scripts are wired; run npm run seed-srd, then npm run seed-demo"
+else
+  record_failure "Demo seed scripts are missing; expected npm run seed-srd and npm run seed-demo"
 fi
 
 if vercel whoami >/dev/null 2>&1; then
@@ -93,4 +132,7 @@ if [[ "$FAILURES" -gt 0 ]]; then
 fi
 
 echo
+if [[ "$WARNINGS" -gt 0 ]]; then
+  echo "Doctor found $WARNINGS warning(s)."
+fi
 echo "Doctor check passed."

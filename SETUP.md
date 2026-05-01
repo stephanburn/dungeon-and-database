@@ -75,6 +75,36 @@ npm run dev
 - `./setup`: first run on a machine, or when local setup has drifted
 - `make doctor`: quick readiness check after switching machines or after auth/env/tooling changes
 - `npm run seed-srd`: seed SRD content using `.env.local`
+- `npm run seed-demo`: seed deterministic player, DM, and admin QA data after SRD content exists
+
+## Demo Authenticated QA
+
+After normal bootstrap, fill `.env.local`, then run:
+
+```bash
+make doctor
+npm run seed-srd
+npm run seed-demo
+npm run dev
+```
+
+`npm run seed-demo` uses the service-role key from `.env.local`. It creates or refreshes these deterministic demo accounts with the password `DemoPassw0rd!`:
+
+- `demo-admin@dungeon-and-database.local`
+- `demo-dm@dungeon-and-database.local`
+- `demo-player@dungeon-and-database.local`
+
+On a database that already has a singleton admin, the script leaves that admin untouched and prints a magic-link path for `/dm/content` instead of relying on a private browser session.
+
+The demo fixture creates a DM-owned campaign with `PHB` and `ERftLW` allowed, a player membership, one draft character, one submitted character, and one changes-requested character. It also prints a rejected import fixture that can be pasted into `/dm/content` under Import diff to preview validation findings without applying writes.
+
+Use these start points for authenticated QA:
+
+- `/login`
+- `/dm/dashboard`
+- `/dm/content`
+- `/characters/new`
+- the character URLs printed by `npm run seed-demo`
 
 ## Repo-Specific Notes
 

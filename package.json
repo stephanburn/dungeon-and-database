@@ -15,7 +15,8 @@
     "test": "node --import tsx --test test/**/*.test.ts",
     "content:validate": "tsx scripts/content-import/validate.ts",
     "content:import": "tsx scripts/content-import/import.ts",
-    "seed-srd": "tsx --env-file=.env.local scripts/seed-srd.ts"
+    "seed-srd": "tsx --env-file=.env.local scripts/seed-srd.ts",
+    "seed-demo": "tsx --env-file=.env.local scripts/seed-demo.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
