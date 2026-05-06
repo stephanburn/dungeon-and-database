@@ -78,7 +78,7 @@ For the practical multi-machine setup workflow, see [SETUP.md](SETUP.md).
 
 ### Prerequisites
 
-- Node.js and npm
+- Node.js 24.x and npm
 - Vercel CLI
 - Supabase CLI
 - A Supabase project with the schema migrations applied
@@ -99,7 +99,7 @@ Then fill in the real Supabase keys in `.env.local`.
 If you want one repeatable setup command after cloning, run:
 
 ```bash
-nvm use
+nvm use # or: fnm use
 ./setup
 ```
 

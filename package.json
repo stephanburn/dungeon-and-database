@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "engines": {
-    "node": "20.x"
+    "node": "24.x"
   },
   "scripts": {
     "bootstrap": "bash scripts/bootstrap.sh",
@@ -41,7 +41,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@types/node": "^20",
+    "@types/node": "^24",
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "eslint": "^8",

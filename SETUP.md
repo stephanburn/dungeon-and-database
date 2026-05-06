@@ -6,7 +6,7 @@ This file is the practical setup guide for working on this repo across multiple 
 
 Install the required tools:
 
-- Node.js 20.x
+- Node.js 24.x
 - npm
 - Vercel CLI
 - Supabase CLI
@@ -16,7 +16,7 @@ Install the required tools:
 Set the expected Node version:
 
 ```bash
-nvm use
+nvm use # or: fnm use
 ```
 
 Authenticate the CLIs:
@@ -55,7 +55,7 @@ After bootstrap, fill in the real values in `.env.local` if they are still place
 Start by making sure you are on the expected Node version:
 
 ```bash
-nvm use
+nvm use # or: fnm use
 ```
 
 If this is a machine you have not used recently, or after another coding agent changed setup-related files, run:
