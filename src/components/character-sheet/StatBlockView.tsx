@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { useToast } from '@/hooks/use-toast'
 import type { Character, Species, Background, CharacterLevel, Sense, Feat } from '@/lib/types/database'
 import { formatModifier, type DerivedCharacter, type DerivedCharacterCore } from '@/lib/characters/derived'
 
@@ -26,6 +27,7 @@ function formatSenses(senses: Sense[]): string {
 }
 
 export function StatBlockView({ character, derived, feats = [] }: StatBlockViewProps) {
+  const { toast } = useToast()
   const [acOverride, setAcOverride] = useState('')
   const [open, setOpen] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -110,7 +112,10 @@ export function StatBlockView({ character, derived, feats = [] }: StatBlockViewP
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     } catch {
-      alert('Clipboard write failed. Copy the text manually.')
+      toast({
+        title: 'Clipboard unavailable',
+        description: 'Select the stat block text and copy it manually.',
+      })
     }
   }
 

@@ -156,7 +156,7 @@ export function SpellsCard({
       <Card className="bg-neutral-900 border-neutral-800">
         <CardHeader><CardTitle className="text-neutral-200">Spells</CardTitle></CardHeader>
         <CardContent>
-          <p className="text-sm text-neutral-500">No castable spells are available for this class in this campaign yet.</p>
+          <p className="text-sm text-neutral-500">This character does not need to choose spells here for the current class and campaign.</p>
         </CardContent>
       </Card>
     )

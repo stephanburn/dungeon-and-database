@@ -400,7 +400,7 @@ function AsiFeatHistoryPanel({
   }>
 }) {
   if (entries.length === 0) {
-    return <p className="text-sm text-neutral-500">No ASI or feat choices have been recorded yet.</p>
+    return <p className="text-sm text-neutral-500">No ability boost or feat choices have been recorded yet.</p>
   }
 
   return (
@@ -415,7 +415,7 @@ function AsiFeatHistoryPanel({
                   ? 'border-amber-300/20 bg-amber-300/10 text-amber-100'
                   : 'border-blue-300/20 bg-blue-300/10 text-blue-100'
               }`}>
-                {entry.type === 'feat' ? 'Feat' : 'ASI'}
+                {entry.type === 'feat' ? 'Feat' : 'Ability boost'}
               </span>
             </div>
             <p className="mt-1 text-sm text-neutral-400">{entry.detail}</p>
@@ -503,7 +503,7 @@ function DmAuditPanel({
           <div>
             <p className="text-sm font-medium text-neutral-100">DM Audit</p>
             <p className="mt-1 text-sm text-neutral-400">
-              Sources, legality, and choice history for review.
+              Sources, rules check, and choice history for review.
             </p>
           </div>
           <span className={`rounded-full border px-3 py-1 text-xs ${
@@ -557,7 +557,7 @@ function DmAuditPanel({
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.12em] text-neutral-500">Legality and Open Issues</p>
           {failedChecks.length === 0 ? (
-            <p className="mt-2 text-sm text-neutral-500">No unresolved legality warnings or blockers.</p>
+            <p className="mt-2 text-sm text-neutral-500">No unresolved rules warnings or blockers.</p>
           ) : (
             <div className="mt-2 space-y-2">
               {failedChecks.map((check) => (
@@ -565,7 +565,7 @@ function DmAuditPanel({
                   key={check.key}
                   type="button"
                   onClick={() => onJumpToCheck(check.key)}
-                  className="block w-full rounded-lg border border-white/10 bg-white/[0.02] p-3 text-left transition hover:border-blue-300/30 hover:bg-blue-300/10"
+                  className="focus-ring block w-full rounded-lg border border-white/10 bg-white/[0.02] p-3 text-left transition hover:border-blue-300/30 hover:bg-blue-300/10"
                 >
                   <div className="flex flex-wrap items-center gap-2">
                     <span className={`rounded-full border px-2 py-0.5 text-[10px] ${
@@ -1623,6 +1623,7 @@ export function CharacterSheet({
     }),
   })
   const canEdit = !readOnly && (status === 'draft' || status === 'changes_requested' || isDm)
+  const canEditClassProgression = canEdit && isDm
   const canSubmit = !readOnly && (status === 'draft' || status === 'changes_requested')
   const errorCount = derivedCharacter?.blockingIssues.length ?? failedChecks.filter((c) => c.severity === 'error').length
 
@@ -1913,7 +1914,7 @@ export function CharacterSheet({
                 key={issue.key}
                 type="button"
                 onClick={() => jumpToCheck(issue.key)}
-                className="block text-left"
+                className="focus-ring block text-left"
               >
                 <LegalityBadge check={check} />
               </button>
@@ -2088,7 +2089,7 @@ export function CharacterSheet({
       <div className="panel-subtle">
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-neutral-200">Class &amp; Level</CardTitle>
-          {canEdit && (
+          {canEditClassProgression && (
             <Button size="sm" variant="outline" onClick={addLevel}>
               + Add class
             </Button>
@@ -2103,7 +2104,7 @@ export function CharacterSheet({
             const subclasses = subclassMap[l.class_id] ?? []
             return (
               <div key={i} className="flex items-center gap-3 flex-wrap">
-                {canEdit ? (
+                {canEditClassProgression ? (
                   <>
                     <Select value={l.class_id} onValueChange={(v) => updateLevel(i, 'class_id', v)}>
                       <SelectTrigger className="w-40">
@@ -2494,7 +2495,7 @@ export function CharacterSheet({
 
         {derivedCharacter && (
           <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-            <p className="text-sm font-medium text-neutral-200">ASI and Feat History</p>
+            <p className="text-sm font-medium text-neutral-200">Ability Boost and Feat History</p>
             <div className="mt-3">
               <AsiFeatHistoryPanel entries={derivedCharacter.asiFeatHistory} />
             </div>

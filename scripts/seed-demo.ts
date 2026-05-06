@@ -207,6 +207,9 @@ async function resolveAdminQaAccess(demoAdmin: { email: string; role: UserRole }
   const { data, error } = await supabase.auth.admin.generateLink({
     type: 'magiclink',
     email: admin.email,
+    options: {
+      redirectTo: 'http://localhost:3000/auth/callback',
+    },
   })
 
   if (error) {
@@ -483,7 +486,7 @@ async function main() {
   if (adminQaAccess.kind === 'password') {
     log(`  admin: ${adminQaAccess.detail}`)
   } else if (adminQaAccess.kind === 'magic_link') {
-    log(`  admin: existing singleton admin ${adminQaAccess.email}; use this generated magic link for /dm/content:`)
+    log(`  admin: existing singleton admin ${adminQaAccess.email}; use this generated magic link, then open /dm/content:`)
     log(`  ${adminQaAccess.detail}`)
   } else {
     log(`  admin: ${adminQaAccess.detail}`)

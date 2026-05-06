@@ -18,7 +18,7 @@ const SOURCE_COLOURS: Record<string, string> = {
 
 export function SourceTag({ source, amended, amendmentNote }: SourceTagProps) {
   const colour = SOURCE_COLOURS[source] ?? 'bg-neutral-700 text-neutral-200'
-  const amendedLabel = amendmentNote?.trim() || 'This entry has been amended from the source text.'
+  const adjustedLabel = amendmentNote?.trim() || 'This entry has a table note for this campaign.'
 
   return (
     <span className="inline-flex items-center gap-1">
@@ -28,10 +28,10 @@ export function SourceTag({ source, amended, amendmentNote }: SourceTagProps) {
       {amended && (
         <Badge
           className="cursor-help text-xs px-1.5 py-0 bg-amber-800 text-amber-200 border-0"
-          title={amendedLabel}
-          aria-label={`Amended: ${amendedLabel}`}
+          title={adjustedLabel}
+          aria-label={`Adjusted source entry: ${adjustedLabel}`}
         >
-          amended
+          Adjusted
         </Badge>
       )}
     </span>

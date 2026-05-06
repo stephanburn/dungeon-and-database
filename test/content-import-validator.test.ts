@@ -204,7 +204,7 @@ test('slice 6e exposes dry-run validation and keeps seed-srd as an orchestration
   const seedScript = readFileSync('scripts/seed-srd.ts', 'utf8')
   const validateScript = readFileSync('scripts/content-import/validate.ts', 'utf8')
 
-  assert.equal(packageJson.scripts['content:validate'], 'tsx scripts/content-import/validate.ts')
+  assert.equal(packageJson.scripts['content:validate'], 'node --import tsx scripts/content-import/validate.ts')
   assert.match(seedScript, /runSrdSeed/)
   assert.doesNotMatch(seedScript, /async function seedSpecies/)
   assert.match(validateScript, /validateContentImport/)

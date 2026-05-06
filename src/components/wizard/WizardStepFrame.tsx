@@ -22,7 +22,13 @@ export function WizardStepFrame({
   return (
     <div className="space-y-4">
       <div className="space-y-1">
-        <h2 className="text-lg font-semibold text-neutral-50">{title}</h2>
+        <h2
+          data-wizard-step-heading
+          tabIndex={-1}
+          className="text-lg font-semibold text-neutral-50 focus:outline-none"
+        >
+          {title}
+        </h2>
         {description && (
           <p className="max-w-2xl text-sm leading-6 text-neutral-400">{description}</p>
         )}

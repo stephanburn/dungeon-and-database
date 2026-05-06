@@ -129,7 +129,7 @@ test('slice 6h applied imports use the same validated plan as dry-run', () => {
   assert.equal(result.nextSnapshot.languages?.find((row) => row.key === 'abyssal')?.retired, true)
 })
 
-test('slice 6h exposes command, docs, and calm admin import diff preview', () => {
+test('slice 6h exposes command, docs, and calm admin import preview', () => {
   const packageJson = JSON.parse(read('package.json')) as { scripts: Record<string, string> }
   const command = read('scripts/content-import/import.ts')
   const admin = read('src/components/dm/ContentAdmin.tsx')
@@ -137,13 +137,13 @@ test('slice 6h exposes command, docs, and calm admin import diff preview', () =>
   const equipmentItemsRoute = read('src/app/api/content/equipment-items/route.ts')
   const packagesRoute = read('src/app/api/content/starting-equipment-packages/route.ts')
 
-  assert.equal(packageJson.scripts['content:import'], 'tsx scripts/content-import/import.ts')
+  assert.equal(packageJson.scripts['content:import'], 'node --import tsx scripts/content-import/import.ts')
   assert.match(command, /planContentImport/)
   assert.match(command, /applyContentImportPlan/)
   assert.match(command, /--dry-run/)
   assert.match(command, /--apply/)
 
-  assert.match(admin, /Import diff/)
+  assert.match(admin, /Import preview/)
   assert.match(admin, /contentImportPreview/)
   assert.match(admin, /surface-row/)
   assert.match(admin, /<details/)

@@ -98,7 +98,7 @@ export function FeatsCard({
           </div>
         )}
 
-        {/* ASI-level feat slots */}
+        {/* Ability-boost feat slots */}
         {Array.from({ length: slots }, (_, i) => {
           const chosenId = featChoices[i] ?? ''
           const chosenFeat = availableFeats.find((f) => f.id === chosenId)
@@ -110,7 +110,7 @@ export function FeatsCard({
           return (
             <div key={i} className="space-y-1">
               <p className="text-xs text-neutral-500">
-                {featOnly ? `Feat slot ${i + 1}` : `ASI slot ${i + 1}`} ({slotLabel})
+                {featOnly ? `Feat choice ${i + 1}` : `Ability boost choice ${i + 1}`} ({slotLabel})
               </p>
               {canEdit ? (
                 <Select
@@ -118,11 +118,11 @@ export function FeatsCard({
                   onValueChange={(value) => setSlot(i, !featOnly && value === 'asi' ? '' : value)}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder={featOnly ? 'Choose feat' : 'Take ASI or choose feat'} />
+                    <SelectValue placeholder={featOnly ? 'Choose feat' : 'Take ability boost or choose feat'} />
                   </SelectTrigger>
                   <SelectContent>
                     {!featOnly && (
-                      <SelectItem value="asi" className="text-neutral-400">Take ASI instead</SelectItem>
+                      <SelectItem value="asi" className="text-neutral-400">Take ability boost instead</SelectItem>
                     )}
                     {availableFeats.map((f) => (
                       <SelectItem key={f.id} value={f.id} className="text-neutral-200">
@@ -146,7 +146,7 @@ export function FeatsCard({
                       <p className="text-sm text-neutral-500">No feat selected yet.</p>
                     ) : (
                       <p className="text-sm text-neutral-500">
-                        ASI {chosenAsi.length > 0 ? `(${chosenAsi.map((ability) => ability.toUpperCase()).join(', ')})` : '(not allocated yet)'}
+                        Ability boost {chosenAsi.length > 0 ? `(${chosenAsi.map((ability) => ability.toUpperCase()).join(', ')})` : '(not allocated yet)'}
                       </p>
                     )}
                   </div>
@@ -172,7 +172,7 @@ export function FeatsCard({
                         }}
                       >
                         <SelectTrigger>
-                          <SelectValue placeholder={`ASI pick ${pickIndex + 1}`} />
+                          <SelectValue placeholder={`Ability boost pick ${pickIndex + 1}`} />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="none" className="text-neutral-500">Unassigned</SelectItem>

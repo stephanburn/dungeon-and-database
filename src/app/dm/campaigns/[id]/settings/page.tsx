@@ -54,6 +54,12 @@ export default async function CampaignSettingsPage({ params }: { params: { id: s
         <CampaignMembers campaignId={params.id} dmId={campaign.dm_id} />
         <CampaignSettingsForm campaign={campaign} />
         <CampaignAllowlist campaignId={params.id} initialAllowlist={allowlist} />
+
+        <div className="flex justify-end border-t border-white/10 pt-4">
+          <Button variant="outline" asChild>
+            <Link href="/dm/dashboard">Back to dashboard</Link>
+          </Button>
+        </div>
       </div>
     </div>
   )

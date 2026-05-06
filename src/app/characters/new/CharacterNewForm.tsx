@@ -202,6 +202,13 @@ function getReviewStepForCheckKey(key: string): Exclude<StepId, 'review'> {
   }
 }
 
+function formatSkillChoiceLabel(skill: string) {
+  return skill
+    .replace(/^skill[_\s-]+/i, '')
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (char) => char.toUpperCase())
+}
+
 export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -209,6 +216,7 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
   const resumeCharacterId = searchParams.get('characterId')
 
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
+  const [campaignLoadState, setCampaignLoadState] = useState<'loading' | 'loaded' | 'error'>('loading')
   const [campaignContext, setCampaignContext] = useState<WizardCampaignContext | null>(null)
   const [campaignId, setCampaignId] = useState('')
   const [name, setName] = useState('')
@@ -225,6 +233,7 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
   const [draftEquipmentItems, setDraftEquipmentItems] = useState<CharacterEquipmentItem[]>([])
   const [equipmentSelectionsHydrated, setEquipmentSelectionsHydrated] = useState(false)
   const saveAbortControllerRef = useRef<AbortController | null>(null)
+  const lastStepIdRef = useRef<StepId | null>(null)
 
   const [speciesList, setSpeciesList] = useState<Species[]>([])
   const [backgroundList, setBackgroundList] = useState<Background[]>([])
@@ -272,12 +281,29 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
   const [startingEquipmentSelections, setStartingEquipmentSelections] = useState<StartingEquipmentSelections>({})
 
   useEffect(() => {
+    let cancelled = false
+    setCampaignLoadState('loading')
+
     fetch('/api/campaigns')
-      .then((response) => response.json())
+      .then((response) => {
+        if (!response.ok) throw new Error('Unable to load campaigns')
+        return response.json()
+      })
       .then((data: Campaign[]) => {
+        if (cancelled) return
         setCampaigns(data)
         if (data.length === 1) setCampaignId(data[0].id)
+        setCampaignLoadState('loaded')
       })
+      .catch(() => {
+        if (cancelled) return
+        setCampaigns([])
+        setCampaignLoadState('error')
+      })
+
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   useEffect(() => {
@@ -655,6 +681,13 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
     })),
     [campaigns]
   )
+  const campaignEmptyMessage = campaignLoadState === 'loading'
+    ? 'Loading your campaigns...'
+    : campaignLoadState === 'error'
+      ? 'Could not load campaigns. Refresh or sign in again.'
+      : isDm
+        ? 'Create a campaign before making a character.'
+        : 'Ask your DM to add you to a campaign before creating a character.'
   const speciesChoiceOptions = useMemo(
     () => speciesList.map((species) => ({
       id: species.id,
@@ -811,7 +844,7 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
   const speciesSkillOptions = useMemo(
     () => Array.from(speciesSkillConfig?.from ?? []).map((skill) => ({
       id: skill,
-      label: skill.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase()),
+      label: formatSkillChoiceLabel(skill),
     })),
     [speciesSkillConfig]
   )
@@ -857,7 +890,7 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
   const backgroundSkillOptions = useMemo(
     () => (selectedBackground?.skill_choice_from ?? []).map((skill) => ({
       id: skill,
-      label: skill.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase()),
+      label: formatSkillChoiceLabel(skill),
       disabledReason: getSkillChoiceDuplicateReason(skill, backgroundSkillDuplicateSources),
     })),
     [backgroundSkillDuplicateSources, selectedBackground]
@@ -865,7 +898,7 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
   const classSkillOptions = useMemo(
     () => (selectedClass?.skill_choices?.from ?? []).map((skill) => ({
       id: skill.toLowerCase(),
-      label: skill,
+      label: formatSkillChoiceLabel(skill),
       disabledReason: getSkillChoiceDuplicateReason(skill, classSkillDuplicateSources),
     })),
     [classSkillDuplicateSources, selectedClass?.skill_choices?.from]
@@ -880,7 +913,7 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
   const subclassSkillOptions = useMemo(
     () => Array.from(subclassSkillConfig?.from ?? []).map((skill) => ({
       id: skill,
-      label: skill.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase()),
+      label: formatSkillChoiceLabel(skill),
       disabledReason: getSkillChoiceDuplicateReason(skill, subclassSkillDuplicateSources),
     })),
     [subclassSkillConfig, subclassSkillDuplicateSources]
@@ -1598,6 +1631,19 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
     visibleSteps[currentStepIndex] ?? { id: 'identity', label: 'Identity' }
 
   useEffect(() => {
+    if (lastStepIdRef.current === null) {
+      lastStepIdRef.current = currentStep.id
+      return
+    }
+    if (lastStepIdRef.current === currentStep.id) return
+
+    lastStepIdRef.current = currentStep.id
+    const heading = document.querySelector<HTMLElement>('[data-wizard-step-heading]')
+    heading?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    heading?.focus({ preventScroll: true })
+  }, [currentStep.id])
+
+  useEffect(() => {
     if (stepIndex > visibleSteps.length - 1) {
       setStepIndex(Math.max(0, visibleSteps.length - 1))
     }
@@ -1907,7 +1953,7 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
         if (incompleteSlot) {
           return incompleteSlot.choiceKind === 'feat_only'
             ? `Choose a feat for ${incompleteSlot.label}.`
-            : `Choose a feat or finish both ASI picks for slot ${requiredSlots.indexOf(incompleteSlot) + 1}.`
+            : `Choose a feat or finish both ability boost picks for slot ${requiredSlots.indexOf(incompleteSlot) + 1}.`
         }
         const missingFeatureSpell = featureSpellDefinitions.find(
           (definition) => !featureSpellChoices[definition.sourceFeatureKey]
@@ -2232,19 +2278,40 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
             {currentStep.id === 'identity' && (
               <WizardStepFrame
                 title="Character identity"
-                description="Choose a campaign and name the character."
+                description="Choose a campaign and name the character. The campaign decides which rules and sources are available."
                 guidance={currentStepGuidance}
-                summaryTitle="Current picks"
+                summaryTitle="Selected so far"
                 summaryItems={identityStepSummaryItems}
               >
-                <GuidedChooseOne
-                  title="Campaign"
-                  description="This sets the available sources and campaign defaults."
-                  options={campaignChoiceOptions}
-                  selectedId={campaignId || null}
-                  onChange={(value) => setCampaignId(value ?? '')}
-                  emptyMessage="No campaigns are available to this user."
-                />
+                <div className="space-y-2">
+                  <Label className="text-neutral-300">Campaign</Label>
+                  {campaignChoiceOptions.length > 0 ? (
+                    <>
+                      <Select value={campaignId || 'none'} onValueChange={(value) => setCampaignId(value === 'none' ? '' : value)}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Choose campaign" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none" className="text-neutral-500">Choose campaign</SelectItem>
+                          {campaignChoiceOptions.map((option) => (
+                            <SelectItem key={option.id} value={option.id} className="text-neutral-200">
+                              {option.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {campaignId && (
+                        <p className="text-sm leading-6 text-neutral-500">
+                          {campaignChoiceOptions.find((option) => option.id === campaignId)?.description}
+                        </p>
+                      )}
+                    </>
+                  ) : (
+                    <div className="surface-row px-3 py-2.5 text-sm text-neutral-500">
+                      {campaignEmptyMessage}
+                    </div>
+                  )}
+                </div>
 
                 <div className="grid gap-5 sm:grid-cols-2">
                   <div className="space-y-2">
@@ -2276,7 +2343,7 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
                 title="Choose a species"
                 description="Pick ancestry traits, flexible bonuses, languages, tools, and any species feat."
                 guidance={currentStepGuidance}
-                summaryTitle="Current picks"
+                summaryTitle="Selected so far"
                 summaryItems={speciesStepSummaryItems}
               >
                 <GuidedChooseOne
@@ -2285,7 +2352,7 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
                   options={speciesChoiceOptions}
                   selectedId={speciesId || null}
                   onChange={(value) => handleSpeciesChange(value ?? '')}
-                  emptyMessage="No species are available for this campaign allowlist."
+                  emptyMessage="No species are available in this campaign yet. Ask the DM to check campaign sources."
                 />
 
                 <GuidedChooseMany
@@ -2354,8 +2421,8 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
                         return next
                       })
                     }}
-                    emptyMessage="No feats are currently available."
-                  />
+                  emptyMessage="No species feats need a choice for this character right now."
+                />
                 )}
               </WizardStepFrame>
             )}
@@ -2365,7 +2432,7 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
                 title="Choose a background"
                 description="Pick the training, languages, tools, and feat that come from the character's past."
                 guidance={currentStepGuidance}
-                summaryTitle="Current picks"
+                summaryTitle="Selected so far"
                 summaryItems={backgroundStepSummaryItems}
               >
                 <GuidedChooseOne
@@ -2374,7 +2441,7 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
                   options={backgroundChoiceOptions}
                   selectedId={backgroundId || null}
                   onChange={(value) => handleBackgroundChange(value ?? '')}
-                  emptyMessage="No backgrounds are available for this campaign allowlist."
+                  emptyMessage="No backgrounds are available in this campaign yet. Ask the DM to check campaign sources."
                 />
 
                 {selectedBackground && (
@@ -2382,7 +2449,7 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
                     <AlertDescription className="text-neutral-300">
                       {selectedBackground.skill_proficiencies.length > 0
                         ? `${selectedBackground.name} grants ${selectedBackground.skill_proficiencies.join(', ')}.`
-                        : `${selectedBackground.name} has no fixed skill grants modeled in this source.`}
+                        : `${selectedBackground.name} does not grant fixed skills in the current rules data.`}
                       {selectedBackground.skill_choice_count === 0
                         ? ' There are no extra flexible background skill picks.'
                         : ''}
@@ -2423,9 +2490,9 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
             {currentStep.id === 'classes' && (
               <WizardStepFrame
                 title="Choose a class"
-                description="Creation is single-class and starts at level 1. Multiclassing will be handled later in the level-up flow."
+                description="Your class is the character's main adventuring role. Creation starts with one level-1 class; multiclassing is handled later in level-up."
                 guidance={currentStepGuidance}
-                summaryTitle="Current picks"
+                summaryTitle="Selected so far"
                 summaryItems={classStepSummaryItems}
               >
                 <GuidedChooseOne
@@ -2436,7 +2503,7 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
                   onChange={(value) => {
                     if (value) setPrimaryClass(value)
                   }}
-                  emptyMessage="No classes are available for this campaign allowlist."
+                  emptyMessage="No classes are available in this campaign yet. Ask the DM to check campaign sources."
                 />
 
                 {creationHitDieRows.length > 0 && (
@@ -2462,7 +2529,7 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
                 title="Choose a subclass"
                 description="This step handles level-gated class identities like Cleric domains, Sorcerous Origins, and Warlock patrons once the class unlocks them."
                 guidance={currentStepGuidance}
-                summaryTitle="Current picks"
+                summaryTitle="Selected so far"
                 summaryItems={subclassStepSummaryItems}
               >
                 {levels.map((level, index) => {
@@ -2488,7 +2555,7 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
                       options={subclassChoiceOptions}
                       selectedId={level.subclass_id ?? null}
                       onChange={(value) => updateLevel(index, 'subclass_id', value ?? null)}
-                      emptyMessage="No subclasses are available for this class in the current allowlist."
+                      emptyMessage="No subclass choices are needed for this class in the current campaign."
                     />
                   )
                 })}
@@ -2514,9 +2581,9 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
             {currentStep.id === 'stats' && (
               <WizardStepFrame
                 title="Generate ability scores"
-                description="Choose how to set the character's base ability scores."
+                description="Ability scores are the six core numbers behind attacks, spells, skills, and saving throws."
                 guidance={currentStepGuidance}
-                summaryTitle="Current picks"
+                summaryTitle="Selected so far"
                 summaryItems={statsStepSummaryItems}
               >
                 <GuidedChooseOne
@@ -2620,7 +2687,7 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
                 title="Class training and level-1 picks"
                 description="Choose class skills, tools, languages, and any level-1 expertise picks."
                 guidance={currentStepGuidance}
-                summaryTitle="Current picks"
+                summaryTitle="Selected so far"
                 summaryItems={skillsStepSummaryItems}
               >
                 <GuidedChooseMany
@@ -2711,7 +2778,7 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
             {currentStep.id === 'spells-feats' && (
               <WizardStepFrame
                 title="Choose spells and feats"
-                description="Resolve any level-1 spell, feat, and ASI choices before review."
+                description="Resolve level-1 spells, feats, and ability boosts before review. Ability boosts improve ability scores; feats add a special perk."
                 guidance={currentStepGuidance}
               >
                 {selectedClass?.spellcasting_type && selectedClass.spellcasting_type !== 'none' && (
@@ -2811,7 +2878,7 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
                 {derived && (
                   <Alert className="border-white/10 bg-white/[0.03]">
                     <AlertDescription className="text-neutral-300">
-                      Level {derived.totalLevel} build with {derived.totalAsiSlots} feat/ASI slots.
+                      Level {derived.totalLevel} build with {derived.totalAsiSlots} ability boost or feat choice{derived.totalAsiSlots === 1 ? '' : 's'}.
                       {` HP ${derived.hitPoints.max}.`}
                       {derived.spellSlots.length > 0 && ` Spell slots: ${derived.spellSlots.join(' / ')}.`}
                       {spellChoices.length > 0 && ` ${spellChoices.length} spells selected.`}
@@ -2943,19 +3010,21 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
                       </div>
                     )}
 
-                    <div className="space-y-2">
-                      <p className="text-sm font-medium text-neutral-200">Detailed legality check</p>
-                      <div className="flex flex-wrap gap-2">
-                        {legalityResult.checks.map((check) => (
-                          <LegalityBadge key={check.key} check={check} />
-                        ))}
+                    {legalityResult.checks.some((check) => !check.passed) && (
+                      <div className="space-y-2">
+                        <p className="text-sm font-medium text-neutral-200">Items to review</p>
+                        <div className="flex flex-wrap gap-2">
+                          {legalityResult.checks.filter((check) => !check.passed).map((check) => (
+                            <LegalityBadge key={check.key} check={check} hideWhenPassed />
+                          ))}
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </div>
                 ) : (
                   <Alert className="border-white/10 bg-white/[0.03]">
                     <AlertDescription className="text-neutral-300">
-                      The draft can still be resumed later, but this review needs the shared legality result before the character is ready to open on the full sheet.
+                      The draft can still be resumed later, but this review needs the rules check before the character is ready to open on the full sheet.
                     </AlertDescription>
                   </Alert>
                 )}

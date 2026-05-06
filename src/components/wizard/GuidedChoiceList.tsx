@@ -96,6 +96,12 @@ function GuidedChoiceCard({
         <div className={cn('min-w-0 flex-1', hasRichDetail ? 'space-y-2' : 'space-y-1')}>
           <div className="flex flex-wrap items-center gap-2">
             <p className={cn('font-medium', selected ? 'text-blue-50' : 'text-neutral-100')}>{option.label}</p>
+            {selected && (
+              <Badge variant="secondary" className="gap-1">
+                <Check className="h-3 w-3" />
+                Chosen
+              </Badge>
+            )}
             {option.prerequisiteLabel && (
               <Badge variant="secondary" className="gap-1">
                 <Lock className="h-3 w-3" />
@@ -116,7 +122,7 @@ function GuidedChoiceCard({
             <p className="text-xs leading-5 text-neutral-500">{option.detail}</p>
           )}
           {option.disabledReason && (
-            <p className="text-xs text-amber-200">{option.disabledReason}</p>
+            <p className="text-xs text-amber-200">Unavailable right now: {option.disabledReason}</p>
           )}
         </div>
       </div>

@@ -21,6 +21,10 @@ test('character PUT route maps known level-up save failures to stable structured
   assert.match(routeSource, /code: 'stale_level_up'/)
   assert.match(routeSource, /code: 'invalid_level_up_increment'/)
   assert.match(routeSource, /code: 'duplicate_level_up_choice'/)
+  assert.match(routeSource, /duplicate_choice_kind/)
+  assert.match(routeSource, /character_feature_option_choices/)
+  assert.match(routeSource, /character_spell_selections/)
+  assert.match(routeSource, /character_feat_choices/)
   assert.match(routeSource, /status: 409/)
 })
 

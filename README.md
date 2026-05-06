@@ -161,7 +161,8 @@ npm run dev
 - `demo-dm@dungeon-and-database.local`
 - `demo-player@dungeon-and-database.local`
 
-If the database already has a singleton admin, the script preserves that account and prints a magic-link path for `/dm/content` so admin QA can still start from a known path.
+If the database already has a singleton admin, the script preserves that account and prints a local magic-link path. Use it to sign in, then open `/dm/content`.
+For local admin QA, make sure Supabase Auth allows `http://localhost:3000/auth/callback` as a redirect URL; otherwise Supabase may rewrite the generated link back to the deployed site.
 
 The fixture gives the DM campaign `PHB` plus `ERftLW`, joins the player to it, and creates draft, submitted, and changes-requested characters. It also prints a rejected import fixture for the `/dm/content` Import diff preview so admin QA can inspect validation findings without applying writes.
 

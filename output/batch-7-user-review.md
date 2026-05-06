@@ -6,11 +6,26 @@ Date: 2026-05-01
 
 First hands-on product trial after Slice 7e. The reviewer logged out, tested magic-link login, opened the dashboard and campaign settings, created a new character in the "Embers of the Last Wall" campaign, opened the resulting sheet, saved a sheet edit, then attempted level-up. The session ended when level-up produced an application error and console output.
 
+## Session 2
+
+Second hands-on trial after the `7UserTest1` follow-up commit. The level-up entry crash was confirmed resolved. The reviewer then attempted the level-up flow, hit a recoverable duplicate-choice error when only HP appeared to be changing, explored an apparent raw class-level edit path on the sheet, retried level-up into the subclass-choice step, saw duplicate `Thief` subclass options, and then reviewed the DM content library/admin area.
+
+## Session 2 Decision
+
+Create a fresh narrow `7UserTest2` slice before `7f`.
+
+Reason: the resolved crash proves `7UserTest1` closed the React blocker, but Session 2 surfaced new level-up workflow integrity issues. A level-up that appears to only add HP should not save a duplicate choice payload, and the sheet should not let a player bypass guided level-up by directly editing class levels unless that path is deliberately constrained and validated. Those are functional/data-trust blockers, not broad usability polish.
+
+Keep the visual density, button wording, ordering, content-admin scrolling, and admin information-architecture comments in `7f` unless investigation proves they directly cause the level-up save failure.
+
 ## Blocking Finding
 
 | ID | Severity | Route / State | Observation | Desired outcome | Triage |
 | --- | --- | --- | --- | --- | --- |
-| UT1-001 | P0 | `PUT /api/characters/70a78581-bbf0-442f-a3fd-ad60ab6ffb34` during level-up save and `/characters/[id]/level-up` entry | Network request returned `409`, then the browser showed "Application error" and console reported minified React error `#185`. The first retry still crashed when clicking level up. React 18 maps `#185` to maximum update depth. | The save conflict should show a recoverable stale-state message, and entering level-up must not crash or enter a render loop. | Fixed in `7UserTest1` follow-up; browser confirmation pending. |
+| UT1-001 | P0 | `PUT /api/characters/70a78581-bbf0-442f-a3fd-ad60ab6ffb34` during level-up save and `/characters/[id]/level-up` entry | Network request returned `409`, then the browser showed "Application error" and console reported minified React error `#185`. The first retry still crashed when clicking level up. React 18 maps `#185` to maximum update depth. | The save conflict should show a recoverable stale-state message, and entering level-up must not crash or enter a render loop. | Fixed in `7UserTest1` follow-up; confirmed resolved in Session 2. |
+| UT2-001 | P0 | Level-up save after crash fix | Level-up entry now works, but saving a level-up that appeared to only add HP returned `duplicate_level_up_choice` / "This level up contains duplicate choice" even though the reviewer did not add spells, feats, or feature choices. | A no-choice HP-only level-up should save, or the UI should identify the exact duplicated row before save. | Fixed in `7UserTest2`: level-up submit no longer resends unchanged feature-option or feat after-state rows. |
+| UT2-002 | P1 | Character sheet class/level editing | Reviewer appeared able to bypass guided level-up by editing class/level directly on the sheet, then submit/approve with no active issues. | Player-facing class-level changes should route through guided level-up or be explicitly locked/validated so level history, HP, and required choices cannot be bypassed. | Fixed in `7UserTest2`: raw class progression edits are DM repair-only. |
+| UT2-003 | P1 | Rogue level-up subclass step | Rogue subclass choices showed `Thief` twice. | Duplicate subclass names should be deduped, source-labeled, or explained; investigate whether duplicate source rows are contributing to duplicate-choice payloads. | Fixed in `7UserTest2`: duplicate subclass names are source-labeled. |
 
 Console excerpt:
 
@@ -43,6 +58,8 @@ Missing evidence to collect during reproduction:
 | UT1-011 | P1 | Skill step/save | Duplicate skill choice was allowed until save failed with `Duplicate skill choice`; reviewer expected prevention earlier. Toast also covered the save/continue area. | Prevent duplicate choices before save and keep error feedback out of the primary action path. | Fixed in `7UserTest1`. |
 | UT1-012 | P1 | Ability scores/review | Campaign requires point buy, but standard array was selectable; review blocked later. | Disable or hide disallowed stat methods before review. | Fixed in `7UserTest1`. |
 | UT1-013 | P2 | Review legality | Detailed legality check showed many boxes saying `Clear`, which felt like noise rather than detail. | Hide all-clear checks by default or summarize them compactly. | Fix in 7f. |
+| UT2-004 | P2 | Level-up class choice | Current class advance, e.g. Rogue level 1 to 2, appeared inside the alphabetical class list rather than as the obvious default/top option. | Put the existing class advance first and visually separate legal new multiclass options. | Fix in 7f. |
+| UT2-005 | P2 | Level-up save action | `Save level up draft and return to sheet` felt too long and unclear as a primary button. | Use a shorter, outcome-focused label. | Fix in 7f. |
 
 ## Sheet and Content Trust Findings
 
@@ -57,6 +74,13 @@ Missing evidence to collect during reproduction:
 | --- | --- | --- | --- | --- | --- |
 | UT1-016 | P2 | Magic-link email | Email link worked, but the email was generic and did not clearly identify Dungeon and Database or why the user received it. | Branded/trustworthy auth email copy and sender context. | Fix in 7f or auth-provider configuration task. |
 | UT1-017 | P3 | Dashboard visual tone | Dashboard worked but felt very stark black-and-white; reviewer wanted a little color and warmth. | Add restrained color cues without broad redesign. | Fix in 7f if within Batch 5.5 conventions. |
+
+## DM Content Admin Findings
+
+| ID | Severity | Route / State | Observation | Desired outcome | Triage |
+| --- | --- | --- | --- | --- | --- |
+| UT2-006 | P2 | `/dm/content` list tables | Several content library sections require horizontal scrolling for one-line text fields, especially backgrounds, species, and classes. | Reduce horizontal scroll through responsive columns, truncation, disclosure, or denser row layout. | Fix in 7f. |
+| UT2-007 | P2 | `/dm/content` information architecture | `Import` was unclear, and the relationship between equipment items versus weapons/armor/shields was not self-explanatory. | Clarify admin tab labels and helper copy without expanding the surface into a new content-model batch. | Fix in 7f. |
 
 ## 7UserTest1 Scope
 
@@ -92,7 +116,22 @@ Verification:
 - `node node_modules/next/dist/bin/next build`
 - `npm test`
 
-Manual browser confirmation remains for the exact original character/session because the first report did not include the `409` JSON body. Existing route tests already cover the structured conflict codes.
+Session 2 confirmed the React `#185` crash is resolved. The remaining level-up save conflict is now tracked separately as `UT2-001` / `7UserTest2`.
+
+## 7UserTest2 Outcome
+
+Completed on 2026-05-01.
+
+- Root cause found for the HP-only duplicate-choice conflict: the level-up wizard computed new-level feature and feat rows, but submitted full after-state feature and feat choices to an additive level-up RPC. That could re-submit old persisted choices even when the visible level-up only changed HP.
+- Level-up submit now sends `newLevelFeatureOptionChoices` and `newLevelFeatChoices`. Spell choices remain after-state because class spell swaps intentionally use replacement semantics.
+- Duplicate level-up save conflicts now return more specific copy and a `duplicate_choice_kind` field when the database error identifies feature option, spell, feat, ASI, skill, or class-level persistence.
+- Player-facing sheet class progression edits are locked to the guided level-up path. The raw class/level editor remains available to DMs for repair/admin use.
+- Duplicate subclass names in the level-up subclass selector are source-labeled, so duplicate `Thief` rows are distinguishable without changing the underlying allowed-source data.
+
+Verification:
+
+- `npm test -- test/ut2-user-test-regressions.test.ts test/level-up-flow.test.ts test/character-route-concurrency-errors.test.ts`
+- `npm run build`
 
 Carry into 7f after blocker fixes:
 
@@ -105,6 +144,22 @@ Carry into 7f after blocker fixes:
 - legality all-clear noise
 - `amended` and content limitation language
 
+## 7f Outcome
+
+Completed on 2026-05-06.
+
+- Fixed in this pass: campaign settings return navigation, dense campaign selection, wizard step focus after Continue/Back/jump, `Current picks` wording, skill label cleanup, shared focus treatment on raw choice/jump buttons, legality all-clear noise, `amended` source wording, level-up class ordering, shorter level-up save copy, stat-block clipboard feedback, and the concrete `/dm/content` keyboard/delete/key-warning findings.
+- Partially addressed: content-admin horizontal scrolling is reduced with fixed-table presentation and clarified admin copy; broader dashboard/campaign visual warmth is left for the novice comprehension pass to avoid another broad visual redesign inside 7f.
+- Deferred with rationale: magic-link email branding likely belongs in Supabase auth/provider configuration rather than the app UI code touched by this slice.
+
+## 7f.5 Outcome
+
+Completed on 2026-05-06.
+
+- Fixed in this pass: beginner-facing copy now explains campaign sources, class role, ability scores, ability boosts, feats, spells, level-up HP defaults, and final rules checks without relying on ASI, source allowlist, or legality shorthand.
+- No-choice states for campaign-filtered content, spell choices, source table notes, and background skill grants now read as normal product states rather than missing implementation.
+- Existing progressive disclosure and sheet/review surfaces remain intact; this pass did not add new rules automation, tutorial flows, schema work, or broad visual redesign.
+
 ## Next Reproduction Script
 
 1. Log in through magic link.
@@ -114,4 +169,4 @@ Carry into 7f after blocker fixes:
 5. Pick overlapping skills once to reproduce duplicate skill handling.
 6. Continue through equipment with rapier, shortbow, and dungeoneer's pack.
 7. Open sheet, make a small edit, save, then start level-up.
-8. Capture the failed `PUT /api/characters/70a78581-bbf0-442f-a3fd-ad60ab6ffb34` response body and non-minified console stack.
+8. If the duplicate-choice conflict appears, capture the `PUT /api/characters/:id` request payload and response body, especially the submitted spell, feat, feature-option, class, and level-up rows.

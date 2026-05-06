@@ -1,4 +1,4 @@
-import type { Class, MulticlassPrereq } from '@/lib/types/database'
+import type { Class, MulticlassPrereq, Subclass } from '@/lib/types/database'
 import type { FeatureOptionChoiceDefinition } from '@/lib/characters/feature-grants'
 import type { CharacterSpellSelection } from '@/lib/types/database'
 import { getContiguouslyCompletedSteps } from '@/lib/characters/wizard-step-helpers'
@@ -27,6 +27,8 @@ export function buildLevelUpClassOptions(args: {
   baseLevels: BaseLevel[]
   adjustedStats: AdjustedStats
 }) {
+  const existingClassOrder = new Map(args.baseLevels.map((level, index) => [level.class_id, index]))
+
   return args.classList.map((cls) => {
     const existingLevel = args.baseLevels.find((level) => level.class_id === cls.id)?.level ?? 0
     const missingPrereqs = existingLevel > 0
@@ -45,7 +47,23 @@ export function buildLevelUpClassOptions(args: {
         ? `${cls.name} (${existingLevel} → ${existingLevel + 1})`
         : `${cls.name} (new multiclass${invalidReason ? `, ${invalidReason}` : ''})`,
     }
+  }).sort((left, right) => {
+    if (left.existingLevel > 0 && right.existingLevel === 0) return -1
+    if (left.existingLevel === 0 && right.existingLevel > 0) return 1
+    if (left.existingLevel > 0 && right.existingLevel > 0) {
+      return (existingClassOrder.get(left.classId) ?? 0) - (existingClassOrder.get(right.classId) ?? 0)
+    }
+    if (left.disabled !== right.disabled) return left.disabled ? 1 : -1
+    return 0
   })
+}
+
+export function formatSubclassOptionLabel(
+  subclass: Pick<Subclass, 'name' | 'source'>,
+  duplicateNameCounts: ReadonlyMap<string, number>
+) {
+  const duplicateCount = duplicateNameCounts.get(subclass.name.toLowerCase()) ?? 0
+  return duplicateCount > 1 ? `${subclass.name} (${subclass.source})` : subclass.name
 }
 
 export function isSubclassSelectionRequired(args: {

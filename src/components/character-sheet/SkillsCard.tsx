@@ -247,7 +247,7 @@ export function SkillsCard({
                   type="button"
                   onClick={() => toggleSkill(skill.key)}
                   disabled={!isChoosable || (atLimit && !proficient)}
-                  className={`flex w-full flex-col items-start gap-2 rounded-xl border px-3 py-2.5 text-left text-sm transition-colors
+                  className={`focus-ring flex w-full flex-col items-start gap-2 rounded-xl border px-3 py-2.5 text-left text-sm transition-colors
                     ${isEligible
                       ? 'cursor-pointer border-white/12 bg-white/[0.03] hover:border-white/18 hover:bg-white/[0.05]'
                       : 'cursor-default border-white/8 bg-white/[0.02]'}

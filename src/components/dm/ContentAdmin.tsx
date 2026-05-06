@@ -1,12 +1,13 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { Children, Fragment, useState, useEffect, useCallback, type KeyboardEvent } from 'react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { ConfirmActionButton } from '@/components/shared/ConfirmActionButton'
 import {
   Select,
   SelectContent,
@@ -1611,6 +1612,29 @@ export default function ContentAdmin() {
     fetch('/api/content/feature-option-groups').then(r => r.json()).then(d => setFeatureOptionGroups(Array.isArray(d) ? d : []))
   }, [])
 
+  const focusContentAdminTab = useCallback((tab: Tab) => {
+    setActiveTab(tab)
+    window.requestAnimationFrame(() => {
+      document.querySelector<HTMLButtonElement>(`[data-content-admin-tab="${tab}"]`)?.focus()
+    })
+  }, [])
+
+  function handleTabListKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (!['ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(event.key)) return
+
+    event.preventDefault()
+    const currentIndex = Math.max(0, TABS.indexOf(activeTab))
+    const nextIndex = event.key === 'Home'
+      ? 0
+      : event.key === 'End'
+        ? TABS.length - 1
+        : event.key === 'ArrowRight'
+          ? (currentIndex + 1) % TABS.length
+          : (currentIndex - 1 + TABS.length) % TABS.length
+
+    focusContentAdminTab(TABS[nextIndex])
+  }
+
   useEffect(() => {
     fetchClasses()
     fetchSources()
@@ -1717,7 +1741,6 @@ export default function ContentAdmin() {
   }
 
   async function deleteItem(itemKey: string) {
-    if (!confirm('Delete this item? This cannot be undone.')) return
     const param = getDeleteParam(activeTab, itemKey)
     const res = await fetch(`${apiUrl(activeTab)}?${param}`, { method: 'DELETE' })
     if (res.ok) {
@@ -1728,9 +1751,11 @@ export default function ContentAdmin() {
       if (activeTab === 'equipment-items') fetchEquipmentItems()
       if (activeTab === 'starting-equipment-packages') fetchStartingPackages()
       if (editingId === itemKey) cancel()
+      return true
     } else {
       const json = await res.json().catch(() => ({}))
       setError((json as { error?: string }).error ?? 'Delete failed')
+      return false
     }
   }
 
@@ -1749,20 +1774,36 @@ export default function ContentAdmin() {
       </div>
 
       <div className="mb-4 overflow-x-auto">
-        <TabsList className="h-auto rounded-2xl border border-white/10 bg-white/[0.03] p-1">
+        <TabsList
+          aria-label="Content sections"
+          onKeyDown={handleTabListKeyDown}
+          className="h-auto rounded-lg border border-white/10 bg-white/[0.03] p-1"
+        >
           {TABS.map(t => (
-            <TabsTrigger key={t} value={t} className="capitalize text-neutral-400 data-[state=active]:bg-white/[0.08] data-[state=active]:text-neutral-100">
+            <TabsTrigger
+              key={t}
+              value={t}
+              data-content-admin-tab={t}
+              className="capitalize text-neutral-400 data-[state=active]:bg-white/[0.08] data-[state=active]:text-neutral-100"
+            >
               {t.replaceAll('-', ' ')}
             </TabsTrigger>
           ))}
         </TabsList>
       </div>
 
+      <p className="mb-4 text-sm leading-6 text-neutral-500">
+        Equipment items hold shared names, costs, and weights. Weapons, armor, and shields add rules to those items.
+      </p>
+
       <details className="surface-section mb-4">
         <summary className="cursor-pointer text-sm font-medium text-neutral-200">
-          Import diff
+          Import preview
         </summary>
         <div className="mt-3 space-y-3">
+          <p className="text-sm leading-6 text-neutral-500">
+            Paste a source bundle to preview creates, updates, unchanged rows, and retire candidates.
+          </p>
           <Textarea
             aria-label="Import fixture"
             value={contentImportText}
@@ -1816,7 +1857,7 @@ export default function ContentAdmin() {
       {TABS.map(tab => (
         <TabsContent key={tab} value={tab} className="mt-0 space-y-4">
           {showForm && activeTab === tab && (
-            <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-5 space-y-4">
+            <div className="rounded-lg border border-white/10 bg-white/[0.04] p-5 space-y-4">
               <h3 className="text-base font-semibold text-neutral-100">
                 {editingId ? 'Edit' : 'Add'} {tabLabel(tab)}
               </h3>
@@ -1870,8 +1911,8 @@ export default function ContentAdmin() {
           {items.length === 0 ? (
             <p className="text-neutral-500 text-sm">No {tab} yet.</p>
           ) : (
-            <div className="overflow-hidden rounded-3xl border border-white/10 bg-white/[0.03]">
-              <Table>
+            <div className="overflow-hidden rounded-lg border border-white/10 bg-white/[0.03]">
+              <Table className="table-fixed">
                 <TableHeader>
                   <TableRow className="hover:bg-transparent">
                     {renderTableHead(tab)}
@@ -1883,16 +1924,26 @@ export default function ContentAdmin() {
                     const itemKey = getItemIdentifier(tab, item)
                     return (
                       <TableRow key={itemKey}>
-                        {renderTableCells(tab, item, classes)}
+                        {Children.toArray(renderTableCells(tab, item, classes)).map((cell, cellIndex) => (
+                          <Fragment key={`${itemKey}:cell:${cellIndex}`}>{cell}</Fragment>
+                        ))}
                         {!READ_ONLY_TABS.has(tab) && (
-                          <TableCell>
+                          <TableCell key={`${itemKey}:actions`}>
                             <div className="flex gap-1 justify-end">
                               <Button size="sm" variant="ghost" onClick={() => startEdit(item)} className="h-7 px-2 text-xs">
                                 Edit
                               </Button>
-                              <Button size="sm" variant="ghost" onClick={() => deleteItem(itemKey)} className="h-7 px-2 text-xs text-red-400 hover:text-red-300">
-                                Delete
-                              </Button>
+                              <ConfirmActionButton
+                                title={`Delete ${tabLabel(tab)}`}
+                                description={`Remove this ${tabLabel(tab)} from the content library. This cannot be undone.`}
+                                triggerLabel="Delete"
+                                confirmLabel="Delete item"
+                                pendingLabel="Deleting..."
+                                onConfirm={() => deleteItem(itemKey)}
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 px-2 text-xs text-red-400 hover:text-red-300"
+                              />
                             </div>
                           </TableCell>
                         )}

@@ -175,9 +175,73 @@ type CharacterSaveErrorResponse = {
   status: number
   code: string
   message: string
+  duplicateChoiceKind?: DuplicateChoiceKind
 }
 
-function mapCharacterSaveError(error: { message: string; code?: string }): CharacterSaveErrorResponse {
+type CharacterSaveError = {
+  message: string
+  code?: string
+  details?: string
+  hint?: string
+}
+
+type DuplicateChoiceKind =
+  | 'feature_option'
+  | 'spell'
+  | 'feat'
+  | 'asi'
+  | 'skill'
+  | 'class_level'
+
+function getDuplicateChoiceKind(error: CharacterSaveError): DuplicateChoiceKind | undefined {
+  const text = [error.message, error.details, error.hint].filter(Boolean).join(' ')
+
+  if (/character_feature_option_choices/i.test(text)) return 'feature_option'
+  if (/character_spell_selections/i.test(text)) return 'spell'
+  if (/character_feat_choices/i.test(text)) return 'feat'
+  if (/character_asi_choices/i.test(text)) return 'asi'
+  if (/character_skill_proficiencies/i.test(text)) return 'skill'
+  if (/character_class_levels/i.test(text)) return 'class_level'
+
+  return undefined
+}
+
+function getDuplicateChoiceMessage(kind: DuplicateChoiceKind | undefined) {
+  switch (kind) {
+    case 'feature_option':
+      return 'This level-up tried to save a duplicate feature option choice. Refresh and review the selected features.'
+    case 'spell':
+      return 'This level-up tried to save a duplicate spell choice. Refresh and review the selected spells.'
+    case 'feat':
+      return 'This level-up tried to save a duplicate feat choice. Refresh and review the selected feats.'
+    case 'asi':
+      return 'This level-up tried to save a duplicate ASI choice. Refresh and review the selected ability score increases.'
+    case 'skill':
+      return 'This level-up tried to save a duplicate skill choice. Refresh and review the selected skills.'
+    case 'class_level':
+      return 'This level-up tried to save a duplicate class level. Refresh the sheet before saving again.'
+    default:
+      return 'This level-up contains a duplicate choice. Refresh and review the selected spells, feats, features, and skills.'
+  }
+}
+
+function toCharacterSaveError(error: unknown): CharacterSaveError {
+  if (error && typeof error === 'object') {
+    const maybe = error as Record<string, unknown>
+    return {
+      message: typeof maybe.message === 'string' ? maybe.message : 'Failed to save character',
+      code: typeof maybe.code === 'string' ? maybe.code : undefined,
+      details: typeof maybe.details === 'string' ? maybe.details : undefined,
+      hint: typeof maybe.hint === 'string' ? maybe.hint : undefined,
+    }
+  }
+
+  return {
+    message: 'Failed to save character',
+  }
+}
+
+function mapCharacterSaveError(error: CharacterSaveError): CharacterSaveErrorResponse {
   const message = error.message
 
   if (/Optimistic lock token is required/i.test(message)) {
@@ -213,10 +277,12 @@ function mapCharacterSaveError(error: { message: string; code?: string }): Chara
   }
 
   if (/duplicate key value violates unique constraint/i.test(message)) {
+    const duplicateChoiceKind = getDuplicateChoiceKind(error)
     return {
       status: 409,
       code: 'duplicate_level_up_choice',
-      message: 'This level-up contains a duplicate choice. Refresh and review the selected spells, feats, and features.',
+      duplicateChoiceKind,
+      message: getDuplicateChoiceMessage(duplicateChoiceKind),
     }
   }
 
@@ -324,7 +390,7 @@ export async function PUT(
     return jsonError('Level-up payload is required', 400)
   }
 
-  let saveError: { message: string; code?: string } | null = null
+  let saveError: CharacterSaveError | null = null
   try {
     const result = save_mode === 'level_up'
       ? await saveCharacterLevelUpAtomic(
@@ -360,14 +426,16 @@ export async function PUT(
       )
     saveError = result.error
   } catch (error) {
-    saveError = {
-      message: error instanceof Error ? error.message : 'Failed to save character',
-    }
+    saveError = toCharacterSaveError(error)
   }
 
   if (saveError) {
     const mapped = mapCharacterSaveError(saveError)
-    return NextResponse.json({ error: mapped.message, code: mapped.code }, { status: mapped.status })
+    return NextResponse.json({
+      error: mapped.message,
+      code: mapped.code,
+      ...(mapped.duplicateChoiceKind ? { duplicate_choice_kind: mapped.duplicateChoiceKind } : {}),
+    }, { status: mapped.status })
   }
 
   // Capture snapshot and reload through the shared cutover loader so

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import {
   buildLevelUpClassOptions,
   findMissingMulticlassPrereqs,
+  formatSubclassOptionLabel,
   getEditableLevelUpSpellChoiceIds,
   getLevelUpFeatureOptionStepDefinitions,
   getLevelUpResumeStepIndex,
@@ -31,14 +32,14 @@ test('buildLevelUpClassOptions disables illegal new multiclass picks but keeps e
     ],
     classList: [
       {
-        id: 'rogue',
-        name: 'Rogue',
-        multiclass_prereqs: [{ ability: 'dex', min: 13 }],
-      },
-      {
         id: 'wizard',
         name: 'Wizard',
         multiclass_prereqs: [{ ability: 'int', min: 13 }],
+      },
+      {
+        id: 'rogue',
+        name: 'Rogue',
+        multiclass_prereqs: [{ ability: 'dex', min: 13 }],
       },
     ] as never,
   })
@@ -59,6 +60,22 @@ test('buildLevelUpClassOptions disables illegal new multiclass picks but keeps e
       label: 'Wizard (new multiclass, Requires INT 13)',
     },
   ])
+})
+
+test('formatSubclassOptionLabel disambiguates duplicate subclass names with their source', () => {
+  const duplicateNameCounts = new Map([
+    ['thief', 2],
+    ['assassin', 1],
+  ])
+
+  assert.equal(
+    formatSubclassOptionLabel({ name: 'Thief', source: 'PHB' } as never, duplicateNameCounts),
+    'Thief (PHB)'
+  )
+  assert.equal(
+    formatSubclassOptionLabel({ name: 'Assassin', source: 'PHB' } as never, duplicateNameCounts),
+    'Assassin'
+  )
 })
 
 test('isSubclassSelectionRequired fires exactly when the per-class level reaches the subclass choice level without a subclass', () => {

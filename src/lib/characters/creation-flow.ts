@@ -39,15 +39,15 @@ export function buildCreationStepList(args: {
 const STAT_METHOD_COPY: Record<StatMethod, { label: string; description: string }> = {
   point_buy: {
     label: 'Point Buy',
-    description: 'Spend exactly 27 points across scores from 8 to 15.',
+    description: 'Ability scores are the six core numbers for the character. Point Buy spends exactly 27 points across scores from 8 to 15.',
   },
   standard_array: {
     label: 'Standard Array',
-    description: 'Assign 15, 14, 13, 12, 10, and 8 exactly once each.',
+    description: 'Ability scores are the six core numbers for the character. Standard Array assigns 15, 14, 13, 12, 10, and 8 exactly once each.',
   },
   rolled: {
     label: 'Rolled',
-    description: 'Roll six sets of 4d6 and drop the lowest die in each set.',
+    description: 'Ability scores are the six core numbers for the character. Roll six sets of 4d6 and drop the lowest die in each set.',
   },
 }
 
@@ -65,7 +65,7 @@ export function getAllowedStatMethodOptions(required: StatMethod | null | undefi
     label: STAT_METHOD_COPY[method].label,
     description: STAT_METHOD_COPY[method].description,
     disabledReason: required && method !== required
-      ? `Campaign requires ${formatStatMethod(required)}.`
+      ? `Unavailable in this campaign: use ${formatStatMethod(required)}.`
       : null,
   }))
 }

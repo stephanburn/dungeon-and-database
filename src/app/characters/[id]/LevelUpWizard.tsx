@@ -80,6 +80,7 @@ import { getFixedHpGainValue } from '@/lib/characters/derived'
 import {
   buildLevelUpClassOptions,
   filterChoiceRecordByAllowedKeysStable,
+  formatSubclassOptionLabel,
   getEditableLevelUpSpellChoiceIds,
   getLevelUpFeatureOptionStepDefinitions,
   getLevelUpResumeStepIndex,
@@ -132,7 +133,7 @@ const LEVEL_UP_REVIEW_STEP_LABELS: Record<StepId, string> = {
   features: 'Features',
   skills: 'Skills',
   spells: 'Spells',
-  feat: 'ASI / Feat',
+  feat: 'Ability boost or feat',
   hp: 'HP',
   review: 'Review',
 }
@@ -593,6 +594,14 @@ export function LevelUpWizard({
   const selectedSubclass = selectedClassId
     ? (subclassMap[selectedClassId] ?? []).find((entry) => entry.id === selectedSubclassId) ?? null
     : null
+  const selectedSubclassOptionNameCounts = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const subclass of subclassMap[selectedClassId] ?? []) {
+      const key = subclass.name.toLowerCase()
+      counts.set(key, (counts.get(key) ?? 0) + 1)
+    }
+    return counts
+  }, [selectedClassId, subclassMap])
   const currentSubclassId = baseLevels.find((level) => level.class_id === selectedClassId)?.subclass_id ?? null
   const currentSubclass = selectedClassId
     ? (subclassMap[selectedClassId] ?? []).find((entry) => entry.id === currentSubclassId) ?? null
@@ -1159,19 +1168,10 @@ export function LevelUpWizard({
       .filter((choice) => !initialFeatChoiceKeys.has(getFeatChoiceKey(choice))),
     [initialFeatChoiceKeys, nextDerived?.featSlots, nextFeatChoices]
   )
-  const afterStateFeatureOptionChoices = useMemo(
-    () => canonicalFeatureOptionChoices,
-    [canonicalFeatureOptionChoices]
-  )
   const afterStateSpellSelections = useMemo(
     () => persistedNextSpellSelections
       .filter((choice): choice is Exclude<typeof choice, string> => typeof choice !== 'string'),
     [persistedNextSpellSelections]
-  )
-  const afterStateFeatChoices = useMemo(
-    () => buildTypedFeatChoices(nextFeatChoices, nextDerived?.featSlots)
-      .filter((choice): choice is Exclude<typeof choice, string> => typeof choice !== 'string'),
-    [nextDerived?.featSlots, nextFeatChoices]
   )
   const spellNameById = useMemo(() => new Map(
     [...initialSelectedSpells, ...mergedSpellOptions].map((spell) => [spell.id, spell.name])
@@ -1323,7 +1323,7 @@ export function LevelUpWizard({
     if (needsFeatureOptionStep) nextSteps.push({ id: 'features', label: 'Features' })
     if (needsSkillStep) nextSteps.push({ id: 'skills', label: 'Skills' })
     if (spellUnlockChanged) nextSteps.push({ id: 'spells', label: 'Spells' })
-    if (needsFeatStep) nextSteps.push({ id: 'feat', label: 'ASI / Feat' })
+    if (needsFeatStep) nextSteps.push({ id: 'feat', label: 'Ability boost or feat' })
     nextSteps.push({ id: 'hp', label: 'HP' })
     nextSteps.push({ id: 'review', label: 'Review' })
 
@@ -1397,15 +1397,15 @@ export function LevelUpWizard({
         if (!newFeatChoice) {
           return newFeatSlot.choiceKind === 'feat_only'
             ? `Choose the feat granted by ${newFeatSlot.label}.`
-            : 'Choose whether this level grants an ASI or a feat.'
+            : 'Choose whether this level grants an ability score increase or a feat.'
         }
         if (newFeatSlot.choiceKind === 'feat_only' && newFeatChoice === 'asi') {
-          return `${newFeatSlot.label} grants a feat, not an ASI.`
+          return `${newFeatSlot.label} grants a feat, not an ability score increase.`
         }
         if (newFeatChoice === 'asi') {
           const selection = asiChoices[currentFeatSlotCount] ?? []
           if (selection.length !== 2) {
-            return 'Choose two ASI increases for this slot.'
+            return 'Choose two ability score increases for this slot.'
           }
         }
         return null
@@ -1482,9 +1482,9 @@ export function LevelUpWizard({
           },
           skill_proficiencies: newLevelSkillChoices,
           asi_choices: newLevelAsiChoices,
-          feature_option_choices: afterStateFeatureOptionChoices,
+          feature_option_choices: newLevelFeatureOptionChoices,
           spell_choices: afterStateSpellSelections,
-          feat_choices: afterStateFeatChoices,
+          feat_choices: newLevelFeatChoices,
         }),
       })
 
@@ -1636,7 +1636,7 @@ export function LevelUpWizard({
                           setLevelUpConflict(null)
                           setSelectedClassId(option.classId)
                         }}
-                        className={`rounded-xl border px-3 py-3 text-left text-sm transition-colors ${
+                        className={`focus-ring rounded-xl border px-3 py-3 text-left text-sm transition-colors ${
                           selected
                             ? 'border-blue-400/30 bg-blue-400/10 text-blue-50'
                             : option.disabled
@@ -1687,7 +1687,7 @@ export function LevelUpWizard({
                 <SelectContent>
                   {(subclassMap[selectedClassId] ?? []).map((subclass) => (
                     <SelectItem key={subclass.id} value={subclass.id} className="text-neutral-200">
-                      {subclass.name}
+                      {formatSubclassOptionLabel(subclass, selectedSubclassOptionNameCounts)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -1726,7 +1726,7 @@ export function LevelUpWizard({
             <div className="space-y-4">
               <Alert className="border-white/10 bg-white/[0.03]">
                 <AlertDescription className="text-neutral-300">
-                  {selectedClassDetail?.name} grants {multiclassSkillConfig.count} multiclass skill choice{multiclassSkillConfig.count === 1 ? '' : 's'} in this data set.
+                  {selectedClassDetail?.name} grants {multiclassSkillConfig.count} skill choice{multiclassSkillConfig.count === 1 ? '' : 's'} for this multiclass level.
                 </AlertDescription>
               </Alert>
               <SkillsCard
@@ -1790,7 +1790,7 @@ export function LevelUpWizard({
                 <AlertDescription className="text-neutral-300">
                   {newFeatSlot?.choiceKind === 'feat_only'
                     ? `${newFeatSlotLabel} grants a bonus feat. Choose that feat now.`
-                    : `${newFeatSlotLabel} unlocks a new ASI / feat decision. Choose a feat, or leave the feat slot empty and assign the ASI increases here now.`}
+                    : `${newFeatSlotLabel} unlocks a new ability score increase or feat decision. Choose a feat, or leave the feat choice empty and assign two ability score increases here now.`}
                 </AlertDescription>
               </Alert>
               <FeatsCard
@@ -1836,15 +1836,17 @@ export function LevelUpWizard({
                 <button
                   type="button"
                   onClick={() => setHpMode('fixed')}
-                  className={`rounded-2xl border px-4 py-4 text-left ${hpMode === 'fixed' ? 'border-blue-400/30 bg-blue-400/10 text-blue-50' : 'border-white/10 bg-white/[0.03] text-neutral-300'}`}
+                  aria-pressed={hpMode === 'fixed'}
+                  className={`focus-ring rounded-2xl border px-4 py-4 text-left ${hpMode === 'fixed' ? 'border-blue-400/30 bg-blue-400/10 text-blue-50' : 'border-white/10 bg-white/[0.03] text-neutral-300'}`}
                 >
-                  <p className="text-sm font-medium">Fixed gain</p>
-                  <p className="mt-1 text-xs text-neutral-400">Use the standard average of {fixedHpGain} on a d{hitDie}.</p>
+                  <p className="text-sm font-medium">Recommended: fixed gain</p>
+                  <p className="mt-1 text-xs text-neutral-400">Good default if your table uses average HP: {fixedHpGain} on a d{hitDie}.</p>
                 </button>
                 <button
                   type="button"
                   onClick={() => setHpMode('max')}
-                  className={`rounded-2xl border px-4 py-4 text-left ${hpMode === 'max' ? 'border-blue-400/30 bg-blue-400/10 text-blue-50' : 'border-white/10 bg-white/[0.03] text-neutral-300'}`}
+                  aria-pressed={hpMode === 'max'}
+                  className={`focus-ring rounded-2xl border px-4 py-4 text-left ${hpMode === 'max' ? 'border-blue-400/30 bg-blue-400/10 text-blue-50' : 'border-white/10 bg-white/[0.03] text-neutral-300'}`}
                 >
                   <p className="text-sm font-medium">Max hit die</p>
                   <p className="mt-1 text-xs text-neutral-400">Use the class hit die maximum of {hitDie}.</p>
@@ -1852,7 +1854,8 @@ export function LevelUpWizard({
                 <button
                   type="button"
                   onClick={() => setHpMode('manual')}
-                  className={`rounded-2xl border px-4 py-4 text-left ${hpMode === 'manual' ? 'border-blue-400/30 bg-blue-400/10 text-blue-50' : 'border-white/10 bg-white/[0.03] text-neutral-300'}`}
+                  aria-pressed={hpMode === 'manual'}
+                  className={`focus-ring rounded-2xl border px-4 py-4 text-left ${hpMode === 'manual' ? 'border-blue-400/30 bg-blue-400/10 text-blue-50' : 'border-white/10 bg-white/[0.03] text-neutral-300'}`}
                 >
                   <p className="text-sm font-medium">Manual roll</p>
                   <p className="mt-1 text-xs text-neutral-400">Enter the actual die result for this level.</p>
@@ -1902,7 +1905,7 @@ export function LevelUpWizard({
                   </div>
                   {(newAsiSummary || newFeatNames.length > 0) && (
                     <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
-                      <p className="text-xs uppercase tracking-[0.12em] text-neutral-500">ASI / Feat</p>
+                      <p className="text-xs uppercase tracking-[0.12em] text-neutral-500">Ability boost or feat</p>
                       {newAsiSummary && <p className="mt-1 text-sm text-neutral-100">{newAsiSummary}</p>}
                       {newFeatNames.length > 0 && (
                         <p className="mt-1 text-sm text-neutral-100">{newFeatNames.join(', ')}</p>
@@ -1973,7 +1976,7 @@ export function LevelUpWizard({
                 <>
                   <Alert className="border-white/10 bg-white/[0.03]">
                     <AlertDescription className="text-neutral-300">
-                      HP {nextDerived.hitPoints.max}. Level {nextDerived.totalLevel} build with {nextDerived.totalAsiSlots} feat / ASI slot{nextDerived.totalAsiSlots === 1 ? '' : 's'}.
+                      HP {nextDerived.hitPoints.max}. Level {nextDerived.totalLevel} build with {nextDerived.totalAsiSlots} ability boost or feat choice{nextDerived.totalAsiSlots === 1 ? '' : 's'}.
                       {nextDerived.spellSlots.length > 0 && ` Spell slots: ${nextDerived.spellSlots.join(' / ')}.`}
                     </AlertDescription>
                   </Alert>
@@ -2012,9 +2015,9 @@ export function LevelUpWizard({
               <div className="space-y-4">
                 <div className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:flex-row sm:items-start sm:justify-between">
                   <div>
-                    <p className="text-sm font-medium text-neutral-100">Review blockers before returning to the sheet</p>
+                    <p className="text-sm font-medium text-neutral-100">Rules check before returning to the sheet</p>
                     <p className="mt-1 text-sm text-neutral-400">
-                      Saving this draft will run the full legality pass. If anything is still blocked, the full sheet will show exactly what to fix before submission.
+                      Saving this draft runs a focused rules check, not a full rules audit. If anything is still blocked, the full sheet will show exactly what to fix before submission.
                     </p>
                   </div>
                   {(savedLegality ?? localLegality) && (
@@ -2061,12 +2064,12 @@ export function LevelUpWizard({
                   </div>
                 )}
 
-                {(savedLegality ?? localLegality) && (
+                {(savedLegality ?? localLegality)?.checks.some((check) => !check.passed) && (
                   <div className="space-y-2">
-                    <p className="text-sm font-medium text-neutral-200">Detailed legality check</p>
+                    <p className="text-sm font-medium text-neutral-200">Items to review</p>
                     <div className="flex flex-wrap gap-2">
-                      {(savedLegality ?? localLegality)?.checks.map((check) => (
-                        <LegalityBadge key={check.key} check={check} />
+                      {(savedLegality ?? localLegality)?.checks.filter((check) => !check.passed).map((check) => (
+                        <LegalityBadge key={check.key} check={check} hideWhenPassed />
                       ))}
                     </div>
                   </div>
@@ -2083,7 +2086,7 @@ export function LevelUpWizard({
         </Button>
         {currentStep?.id === 'review' ? (
           <Button type="button" onClick={finishLevelUp} disabled={working}>
-            {working ? 'Saving…' : 'Save level-up draft and return to sheet'}
+            {working ? 'Saving…' : 'Save level-up'}
           </Button>
         ) : (
           <Button type="button" onClick={goNext} disabled={working}>

@@ -59,7 +59,10 @@ test('slice 7a env example covers every app env key with safe placeholders', () 
 test('slice 7a wires deterministic demo seed command and fixture states', () => {
   const packageJson = JSON.parse(read('package.json')) as { scripts: Record<string, string> }
 
-  assert.equal(packageJson.scripts['seed-demo'], 'tsx --env-file=.env.local scripts/seed-demo.ts')
+  assert.equal(
+    packageJson.scripts['seed-demo'],
+    'node --import tsx --env-file=.env.local scripts/seed-demo.ts'
+  )
   assert.ok(existsSync(join(ROOT, 'scripts/seed-demo.ts')))
 
   const seedDemo = read('scripts/seed-demo.ts')
@@ -69,6 +72,8 @@ test('slice 7a wires deterministic demo seed command and fixture states', () => 
   assert.match(seedDemo, /demo-dm@dungeon-and-database\.local/)
   assert.match(seedDemo, /demo-player@dungeon-and-database\.local/)
   assert.match(seedDemo, /campaign_source_allowlist/)
+  assert.match(seedDemo, /http:\/\/localhost:3000\/auth\/callback/)
+  assert.doesNotMatch(seedDemo, /http:\/\/localhost:3000\/auth\/callback\?next=\/dm\/content/)
   assert.match(seedDemo, /PHB/)
   assert.match(seedDemo, /ERftLW/)
   assert.match(seedDemo, /status: 'draft'/)
@@ -77,6 +82,16 @@ test('slice 7a wires deterministic demo seed command and fixture states', () => 
   assert.match(seedDemo, /validateContentImport/)
   assert.match(seedDemo, /duplicate_record/)
   assert.doesNotMatch(seedDemo, /console\.log\([^)]*SUPABASE_SERVICE_ROLE_KEY/)
+})
+
+test('demo auth fixture can create profile rows through the auth trigger', () => {
+  const migration = read('supabase/migrations/078_restore_new_user_email_trigger.sql')
+
+  assert.match(migration, /CREATE OR REPLACE FUNCTION public\.handle_new_user\(\)/)
+  assert.match(migration, /INSERT INTO public\.users \(id, email, display_name, role\)/)
+  assert.match(migration, /COALESCE\(NEW\.email, ''\)/)
+  assert.match(migration, /assigned_role := 'admin'/)
+  assert.match(migration, /assigned_role := 'player'/)
 })
 
 test('slice 7a documents repeatable authenticated QA start points', () => {

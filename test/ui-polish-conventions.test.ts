@@ -248,9 +248,21 @@ test('batch 7 visual QA records required routes, tooling blockers, and 7f decisi
     'in-app browser',
     'seed-demo',
     'Fix in 7f',
-    'Defer with rationale',
+    'Partially resolved',
+    'DM/admin routes still need a dedicated pass',
     'broad visual redesign',
   ]) {
     assert.match(qa, new RegExp(phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'))
   }
+})
+
+test('campaign picker does not show true-empty membership copy while campaigns are loading', () => {
+  const source = read('src/app/characters/new/CharacterNewForm.tsx')
+
+  assert.match(source, /campaignLoadState/)
+  assert.match(source, /Loading your campaigns/)
+  assert.match(source, /Ask your DM to add you to a campaign/)
+  assert.match(source, /setCampaignLoadState\('loaded'\)/)
+  assert.match(source, /setCampaignLoadState\('error'\)/)
+  assert.doesNotMatch(source, /emptyMessage="No campaigns are available to this user\."/)
 })
