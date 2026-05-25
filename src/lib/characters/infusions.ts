@@ -4,11 +4,16 @@ import type {
 } from '@/lib/types/database'
 import type { FeatureOptionChoiceInput } from '@/lib/characters/choice-persistence'
 import {
-  FEATURE_OPTION_VALUE_KEY,
   type FeatureOptionChoiceDefinition,
 } from '@/lib/characters/feature-grants'
+import {
+  ARTIFICER_INFUSION_GROUP_KEY,
+  FEATURE_OPTION_VALUE_KEY,
+  getFeatureOptionMinimumClassLevel,
+  hasFeatureOptionMinimumClassLevel,
+} from '@/lib/characters/rule-handlers'
 
-export const ARTIFICER_INFUSION_GROUP_KEY = 'artificer:infusion:2014'
+export { ARTIFICER_INFUSION_GROUP_KEY } from '@/lib/characters/rule-handlers'
 export const ARTIFICER_INFUSION_SOURCE_FEATURE_KEY = 'class_feature:artificer:infuse_item'
 export const ARTIFICER_CLASS_NAME = 'Artificer'
 export const ARTIFICER_CLASS_SOURCE = 'ERftLW'
@@ -47,8 +52,9 @@ export function getInfusionsPrepared(artificerLevel: number): number {
 }
 
 function getMinimumInfusionLevel(option: Pick<FeatureOption, 'prerequisites'>) {
-  const raw = option.prerequisites?.minimum_class_level
-  return typeof raw === 'number' ? raw : 2
+  return hasFeatureOptionMinimumClassLevel(option.prerequisites)
+    ? getFeatureOptionMinimumClassLevel(option.prerequisites)
+    : 2
 }
 
 function getInfusionChoicePool(args: {

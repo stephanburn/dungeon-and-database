@@ -33,35 +33,28 @@ export interface DragonbornAncestryDefinition {
   description: string
 }
 
+export {
+  BATTLE_MASTER_MANEUVER_GROUP_KEY,
+  CIRCLE_OF_LAND_TERRAIN_GROUP_KEY,
+  DRAGONBORN_ANCESTRY_GROUP_KEY,
+  DRAGONBORN_ANCESTRY_SOURCE_KEY,
+  FEATURE_OPTION_VALUE_KEY,
+  FIGHTING_STYLE_GROUP_KEYS,
+  FIGHTING_STYLE_UNLOCK_LEVELS,
+  FIGHTING_STYLE_VALUE_KEY,
+  FOUR_ELEMENTS_DISCIPLINE_GROUP_KEY,
+  HIGH_ELF_CANTRIP_SOURCE_KEY,
+  HUNTER_DEFENSIVE_TACTICS_GROUP_KEY,
+  HUNTER_MULTIATTACK_GROUP_KEY,
+  HUNTER_PREY_GROUP_KEY,
+  HUNTER_SUPERIOR_DEFENSE_GROUP_KEY,
+  MAVERICK_ARCANE_BREAKTHROUGH_GROUP_KEY,
+  MAVERICK_ARCANE_BREAKTHROUGH_SOURCE_KEY,
+  MAVERICK_CANTRIP_SPECIALIST_SOURCE_KEY,
+} from './rule-handlers'
+
 export const MAVERICK_SUBCLASS_NAME = 'Maverick'
 export const MAVERICK_SUBCLASS_SOURCE = 'EE'
-export const MAVERICK_ARCANE_BREAKTHROUGH_GROUP_KEY = 'maverick:arcane_breakthrough_classes'
-export const MAVERICK_ARCANE_BREAKTHROUGH_SOURCE_KEY = 'subclass_feature:maverick:arcane_breakthroughs'
-export const MAVERICK_CANTRIP_SPECIALIST_SOURCE_KEY = 'feature_spell:maverick:cantrip_specialist'
-export const FEATURE_OPTION_VALUE_KEY = 'feature_option_key'
-export const FIGHTING_STYLE_VALUE_KEY = FEATURE_OPTION_VALUE_KEY
-export const DRAGONBORN_ANCESTRY_GROUP_KEY = 'species:dragonborn:ancestry'
-export const DRAGONBORN_ANCESTRY_SOURCE_KEY = 'species_trait:dragonborn_ancestry'
-export const HIGH_ELF_CANTRIP_SOURCE_KEY = 'feature_spell:species:high_elf:cantrip'
-export const BATTLE_MASTER_MANEUVER_GROUP_KEY = 'maneuver:battle_master:2014'
-export const HUNTER_PREY_GROUP_KEY = 'hunter:hunters_prey:2014'
-export const HUNTER_DEFENSIVE_TACTICS_GROUP_KEY = 'hunter:defensive_tactics:2014'
-export const HUNTER_MULTIATTACK_GROUP_KEY = 'hunter:multiattack:2014'
-export const HUNTER_SUPERIOR_DEFENSE_GROUP_KEY = 'hunter:superior_defense:2014'
-export const CIRCLE_OF_LAND_TERRAIN_GROUP_KEY = 'circle_of_land:terrain:2014'
-export const FOUR_ELEMENTS_DISCIPLINE_GROUP_KEY = 'elemental_discipline:four_elements:2014'
-
-export const FIGHTING_STYLE_GROUP_KEYS: Record<string, string> = {
-  Fighter: 'fighting_style:fighter:2014',
-  Paladin: 'fighting_style:paladin:2014',
-  Ranger: 'fighting_style:ranger:2014',
-}
-
-export const FIGHTING_STYLE_UNLOCK_LEVELS: Record<string, number> = {
-  Fighter: 1,
-  Paladin: 2,
-  Ranger: 2,
-}
 
 export const INTERACTIVE_FEATURE_SPELL_PREFIXES = ['feat_spell:', 'feature_spell:'] as const
 export const MAVERICK_BREAKTHROUGH_LEVELS = [3, 5, 9, 13, 17] as const

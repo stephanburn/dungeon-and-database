@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database, Tool } from '@/lib/types/database'
-import { getAllowedSources } from '@/lib/content-helpers'
+import { applySourceFilter, getAllowedSources, hasContentLoadError } from '@/lib/content-helpers'
 
 type ToolQuery = {
   campaignId?: string | null
@@ -31,13 +31,14 @@ export async function listTools(
   query: ToolQuery = {}
 ) {
   const allowedSources = await getAllowedSources(supabase, query.campaignId ?? null)
+  if (hasContentLoadError(allowedSources)) return { data: [] as Tool[], error: allowedSources.error }
 
   let builder = supabase
     .from('tools')
     .select('*')
     .order('sort_order')
     .order('name')
-  if (allowedSources) builder = builder.in('source', Array.from(allowedSources))
+  builder = applySourceFilter(builder, allowedSources)
 
   const { data, error } = await builder
   return {

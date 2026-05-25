@@ -5,13 +5,50 @@ import {
   sortCharacterClassLevels,
 } from '@/lib/characters/class-levels'
 
+type SnapshotIssue = {
+  scope: string
+  message: string
+}
+
+export type SnapshotResult =
+  | { ok: true }
+  | {
+      ok: false
+      error: {
+        message: string
+        issues: SnapshotIssue[]
+      }
+    }
+
+function snapshotFailure(message: string, issues: SnapshotIssue[]): SnapshotResult {
+  return {
+    ok: false,
+    error: {
+      message,
+      issues,
+    },
+  }
+}
+
+function collectSnapshotIssues(
+  results: Array<{ error?: { message: string } | null }>,
+  scopes: string[]
+): SnapshotIssue[] {
+  return results.flatMap((result, index) => result.error
+    ? [{
+        scope: scopes[index] ?? 'unknown',
+        message: result.error.message,
+      }]
+    : [])
+}
+
 /**
  * Captures a full character snapshot and stores it in character_snapshots.
  */
 export async function captureSnapshot(
   supabase: SupabaseClient<Database>,
   characterId: string
-): Promise<void> {
+): Promise<SnapshotResult> {
   const [characterResult, classLevelsResult, hpRollsResult, choicesResult, spellSelectionsResult, featChoicesResult, abilityBonusChoicesResult, asiChoicesResult, featureOptionChoicesResult, languageChoicesResult, toolChoicesResult, equipmentItemsResult, rollsResult, skillsResult] = await Promise.all([
     supabase.from('characters').select('*').eq('id', characterId).single(),
     supabase.from('character_class_levels').select('*').eq('character_id', characterId),
@@ -29,7 +66,48 @@ export async function captureSnapshot(
     supabase.from('character_skill_proficiencies').select('*').eq('character_id', characterId),
   ])
 
-  if (!characterResult.data) return
+  const issues = collectSnapshotIssues(
+    [
+      characterResult,
+      classLevelsResult,
+      hpRollsResult,
+      choicesResult,
+      spellSelectionsResult,
+      featChoicesResult,
+      abilityBonusChoicesResult,
+      asiChoicesResult,
+      featureOptionChoicesResult,
+      languageChoicesResult,
+      toolChoicesResult,
+      equipmentItemsResult,
+      rollsResult,
+      skillsResult,
+    ],
+    [
+      'character',
+      'class_levels',
+      'hp_rolls',
+      'choices',
+      'spell_selections',
+      'feat_choices',
+      'ability_bonus_choices',
+      'asi_choices',
+      'feature_option_choices',
+      'language_choices',
+      'tool_choices',
+      'equipment_items',
+      'stat_rolls',
+      'skill_proficiencies',
+    ]
+  )
+  if (issues.length > 0) return snapshotFailure('Failed to capture character snapshot', issues)
+
+  if (!characterResult.data) {
+    return snapshotFailure('Failed to capture character snapshot', [{
+      scope: 'character',
+      message: `Character ${characterId} was not found`,
+    }])
+  }
 
   const classLevels = sortCharacterClassLevels((classLevelsResult.data ?? []) as CharacterClassLevel[])
   const levels = aggregateCharacterLevels(classLevels)
@@ -51,9 +129,17 @@ export async function captureSnapshot(
     skill_proficiencies: skillsResult.data ?? [],
   }
 
-  await supabase.from('character_snapshots').insert({
+  const insertResult = await supabase.from('character_snapshots').insert({
     character_id: characterId,
     snapshot,
     level_total: classLevels.length,
   })
+  if (insertResult.error) {
+    return snapshotFailure('Failed to insert character snapshot', [{
+      scope: 'character_snapshots',
+      message: insertResult.error.message,
+    }])
+  }
+
+  return { ok: true }
 }

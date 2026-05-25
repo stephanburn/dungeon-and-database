@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { requireAuth, jsonError } from '@/lib/api-helpers'
 import { assertCharacterOwnedByUser } from '@/lib/auth/ownership'
-import { buildLegalityInput } from '@/lib/legality/build-input'
+import { buildLegalityInputResult } from '@/lib/legality/build-input'
 import { runLegalityChecks, shouldBlockCharacterSubmit } from '@/lib/legality/engine'
 import { captureSnapshot } from '@/lib/snapshots'
 
@@ -19,8 +19,17 @@ export async function POST(
     return jsonError(`Cannot submit a character with status "${character.status}"`, 400)
   }
 
-  const legalityInput = await buildLegalityInput(supabase, params.id)
-  const legalityResult = legalityInput ? runLegalityChecks(legalityInput) : null
+  const legalityInputResult = await buildLegalityInputResult(supabase, params.id)
+  if (legalityInputResult.status === 'error') {
+    return NextResponse.json({
+      error: legalityInputResult.error.message,
+      code: 'legality_input_load_failed',
+      issues: legalityInputResult.error.issues,
+    }, { status: 500 })
+  }
+  if (legalityInputResult.status === 'not_found') return jsonError('Character not found', 404)
+
+  const legalityResult = runLegalityChecks(legalityInputResult.context)
 
   if (shouldBlockCharacterSubmit(legalityResult)) {
     return NextResponse.json(
@@ -41,6 +50,13 @@ export async function POST(
 
   if (error) return jsonError(error.message, 500)
 
-  await captureSnapshot(supabase, params.id)
+  const snapshotResult = await captureSnapshot(supabase, params.id)
+  if (!snapshotResult.ok) {
+    return NextResponse.json({
+      error: 'Failed to capture character snapshot.',
+      code: 'snapshot_capture_failed',
+      issues: snapshotResult.error.issues,
+    }, { status: 500 })
+  }
   return NextResponse.json({ character: data, legality: legalityResult })
 }

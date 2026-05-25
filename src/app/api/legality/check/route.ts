@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { requireAuth, jsonError, readJsonBody } from '@/lib/api-helpers'
 import { hasDmAccess } from '@/lib/auth/roles'
 import { assertCharacterManageableByUser } from '@/lib/auth/ownership'
-import { buildLegalityInput } from '@/lib/legality/build-input'
+import { buildLegalityInputResult } from '@/lib/legality/build-input'
 import { runLegalityChecks } from '@/lib/legality/engine'
 import { z } from 'zod'
 
@@ -41,9 +41,16 @@ export async function POST(request: NextRequest) {
     if (!character) return jsonError('Forbidden', 403)
   }
 
-  const input = await buildLegalityInput(supabase, parsed.data.character_id)
-  if (!input) return jsonError('Character not found', 404)
+  const inputResult = await buildLegalityInputResult(supabase, parsed.data.character_id)
+  if (inputResult.status === 'error') {
+    return NextResponse.json({
+      error: inputResult.error.message,
+      code: 'legality_input_load_failed',
+      issues: inputResult.error.issues,
+    }, { status: 500 })
+  }
+  if (inputResult.status === 'not_found') return jsonError('Character not found', 404)
 
-  const result = runLegalityChecks(input)
+  const result = runLegalityChecks(inputResult.context)
   return NextResponse.json(result)
 }

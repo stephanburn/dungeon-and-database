@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { requireDm, jsonError, readJsonBody } from '@/lib/api-helpers'
 import { assertCharacterManageableByUser } from '@/lib/auth/ownership'
+import { buildLegalityInputResult } from '@/lib/legality/build-input'
 import { z } from 'zod'
 
 const schema = z.object({
@@ -30,6 +31,16 @@ export async function POST(
   if (character.status !== 'submitted') {
     return jsonError(`Cannot request changes on a character with status "${character.status}"`, 400)
   }
+
+  const legalityInputResult = await buildLegalityInputResult(supabase, params.id)
+  if (legalityInputResult.status === 'error') {
+    return NextResponse.json({
+      error: legalityInputResult.error.message,
+      code: 'legality_input_load_failed',
+      issues: legalityInputResult.error.issues,
+    }, { status: 500 })
+  }
+  if (legalityInputResult.status === 'not_found') return jsonError('Character not found', 404)
 
   const { data, error } = await supabase
     .from('characters')

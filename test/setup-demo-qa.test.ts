@@ -123,3 +123,31 @@ test('slice 7a doctor warns about placeholder keys without printing secrets', ()
   assert.doesNotMatch(doctor, /cat \.env\.local/)
   assert.doesNotMatch(doctor, /echo "\$SUPABASE_SERVICE_ROLE_KEY"/)
 })
+
+test('slice 8a keeps Node 24 setup and doctor credential handoff aligned', () => {
+  const nvmrc = read('.nvmrc').trim()
+  const packageJson = JSON.parse(read('package.json')) as { engines: { node: string } }
+  const doctor = read('scripts/doctor.sh')
+  const setup = read('SETUP.md')
+  const readme = read('README.md')
+  const batch7Closeout = read('output/batch-7-closeout-audit.md')
+  const roadmap = read('output/character-creator-roadmap.md')
+
+  assert.equal(nvmrc, '24')
+  assert.equal(packageJson.engines.node, '24.x')
+  assert.match(doctor, /Node major version matches \.nvmrc/)
+  assert.match(setup, /Node\.js 24\.x/)
+  assert.match(readme, /Node\.js 24\.x/)
+  assert.doesNotMatch(batch7Closeout, /Node 20\.x|Node `20\.x`|under Node 20\.x/)
+  assert.doesNotMatch(roadmap, /Node 20\.x|Node `20\.x`|under Node 20\.x/)
+
+  assert.match(doctor, /Vercel CLI is not authenticated; run vercel login/)
+  assert.match(doctor, /Supabase CLI is not authenticated; run supabase login/)
+  for (const doc of [setup, readme]) {
+    assert.match(doc, /Credential-only doctor blocker/i)
+    assert.match(doc, /Owner: Stephan/i)
+    assert.match(doc, /Date: 2026-05-06/i)
+    assert.match(doc, /vercel login/)
+    assert.match(doc, /supabase login/)
+  }
+})

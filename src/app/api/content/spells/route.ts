@@ -1,8 +1,8 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { requireAuth, requireAdmin, jsonError, readJsonBody } from '@/lib/api-helpers'
 import { spellCreateSchema, spellUpdateSchema } from '@/lib/content/admin-schemas'
-import { getAllowedSources } from '@/lib/content-helpers'
-import { MAVERICK_ARCANE_BREAKTHROUGH_SOURCE_KEY } from '@/lib/characters/feature-grants'
+import { getAllowedSources, hasContentLoadError } from '@/lib/content-helpers'
+import { getMaverickArcaneBreakthroughSourceKey } from '@/lib/characters/rule-handlers'
 import { filterRestrictedSubclassSpellOptions, getRestrictedSubclassRuleForSubclassRow } from '@/lib/characters/subclass-spell-restrictions'
 import { writeAuditLog } from '@/lib/server/audit'
 import type { SpellComponents } from '@/lib/types/database'
@@ -23,6 +23,7 @@ export async function GET(request: NextRequest) {
   const levelParam = searchParams.get('level')
 
   const allowedSources = await getAllowedSources(supabase, campaignId)
+  if (hasContentLoadError(allowedSources)) return jsonError(allowedSources.error.message, 500)
   const activeBonusRows = subclassIds.length > 0
     ? await supabase
         .from('subclass_bonus_spells')
@@ -83,7 +84,7 @@ export async function GET(request: NextRequest) {
     const bonusAllowed = grantedSpellIds.has(spell.id)
     const speciesAllowed = speciesExpandedSpellIds.has(spell.id)
     const breakthroughAllowed = expandedClassIds.some((expandedClassId) => spell.classes.includes(expandedClassId))
-    const sourceAllowed = !allowedSources || allowedSources.has(spell.source) || bonusAllowed
+    const sourceAllowed = !allowedSources.sources || allowedSources.sources.has(spell.source) || bonusAllowed
     const levelAllowed = levelParam === null || spell.level === parseInt(levelParam, 10)
     const restrictedBaseAllowed = !baseAllowed || filteredClassSpellIds.has(spell.id)
     return sourceAllowed && levelAllowed && restrictedBaseAllowed && (baseAllowed || bonusAllowed || speciesAllowed || breakthroughAllowed)
@@ -108,7 +109,7 @@ export async function GET(request: NextRequest) {
           : []),
       ],
       source_feature_key: breakthroughOnly && spell.level > 0
-        ? MAVERICK_ARCANE_BREAKTHROUGH_SOURCE_KEY
+        ? getMaverickArcaneBreakthroughSourceKey(spell.level)
         : null,
     }
   })

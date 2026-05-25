@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { requireAuth, requireAdmin, jsonError, readJsonBody } from '@/lib/api-helpers'
 import { speciesCreateSchema, speciesUpdateSchema } from '@/lib/content/admin-schemas'
-import { getAllowedSources } from '@/lib/content-helpers'
+import { applySourceFilter, getAllowedSources, hasContentLoadError } from '@/lib/content-helpers'
 import { writeAuditLog } from '@/lib/server/audit'
 import type { AbilityScoreBonus, Sense, SizeCategory, SpeciesVariantType } from '@/lib/types/database'
 
@@ -12,6 +12,7 @@ export async function GET(request: NextRequest) {
 
   const campaignId = request.nextUrl.searchParams.get('campaign_id')
   const allowedSources = await getAllowedSources(supabase, campaignId)
+  if (hasContentLoadError(allowedSources)) return jsonError(allowedSources.error.message, 500)
 
   let query = supabase
     .from('species')
@@ -19,9 +20,7 @@ export async function GET(request: NextRequest) {
     .order('lineage_key')
     .order('variant_order')
     .order('name')
-  if (allowedSources) {
-    query = query.in('source', Array.from(allowedSources))
-  }
+  query = applySourceFilter(query, allowedSources)
 
   const { data, error } = await query
   if (error) return jsonError(error.message, 500)

@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { requireDm, jsonError } from '@/lib/api-helpers'
 import { assertCharacterManageableByUser } from '@/lib/auth/ownership'
+import { buildLegalityInputResult } from '@/lib/legality/build-input'
 import { captureSnapshot } from '@/lib/snapshots'
 
 /**
@@ -22,6 +23,16 @@ export async function POST(
     return jsonError(`Cannot approve a character with status "${character.status}"`, 400)
   }
 
+  const legalityInputResult = await buildLegalityInputResult(supabase, params.id)
+  if (legalityInputResult.status === 'error') {
+    return NextResponse.json({
+      error: legalityInputResult.error.message,
+      code: 'legality_input_load_failed',
+      issues: legalityInputResult.error.issues,
+    }, { status: 500 })
+  }
+  if (legalityInputResult.status === 'not_found') return jsonError('Character not found', 404)
+
   const { data, error } = await supabase
     .from('characters')
     .update({ status: 'approved', dm_notes: null })
@@ -30,6 +41,13 @@ export async function POST(
     .single()
 
   if (error) return jsonError(error.message, 500)
-  await captureSnapshot(supabase, params.id)
+  const snapshotResult = await captureSnapshot(supabase, params.id)
+  if (!snapshotResult.ok) {
+    return NextResponse.json({
+      error: 'Failed to capture character snapshot.',
+      code: 'snapshot_capture_failed',
+      issues: snapshotResult.error.issues,
+    }, { status: 500 })
+  }
   return NextResponse.json(data)
 }

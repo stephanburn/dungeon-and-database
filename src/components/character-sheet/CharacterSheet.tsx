@@ -99,6 +99,12 @@ import type { ArmorCatalogEntry, ShieldCatalogEntry } from '@/lib/content/equipm
 import type { LegalityResult } from '@/lib/legality/engine'
 import type { SpellOption } from '@/lib/characters/wizard-helpers'
 import { mergeSpellOptionsStable, replaceSpellOptionsStable } from '@/lib/characters/spell-options'
+import { contentDataOr, fetchContent, fetchContentErrorMessage } from '@/lib/client/fetch-content'
+import {
+  isLegacyMaverickBreakthroughOptionGroup,
+  isSpeciesFeatureOptionGroup,
+  isSubclassFeatureOptionGroup,
+} from '@/lib/characters/rule-handlers'
 
 // ── Status display ─────────────────────────────────────────
 
@@ -682,6 +688,7 @@ export function CharacterSheet({
   const [featureOptionRows, setFeatureOptionRows] = useState<FeatureOption[]>([])
   const [featureSpellGrants, setFeatureSpellGrants] = useState<FeatureSpellGrant[]>([])
   const [spellOptions, setSpellOptions] = useState<SpellOption[]>(initialSelectedSpells)
+  const [contentLoadError, setContentLoadError] = useState<string | null>(null)
 
   const [skillProficiencies, setSkillProficiencies] = useState<string[]>(initialSkillProficiencies)
   const [abilityBonusChoices, setAbilityBonusChoices] = useState<SpeciesChoiceAbilityKey[]>(initialAbilityBonusChoices)
@@ -744,12 +751,7 @@ export function CharacterSheet({
   const initialSubclassFeatureOptionKeys = useMemo(
     () => new Set(
       initialFeatureOptionChoices
-        .filter((choice) => (
-          choice.option_group_key === 'maneuver:battle_master:2014'
-          || choice.option_group_key.startsWith('hunter:')
-          || choice.option_group_key === 'circle_of_land:terrain:2014'
-          || choice.option_group_key === 'elemental_discipline:four_elements:2014'
-        ))
+        .filter((choice) => isSubclassFeatureOptionGroup(choice.option_group_key))
         .map((choice) => `${choice.option_group_key}:${choice.option_key}`)
     ),
     [initialFeatureOptionChoices]
@@ -759,27 +761,34 @@ export function CharacterSheet({
   useEffect(() => {
     const qs = `?campaign_id=${campaignId}`
     Promise.all([
-      fetch(`/api/content/species${qs}`).then((r) => r.json()),
-      fetch(`/api/content/backgrounds${qs}`).then((r) => r.json()),
-      fetch(`/api/content/classes${qs}`).then((r) => r.json()),
-      fetch(`/api/content/feats${qs}`).then((r) => r.json()),
-      fetch(`/api/content/languages${qs}`).then((r) => r.json()),
-      fetch(`/api/content/tools${qs}`).then((r) => r.json()),
-      fetch(`/api/content/armor${qs}`).then((r) => r.json()),
-      fetch(`/api/content/shields${qs}`).then((r) => r.json()),
-      fetch(`/api/content/feature-options${qs}`).then((r) => r.json()),
-      fetch(`/api/content/feature-spell-grants${qs}`).then((r) => r.json()),
+      fetchContent<Species[]>(`/api/content/species${qs}`),
+      fetchContent<Background[]>(`/api/content/backgrounds${qs}`),
+      fetchContent<Class[]>(`/api/content/classes${qs}`),
+      fetchContent<Feat[]>(`/api/content/feats${qs}`),
+      fetchContent<Language[]>(`/api/content/languages${qs}`),
+      fetchContent<Tool[]>(`/api/content/tools${qs}`),
+      fetchContent<ArmorCatalogEntry[]>(`/api/content/armor${qs}`),
+      fetchContent<ShieldCatalogEntry[]>(`/api/content/shields${qs}`),
+      fetchContent<FeatureOption[]>(`/api/content/feature-options${qs}`),
+      fetchContent<FeatureSpellGrant[]>(`/api/content/feature-spell-grants${qs}`),
     ]).then(([s, b, c, f, languages, tools, armor, shields, featureOptions, spellGrants]) => {
-      setSpeciesList(s)
-      setBackgroundList(b)
-      setClassList(c)
-      setFeatList(Array.isArray(f) ? f : [])
-      setLanguageList(Array.isArray(languages) ? languages : [])
-      setToolList(Array.isArray(tools) ? tools : [])
-      setArmorCatalog(Array.isArray(armor) ? armor : [])
-      setShieldCatalog(Array.isArray(shields) ? shields : [])
-      setFeatureOptionRows(Array.isArray(featureOptions) ? featureOptions : [])
-      setFeatureSpellGrants(Array.isArray(spellGrants) ? spellGrants : [])
+      const loadError = fetchContentErrorMessage([s, b, c, f, languages, tools, armor, shields, featureOptions, spellGrants])
+      if (loadError) {
+        setContentLoadError(loadError)
+        return
+      }
+
+      setContentLoadError(null)
+      setSpeciesList(contentDataOr(s, []))
+      setBackgroundList(contentDataOr(b, []))
+      setClassList(contentDataOr(c, []))
+      setFeatList(contentDataOr(f, []))
+      setLanguageList(contentDataOr(languages, []))
+      setToolList(contentDataOr(tools, []))
+      setArmorCatalog(contentDataOr(armor, []))
+      setShieldCatalog(contentDataOr(shields, []))
+      setFeatureOptionRows(contentDataOr(featureOptions, []))
+      setFeatureSpellGrants(contentDataOr(spellGrants, []))
     })
   }, [campaignId])
 
@@ -793,14 +802,20 @@ export function CharacterSheet({
 
     Promise.all(
       needed.map((id) =>
-        fetch(`/api/content/classes/${id}/subclasses?campaign_id=${campaignId}`)
-          .then((r) => r.json())
-          .then((data: Subclass[]) => ({ id, data }))
+        fetchContent<Subclass[]>(`/api/content/classes/${id}/subclasses?campaign_id=${campaignId}`)
+          .then((result) => ({ id, result }))
       )
     ).then((results) => {
+      const loadError = fetchContentErrorMessage(results.map((entry) => entry.result))
+      if (loadError) {
+        setContentLoadError(loadError)
+        return
+      }
+
+      setContentLoadError(null)
       setSubclassMap((prev) => {
         const next = { ...prev }
-        results.forEach(({ id, data }) => { next[id] = data })
+        results.forEach(({ id, result }) => { next[id] = contentDataOr(result, []) })
         return next
       })
     })
@@ -837,12 +852,17 @@ export function CharacterSheet({
       params.append('expanded_class_id', expandedClassId)
     }
 
-    fetch(`/api/content/spells?${params.toString()}`)
-      .then((response) => response.json())
-      .then((data: SpellOption[]) => {
+    fetchContent<SpellOption[]>(`/api/content/spells?${params.toString()}`)
+      .then((result) => {
+        if ('error' in result) {
+          setContentLoadError(result.error.message)
+          return
+        }
+
+        setContentLoadError(null)
         const mergedById = new Map<string, SpellOption>()
         for (const spell of initialSelectedSpells) mergedById.set(spell.id, spell)
-        for (const spell of Array.isArray(data) ? data : []) mergedById.set(spell.id, spell)
+        for (const spell of Array.isArray(result.data) ? result.data : []) mergedById.set(spell.id, spell)
         setSpellOptions((current) => replaceSpellOptionsStable(current, Array.from(mergedById.values())))
       })
   }, [
@@ -881,13 +901,10 @@ export function CharacterSheet({
     try {
       const canonicalFeatureOptionChoices = [
         ...featureOptionChoices.filter((choice) => (
-          !choice.option_group_key.startsWith('species:')
-          && choice.option_group_key !== 'maneuver:battle_master:2014'
-          && !choice.option_group_key.startsWith('hunter:')
-          && choice.option_group_key !== 'circle_of_land:terrain:2014'
-          && choice.option_group_key !== 'elemental_discipline:four_elements:2014'
+          !isSpeciesFeatureOptionGroup(choice.option_group_key)
+          && !isSubclassFeatureOptionGroup(choice.option_group_key)
           && choice.option_group_key !== MAVERICK_ARCANE_BREAKTHROUGH_GROUP_KEY
-          && !choice.option_group_key.startsWith('maverick:breakthrough:')
+          && !isLegacyMaverickBreakthroughOptionGroup(choice.option_group_key)
         )),
         ...buildFeatureOptionChoicesFromDefinitionMap({
           definitions: speciesOptionDefinitions,
@@ -1221,12 +1238,7 @@ export function CharacterSheet({
       subclassFeatureOptionDefinitions.map((definition) => `${definition.optionGroupKey}:${definition.optionKey}`)
     )
     setFeatureOptionChoices((prev) => prev.filter((choice) => (
-      !(
-        choice.option_group_key === 'maneuver:battle_master:2014'
-        || choice.option_group_key.startsWith('hunter:')
-        || choice.option_group_key === 'circle_of_land:terrain:2014'
-        || choice.option_group_key === 'elemental_discipline:four_elements:2014'
-      )
+      !isSubclassFeatureOptionGroup(choice.option_group_key)
       || initialSubclassFeatureOptionKeys.has(`${choice.option_group_key}:${choice.option_key}`)
       || activeKeys.has(`${choice.option_group_key}:${choice.option_key}`)
     )))
@@ -1887,6 +1899,14 @@ export function CharacterSheet({
             >
               Refresh character
             </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {contentLoadError && (
+        <Alert className="border-rose-400/20 bg-rose-400/10">
+          <AlertDescription className="text-rose-100">
+            Character content could not be loaded: {contentLoadError}
           </AlertDescription>
         </Alert>
       )}

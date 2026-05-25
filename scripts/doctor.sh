@@ -105,13 +105,13 @@ fi
 if vercel whoami >/dev/null 2>&1; then
   record_ok "Vercel CLI is authenticated"
 else
-  record_failure "Vercel CLI is not authenticated"
+  record_failure "Vercel CLI is not authenticated; run vercel login"
 fi
 
 if supabase projects list >/dev/null 2>&1; then
   record_ok "Supabase CLI is authenticated"
 else
-  record_failure "Supabase CLI is not authenticated"
+  record_failure "Supabase CLI is not authenticated; run supabase login"
 fi
 
 if [[ -f supabase/.temp/project-ref ]]; then

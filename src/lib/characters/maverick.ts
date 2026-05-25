@@ -5,10 +5,12 @@ import type {
   CharacterFeatureOptionChoice,
   Subclass,
 } from '@/lib/types/database'
+import {
+  MAVERICK_ARCANE_BREAKTHROUGH_SOURCE_KEY,
+} from '@/lib/characters/rule-handlers'
 
 export const MAVERICK_SOURCE_KEY = 'EE'
 export const MAVERICK_SUBCLASS_NAME = 'Maverick'
-export const MAVERICK_BREAKTHROUGH_SOURCE_FEATURE_KEY = 'subclass_feature:maverick_arcane_breakthroughs'
 
 export const MAVERICK_BREAKTHROUGH_SLOTS = [
   { classLevel: 3, optionGroupKey: 'maverick:breakthrough:3' },
@@ -68,7 +70,7 @@ export function buildMaverickFeatureOptionChoices(args: {
       character_level_id: null,
       source_category: 'subclass_choice',
       source_entity_id: subclassId,
-      source_feature_key: MAVERICK_BREAKTHROUGH_SOURCE_FEATURE_KEY,
+      source_feature_key: MAVERICK_ARCANE_BREAKTHROUGH_SOURCE_KEY,
     }]
   })
 }

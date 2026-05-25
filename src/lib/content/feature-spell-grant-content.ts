@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database, FeatureSpellGrant } from '@/lib/types/database'
-import { getAllowedSources } from '@/lib/content-helpers'
+import { getAllowedSources, hasContentLoadError } from '@/lib/content-helpers'
 
 type FeatureSpellGrantQuery = {
   campaignId?: string | null
@@ -23,7 +23,13 @@ export async function listFeatureSpellGrants(
 
   const rows = (data ?? []) as FeatureSpellGrant[]
   const allowedSources = await getAllowedSources(supabase, query.campaignId ?? null)
-  if (!allowedSources || rows.length === 0) {
+  if (hasContentLoadError(allowedSources)) {
+    return {
+      data: [] as FeatureSpellGrant[],
+      error: allowedSources.error,
+    }
+  }
+  if (!allowedSources.sources || rows.length === 0) {
     return {
       data: rows,
       error: null,
@@ -43,7 +49,7 @@ export async function listFeatureSpellGrants(
 
   const allowedSpellIds = new Set(
     (spells ?? [])
-      .filter((spell) => allowedSources.has(spell.source))
+      .filter((spell) => allowedSources.sources?.has(spell.source))
       .map((spell) => spell.id)
   )
 

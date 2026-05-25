@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { requireAuth, jsonError } from '@/lib/api-helpers'
-import { getAllowedSources } from '@/lib/content-helpers'
+import { applySourceFilter, getAllowedSources, hasContentLoadError } from '@/lib/content-helpers'
 
 export async function GET(
   request: NextRequest,
@@ -12,6 +12,7 @@ export async function GET(
 
   const campaignId = request.nextUrl.searchParams.get('campaign_id')
   const allowedSources = await getAllowedSources(supabase, campaignId)
+  if (hasContentLoadError(allowedSources)) return jsonError(allowedSources.error.message, 500)
 
   let query = supabase
     .from('subclasses')
@@ -19,9 +20,7 @@ export async function GET(
     .eq('class_id', params.id)
     .order('name')
 
-  if (allowedSources) {
-    query = query.in('source', Array.from(allowedSources))
-  }
+  query = applySourceFilter(query, allowedSources)
 
   const { data, error } = await query
   if (error) return jsonError(error.message, 500)

@@ -115,6 +115,8 @@ Supabase local project config is now tracked in `supabase/config.toml`.
 Only the machine-specific Supabase link state in `supabase/.temp/` remains untracked.
 Use `./setup` for first-time machine bootstrap and `npm run doctor` or `make doctor` to verify that the current machine is ready before editing or deploying.
 
+Credential-only doctor blocker (Date: 2026-05-06; Owner: Stephan; Reason: local CLI credentials cannot be handed to Codex): if `npm run doctor` fails only on `Vercel CLI is not authenticated; run vercel login` or `Supabase CLI is not authenticated; run supabase login`, run those commands in an interactive terminal, then rerun `npm run doctor`. The expected Node target is Node.js 24.x from `.nvmrc` and `package.json`.
+
 ### Environment variables
 
 The repo directly references these variables:

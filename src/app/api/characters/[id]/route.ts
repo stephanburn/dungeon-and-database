@@ -440,7 +440,14 @@ export async function PUT(
 
   // Capture snapshot and reload through the shared cutover loader so
   // save responses use the same class-level aggregation as the rest of the app.
-  await captureSnapshot(supabase, params.id)
+  const snapshotResult = await captureSnapshot(supabase, params.id)
+  if (!snapshotResult.ok) {
+    return NextResponse.json({
+      error: 'Failed to capture character snapshot.',
+      code: 'snapshot_capture_failed',
+      issues: snapshotResult.error.issues,
+    }, { status: 500 })
+  }
   const loadedState = await loadCharacterState(supabase, params.id)
   if (loadedState.status === 'not_found') return jsonError('Character not found', 404)
   if (loadedState.status === 'error') return jsonError(loadedState.error.message, 500)

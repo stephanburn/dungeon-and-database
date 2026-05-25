@@ -1,6 +1,4 @@
-import {
-  MAVERICK_ARCANE_BREAKTHROUGH_SOURCE_KEY,
-} from '@/lib/characters/feature-grants'
+import { isMaverickArcaneBreakthroughSourceKey } from '@/lib/characters/rule-handlers'
 import {
   getRestrictedSubclassRuleForSubclassRow,
   isRestrictedSubclassSpellSelectionValid,
@@ -8,7 +6,6 @@ import {
 import {
   getMaverickPreparedBreakthroughLevels,
   isMaverickSubclass,
-  MAVERICK_BREAKTHROUGH_SOURCE_FEATURE_KEY,
 } from '@/lib/characters/maverick'
 import type { DerivedCharacter } from '@/lib/characters/derived'
 import type { LegalityCheck, LegalityInput } from './types'
@@ -74,10 +71,7 @@ export function checkMaverickBreakthroughSelections(input: LegalityInput): Legal
 
   const allowedLevels = new Set<number>(getMaverickPreparedBreakthroughLevels(maverickClass.level))
   const breakthroughSpells = input.selectedSpells.filter(
-    (spell) => (
-      spell.sourceFeatureKey === MAVERICK_BREAKTHROUGH_SOURCE_FEATURE_KEY
-      || spell.sourceFeatureKey === MAVERICK_ARCANE_BREAKTHROUGH_SOURCE_KEY
-    ) && spell.level > 0
+    (spell) => isMaverickArcaneBreakthroughSourceKey(spell.sourceFeatureKey) && spell.level > 0
   )
 
   const invalidLevels = breakthroughSpells

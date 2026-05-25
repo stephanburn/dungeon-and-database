@@ -50,6 +50,15 @@ That script will:
 
 After bootstrap, fill in the real values in `.env.local` if they are still placeholders.
 
+## Doctor Credential Handoff
+
+Credential-only doctor blocker:
+
+- Date: 2026-05-06
+- Owner: Stephan
+- Reason: Codex can verify installed tools, `.env.local`, Node.js 24.x alignment, and the Supabase project ref, but cannot complete interactive browser/device CLI login in this session.
+- Handoff: run `vercel login`, run `supabase login`, relink with `supabase link --project-ref cqpyvaynpzgyjerfesmz` if the doctor reports a missing link, then rerun `npm run doctor`.
+
 ## Daily Use
 
 Start by making sure you are on the expected Node version:

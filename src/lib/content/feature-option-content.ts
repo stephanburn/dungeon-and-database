@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database, FeatureOption, FeatureOptionGroup } from '@/lib/types/database'
-import { getAllowedSources } from '@/lib/content-helpers'
+import { applySourceFilter, getAllowedSources, hasContentLoadError } from '@/lib/content-helpers'
 
 type FeatureOptionGroupQuery = {
   campaignId?: string | null
@@ -19,11 +19,12 @@ export async function listFeatureOptionGroups(
   query: FeatureOptionGroupQuery = {}
 ) {
   const allowedSources = await getAllowedSources(supabase, query.campaignId ?? null)
+  if (hasContentLoadError(allowedSources)) return { data: [] as FeatureOptionGroup[], error: allowedSources.error }
 
   let builder = supabase.from('feature_option_groups').select('*').order('name')
   if (query.optionFamily) builder = builder.eq('option_family', query.optionFamily)
   if ((query.keys?.length ?? 0) > 0) builder = builder.in('key', query.keys ?? [])
-  if (allowedSources) builder = builder.in('source', Array.from(allowedSources))
+  builder = applySourceFilter(builder, allowedSources)
 
   const { data, error } = await builder
   return {
@@ -60,6 +61,7 @@ export async function listFeatureOptions(
   }
 
   const allowedSources = await getAllowedSources(supabase, query.campaignId ?? null)
+  if (hasContentLoadError(allowedSources)) return { data: [] as FeatureOption[], error: allowedSources.error }
 
   let builder = supabase
     .from('feature_options')
@@ -68,7 +70,7 @@ export async function listFeatureOptions(
     .order('option_order')
     .order('name')
   if (eligibleGroupKeys) builder = builder.in('group_key', eligibleGroupKeys)
-  if (allowedSources) builder = builder.in('source', Array.from(allowedSources))
+  builder = applySourceFilter(builder, allowedSources)
 
   const { data, error } = await builder
   return {

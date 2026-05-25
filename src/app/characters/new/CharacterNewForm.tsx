@@ -131,6 +131,7 @@ import {
   getSpeciesFeatureSpellChoiceDefinitions,
 } from '@/lib/characters/feature-grants'
 import { isMaverickSubclass } from '@/lib/characters/maverick'
+import { isSubclassFeatureOptionGroup } from '@/lib/characters/rule-handlers'
 import {
   getSpeciesSkillChoiceConfig,
   getSubclassSkillChoiceConfig,
@@ -145,6 +146,7 @@ import type {
   StartingEquipmentPackageEntry,
   WeaponCatalogEntry,
 } from '@/lib/content/equipment-content'
+import { contentDataOr, fetchContent, fetchContentErrorMessage } from '@/lib/client/fetch-content'
 
 interface CharacterNewFormProps {
   isDm: boolean
@@ -252,6 +254,7 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
   const [classDetailMap, setClassDetailMap] = useState<Record<string, ClassDetail>>({})
   const [spellOptions, setSpellOptions] = useState<SpellOption[]>([])
   const [speciesSpellOptions, setSpeciesSpellOptions] = useState<SpellOption[]>([])
+  const [contentLoadError, setContentLoadError] = useState<string | null>(null)
 
   const [speciesId, setSpeciesId] = useState('')
   const [backgroundId, setBackgroundId] = useState('')
@@ -489,35 +492,43 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
     if (!campaignId) return
     const qs = `?campaign_id=${campaignId}`
     Promise.all([
-      fetch(`/api/content/species${qs}`).then((response) => response.json()),
-      fetch(`/api/content/backgrounds${qs}`).then((response) => response.json()),
-      fetch(`/api/content/classes${qs}`).then((response) => response.json()),
-      fetch(`/api/content/feats${qs}`).then((response) => response.json()),
-      fetch(`/api/content/languages${qs}`).then((response) => response.json()),
-      fetch(`/api/content/tools${qs}`).then((response) => response.json()),
-      fetch(`/api/content/feature-options${qs}`).then((response) => response.json()),
-      fetch(`/api/content/feature-spell-grants${qs}`).then((response) => response.json()),
-      fetch(`/api/content/starting-equipment-packages${qs}`).then((response) => response.json()),
-      fetch(`/api/content/equipment-items${qs}`).then((response) => response.json()),
-      fetch(`/api/content/weapons${qs}`).then((response) => response.json()),
-      fetch(`/api/content/armor${qs}`).then((response) => response.json()),
-      fetch(`/api/content/shields${qs}`).then((response) => response.json()),
+      fetchContent<Species[]>(`/api/content/species${qs}`),
+      fetchContent<Background[]>(`/api/content/backgrounds${qs}`),
+      fetchContent<Class[]>(`/api/content/classes${qs}`),
+      fetchContent<Feat[]>(`/api/content/feats${qs}`),
+      fetchContent<Language[]>(`/api/content/languages${qs}`),
+      fetchContent<Tool[]>(`/api/content/tools${qs}`),
+      fetchContent<FeatureOption[]>(`/api/content/feature-options${qs}`),
+      fetchContent<FeatureSpellGrant[]>(`/api/content/feature-spell-grants${qs}`),
+      fetchContent<StartingEquipmentPackageEntry[]>(`/api/content/starting-equipment-packages${qs}`),
+      fetchContent<EquipmentItem[]>(`/api/content/equipment-items${qs}`),
+      fetchContent<WeaponCatalogEntry[]>(`/api/content/weapons${qs}`),
+      fetchContent<ArmorCatalogEntry[]>(`/api/content/armor${qs}`),
+      fetchContent<ShieldCatalogEntry[]>(`/api/content/shields${qs}`),
     ]).then(([species, backgrounds, classes, feats, languages, tools, featureOptions, spellGrants, packages, items, weapons, armor, shields]) => {
-      setSpeciesList(species)
-      setBackgroundList(backgrounds)
-      setClassList(classes)
-      setFeatList(feats)
-      setLanguageList(Array.isArray(languages) ? languages : [])
-      setToolList(Array.isArray(tools) ? tools : [])
-      setFeatureOptionRows(Array.isArray(featureOptions) ? featureOptions : [])
-      setFeatureSpellGrants(Array.isArray(spellGrants) ? spellGrants : [])
-      setStartingEquipmentPackages(Array.isArray(packages) ? packages : [])
-      setEquipmentItems(Array.isArray(items) ? items : [])
-      setWeaponCatalog(Array.isArray(weapons) ? weapons : [])
-      setArmorCatalog(Array.isArray(armor) ? armor : [])
-      setShieldCatalog(Array.isArray(shields) ? shields : [])
-      if (levels.length === 0 && Array.isArray(classes) && classes.length > 0) {
-        setLevels([{ class_id: classes[0].id, level: 1, subclass_id: null }])
+      const loadError = fetchContentErrorMessage([species, backgrounds, classes, feats, languages, tools, featureOptions, spellGrants, packages, items, weapons, armor, shields])
+      if (loadError) {
+        setContentLoadError(loadError)
+        return
+      }
+
+      const classRows = contentDataOr(classes, [])
+      setContentLoadError(null)
+      setSpeciesList(contentDataOr(species, []))
+      setBackgroundList(contentDataOr(backgrounds, []))
+      setClassList(classRows)
+      setFeatList(contentDataOr(feats, []))
+      setLanguageList(contentDataOr(languages, []))
+      setToolList(contentDataOr(tools, []))
+      setFeatureOptionRows(contentDataOr(featureOptions, []))
+      setFeatureSpellGrants(contentDataOr(spellGrants, []))
+      setStartingEquipmentPackages(contentDataOr(packages, []))
+      setEquipmentItems(contentDataOr(items, []))
+      setWeaponCatalog(contentDataOr(weapons, []))
+      setArmorCatalog(contentDataOr(armor, []))
+      setShieldCatalog(contentDataOr(shields, []))
+      if (levels.length === 0 && classRows.length > 0) {
+        setLevels([{ class_id: classRows[0].id, level: 1, subclass_id: null }])
       }
     })
   }, [campaignId, levels.length])
@@ -530,14 +541,22 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
     if (missingDetails.length > 0) {
       Promise.all(
         missingDetails.map((classId) =>
-          fetch(`/api/content/classes/${classId}`)
-            .then((response) => response.json())
-            .then((detail: ClassDetail) => ({ classId, detail }))
+          fetchContent<ClassDetail>(`/api/content/classes/${classId}`)
+            .then((result) => ({ classId, result }))
         )
       ).then((results) => {
+        const loadError = fetchContentErrorMessage(results.map((entry) => entry.result))
+        if (loadError) {
+          setContentLoadError(loadError)
+          return
+        }
+
+        setContentLoadError(null)
         setClassDetailMap((prev) => {
           const next = { ...prev }
-          for (const result of results) next[result.classId] = result.detail
+          for (const result of results) {
+            if ('data' in result.result) next[result.classId] = result.result.data
+          }
           return next
         })
       })
@@ -546,14 +565,20 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
     if (missingSubclasses.length > 0 && campaignId) {
       Promise.all(
         missingSubclasses.map((classId) =>
-          fetch(`/api/content/classes/${classId}/subclasses?campaign_id=${campaignId}`)
-            .then((response) => response.json())
-            .then((subclasses: Subclass[]) => ({ classId, subclasses }))
+          fetchContent<Subclass[]>(`/api/content/classes/${classId}/subclasses?campaign_id=${campaignId}`)
+            .then((result) => ({ classId, result }))
         )
       ).then((results) => {
+        const loadError = fetchContentErrorMessage(results.map((entry) => entry.result))
+        if (loadError) {
+          setContentLoadError(loadError)
+          return
+        }
+
+        setContentLoadError(null)
         setSubclassMap((prev) => {
           const next = { ...prev }
-          for (const result of results) next[result.classId] = result.subclasses
+          for (const result of results) next[result.classId] = contentDataOr(result.result, [])
           return next
         })
       })
@@ -604,9 +629,16 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
       params.append('expanded_class_id', expandedClassId)
     }
 
-    fetch(`/api/content/spells?${params.toString()}`)
-      .then((response) => response.json())
-      .then((data: SpellOption[]) => setSpellOptions(Array.isArray(data) ? data : []))
+    fetchContent<SpellOption[]>(`/api/content/spells?${params.toString()}`)
+      .then((result) => {
+        if ('error' in result) {
+          setContentLoadError(result.error.message)
+          return
+        }
+
+        setContentLoadError(null)
+        setSpellOptions(Array.isArray(result.data) ? result.data : [])
+      })
   }, [campaignId, levels, classDetailMap, maverickBreakthroughClassIds, speciesId])
 
   useEffect(() => {
@@ -622,9 +654,16 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
       class_level: String(totalLevel),
     })
 
-    fetch(`/api/content/spells?${params.toString()}`)
-      .then((response) => response.json())
-      .then((data: SpellOption[]) => setSpeciesSpellOptions(Array.isArray(data) ? data : []))
+    fetchContent<SpellOption[]>(`/api/content/spells?${params.toString()}`)
+      .then((result) => {
+        if ('error' in result) {
+          setContentLoadError(result.error.message)
+          return
+        }
+
+        setContentLoadError(null)
+        setSpeciesSpellOptions(Array.isArray(result.data) ? result.data : [])
+      })
   }, [campaignId, levels, speciesId])
 
   useEffect(() => {
@@ -1037,12 +1076,7 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
       subclassFeatureOptionDefinitions.map((definition) => `${definition.optionGroupKey}:${definition.optionKey}`)
     )
     setFeatureOptionChoices((prev) => prev.filter((choice) => (
-      !(
-        choice.option_group_key === 'maneuver:battle_master:2014'
-        || choice.option_group_key.startsWith('hunter:')
-        || choice.option_group_key === 'circle_of_land:terrain:2014'
-        || choice.option_group_key === 'elemental_discipline:four_elements:2014'
-      )
+      !isSubclassFeatureOptionGroup(choice.option_group_key)
       || activeSubclassKeys.has(`${choice.option_group_key}:${choice.option_key}`)
     )))
   }, [subclassFeatureOptionDefinitions])
@@ -2226,6 +2260,14 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
                 Step {currentStepIndex + 1} of {visibleSteps.length}: {currentStep.label}
               </p>
             </div>
+
+            {contentLoadError && (
+              <Alert className="border-rose-400/20 bg-rose-400/10">
+                <AlertDescription className="text-rose-100">
+                  Character options could not be loaded: {contentLoadError}
+                </AlertDescription>
+              </Alert>
+            )}
 
             <ol aria-label="Creation progress" className="flex flex-wrap gap-2">
               {visibleSteps.map((step, index) => {

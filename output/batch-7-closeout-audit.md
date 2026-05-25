@@ -64,7 +64,7 @@ Fresh Slice 7i verification run:
 - `node --import tsx --test test/setup-demo-qa.test.ts test/route-persistence-7b.test.ts test/batch-7-regression-matrix.test.ts test/batch-7-schema-validation.test.ts test/content-import-validator.test.ts test/content-import-6h.test.ts test/ui-polish-conventions.test.ts test/batch-7-usability-copy.test.ts test/batch-7-novice-comprehension.test.ts test/multi-source-skill-provenance.test.ts test/build-context-module-split.test.ts test/feature-grants-module-split.test.ts test/legality-engine-module-split.test.ts test/batch-7-closeout.test.ts` passed: 83/83 tests.
 - `npm test` passed: 367/367 tests.
 - `npm run build` passed.
-- `npm run doctor` ran but did not pass because the local shell is on Node 25.x while `.nvmrc` expects Node 20.x, and the Supabase CLI is not authenticated. The same doctor run confirmed Vercel CLI authentication and the expected Supabase project ref.
+- `npm run doctor` had a stale handoff note in this audit. Slice 8a corrected the intended target to Node 24.x. The 2026-05-06 rerun under Node 24.x passed the Node, env, and Supabase project-ref checks, but did not pass because the local Vercel and Supabase CLI sessions are not authenticated.
 
 The focused suite above carries the route-persistence-7b, Batch 7 matrix, content-import, and batch-7-visual-qa checks forward into the closeout gate.
 
@@ -93,7 +93,7 @@ No `character_skill_proficiency_sources` migration was added. There was no authe
 | Finish remaining behavior-preserving module splits for `derived.ts` and `CharacterSheet.tsx` | Codex | 2026-05-15 | Slice 7g safely split three high-risk modules; these two are still large enough to deserve isolated follow-up. |
 | Authenticated screenshot smoke | Codex | 2026-05-15 | Batch 7 has visual QA notes, but a stable automated screenshot smoke gate still needs setup. |
 | Magic-link email branding provider configuration | Stephan + Codex | 2026-05-15 | The issue appears to live in auth/provider configuration rather than the local application surface. |
-| Local doctor environment alignment | Stephan + Codex | 2026-05-15 | `npm run doctor` found Node 25.x instead of the expected Node 20.x and an unauthenticated Supabase CLI. |
+| Local doctor environment alignment | Stephan + Codex | 2026-05-15 | Slice 8a confirms Node 24.x alignment. The remaining blocker is credential-only Vercel and Supabase CLI authentication in this local session. |
 | Dashboard/campaign visual warmth | Codex | 2026-05-15 | User review called the experience stark; Batch 7 only took the trust/blocker fixes. |
 | Content-admin table ergonomics | Codex | 2026-05-15 | The immediate horizontal-scroll problem was reduced, but deeper responsive IA remains. |
 
@@ -102,6 +102,6 @@ No `character_skill_proficiency_sources` migration was added. There was no authe
 1. Finish remaining behavior-preserving module splits for `derived.ts` and `CharacterSheet.tsx`, keeping the 7g structural tests as the model.
 2. Add Authenticated screenshot smoke for the same setup, character, sheet, and DM/admin paths recorded in `output/batch-7-visual-qa.md`.
 3. Review magic-link email branding provider configuration with Supabase/auth settings access.
-4. Rerun `npm run doctor` under Node 20.x with Supabase CLI authentication available.
+4. Rerun `npm run doctor` under Node 24.x with Vercel and Supabase CLI authentication available.
 5. Make a targeted warmth pass on dashboard and campaign-selection surfaces without changing creation rules.
 6. Continue content-admin table ergonomics once the screenshot smoke gives reliable visual regression coverage.

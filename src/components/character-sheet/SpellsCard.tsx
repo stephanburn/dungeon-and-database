@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input'
 import type { DerivedCharacter } from '@/lib/characters/derived'
 import type { Spell } from '@/lib/types/database'
 import { replaceSpellOptionsStable } from '@/lib/characters/spell-options'
+import { fetchContent } from '@/lib/client/fetch-content'
 
 const LEVEL_LABELS: Record<number, string> = {
   0: 'Cantrips',
@@ -61,6 +62,7 @@ export function SpellsCard({
 }: SpellsCardProps) {
   const [spells, setSpells] = useState<SpellOption[]>([])
   const [search, setSearch] = useState('')
+  const [loadError, setLoadError] = useState<string | null>(null)
   const subclassIdsKey = useMemo(() => subclassIds.join('|'), [subclassIds])
   const expandedClassIdsKey = useMemo(() => expandedClassIds.join('|'), [expandedClassIds])
   const spellChoicesKey = useMemo(() => spellChoices.join('|'), [spellChoices])
@@ -80,10 +82,15 @@ export function SpellsCard({
     for (const expandedClassId of expandedClassIdsKey ? expandedClassIdsKey.split('|') : []) params.append('expanded_class_id', expandedClassId)
     for (const spellId of spellChoicesKey ? spellChoicesKey.split('|') : []) params.append('selected_spell_id', spellId)
 
-    fetch(`/api/content/spells?${params.toString()}`)
-      .then(r => r.json())
-      .then(data => {
-        const nextSpells = Array.isArray(data) ? data : []
+    fetchContent<SpellOption[]>(`/api/content/spells?${params.toString()}`)
+      .then((result) => {
+        if ('error' in result) {
+          setLoadError(result.error.message)
+          return
+        }
+
+        setLoadError(null)
+        const nextSpells = Array.isArray(result.data) ? result.data : []
         setSpells((current) => replaceSpellOptionsStable(current, nextSpells))
       })
   }, [classId, campaignId, classLevel, speciesId, subclassIdsKey, expandedClassIdsKey, spellChoicesKey])
@@ -156,6 +163,7 @@ export function SpellsCard({
       <Card className="bg-neutral-900 border-neutral-800">
         <CardHeader><CardTitle className="text-neutral-200">Spells</CardTitle></CardHeader>
         <CardContent>
+          {loadError && <p className="mb-3 text-sm text-rose-300">Spells could not be loaded: {loadError}</p>}
           <p className="text-sm text-neutral-500">This character does not need to choose spells here for the current class and campaign.</p>
         </CardContent>
       </Card>
@@ -179,6 +187,7 @@ export function SpellsCard({
         />
       </CardHeader>
       <CardContent className="space-y-4">
+        {loadError && <p className="text-sm text-rose-300">Spells could not be loaded: {loadError}</p>}
         {canEdit && (
           <div className="space-y-1 text-xs text-neutral-500">
             <p>{selectionInstruction}</p>

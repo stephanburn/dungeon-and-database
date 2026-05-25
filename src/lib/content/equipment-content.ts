@@ -8,7 +8,7 @@ import type {
   Shield,
   Weapon,
 } from '@/lib/types/database'
-import { getAllowedSources } from '@/lib/content-helpers'
+import { applySourceFilter, getAllowedSources, hasContentLoadError } from '@/lib/content-helpers'
 
 type EquipmentQuery = {
   campaignId?: string | null
@@ -87,13 +87,14 @@ export async function listEquipmentItems(
   query: EquipmentQuery = {}
 ) {
   const allowedSources = await getAllowedSources(supabase, query.campaignId ?? null)
+  if (hasContentLoadError(allowedSources)) return { data: [] as EquipmentItem[], error: allowedSources.error }
 
   let builder = supabase
     .from('equipment_items')
     .select('*')
     .order('item_category')
     .order('name')
-  if (allowedSources) builder = builder.in('source', Array.from(allowedSources))
+  builder = applySourceFilter(builder, allowedSources)
 
   const { data, error } = await builder
   return {
@@ -194,10 +195,13 @@ export async function listStartingEquipmentPackages(
   query: EquipmentQuery = {}
 ) {
   const allowedSources = await getAllowedSources(supabase, query.campaignId ?? null)
+  if (hasContentLoadError(allowedSources)) {
+    return { data: [] as StartingEquipmentPackageEntry[], error: allowedSources.error }
+  }
   const [packageResult, packageItemsResult, itemResult] = await Promise.all([
     (async () => {
       let builder = supabase.from('starting_equipment_packages').select('*').order('name')
-      if (allowedSources) builder = builder.in('source', Array.from(allowedSources))
+      builder = applySourceFilter(builder, allowedSources)
       return builder
     })(),
     supabase.from('starting_equipment_package_items').select('*').order('item_order'),

@@ -29,6 +29,7 @@ import {
   type ContentImportPlan,
   type ContentImportSnapshot,
 } from '../../../scripts/content-import/import-workflow'
+import { contentDataOr, fetchContent } from '@/lib/client/fetch-content'
 
 // ── Types ──────────────────────────────────────────────────
 
@@ -1581,35 +1582,80 @@ export default function ContentAdmin() {
   const speciesRows = (activeTab === 'species' ? items : []) as unknown as SpeciesRow[]
 
   const fetchItems = useCallback(async (tab: Tab) => {
-    const res = await fetch(apiUrl(tab))
-    const data = await res.json()
-    setItems(Array.isArray(data) ? data : [])
+    const result = await fetchContent<ContentItem[]>(apiUrl(tab))
+    if ('error' in result) {
+      setError(result.error.message)
+      setItems([])
+      return
+    }
+    setError(null)
+    setItems(contentDataOr(result, []))
   }, [apiUrl])
 
-  const fetchClasses = useCallback(() => {
-    fetch('/api/content/classes').then(r => r.json()).then(d => setClasses(Array.isArray(d) ? d : []))
+  const fetchClasses = useCallback(async () => {
+    const result = await fetchContent<ClassRow[]>('/api/content/classes')
+    if ('error' in result) {
+      setError(result.error.message)
+      setClasses([])
+      return
+    }
+    setError(null)
+    setClasses(contentDataOr(result, []))
   }, [])
 
-  const fetchSources = useCallback(() => {
-    fetch('/api/content/sources').then(r => r.json()).then(d => setSources(Array.isArray(d) ? d : []))
+  const fetchSources = useCallback(async () => {
+    const result = await fetchContent<SourceRow[]>('/api/content/sources')
+    if ('error' in result) {
+      setError(result.error.message)
+      setSources([])
+      return
+    }
+    setError(null)
+    setSources(contentDataOr(result, []))
   }, [])
 
-  const fetchFeats = useCallback(() => {
-    fetch('/api/content/feats').then(r => r.json()).then(d => setFeats(Array.isArray(d) ? d : []))
+  const fetchFeats = useCallback(async () => {
+    const result = await fetchContent<FeatRow[]>('/api/content/feats')
+    if ('error' in result) {
+      setError(result.error.message)
+      setFeats([])
+      return
+    }
+    setError(null)
+    setFeats(contentDataOr(result, []))
   }, [])
 
-  const fetchEquipmentItems = useCallback(() => {
-    fetch('/api/content/equipment-items').then(r => r.json()).then(d => setEquipmentItems(Array.isArray(d) ? d : []))
+  const fetchEquipmentItems = useCallback(async () => {
+    const result = await fetchContent<EquipmentItemRow[]>('/api/content/equipment-items')
+    if ('error' in result) {
+      setError(result.error.message)
+      setEquipmentItems([])
+      return
+    }
+    setError(null)
+    setEquipmentItems(contentDataOr(result, []))
   }, [])
 
-  const fetchStartingPackages = useCallback(() => {
-    fetch('/api/content/starting-equipment-packages')
-      .then(r => r.json())
-      .then(d => setStartingPackages(Array.isArray(d) ? d : []))
+  const fetchStartingPackages = useCallback(async () => {
+    const result = await fetchContent<StartingEquipmentPackageRow[]>('/api/content/starting-equipment-packages')
+    if ('error' in result) {
+      setError(result.error.message)
+      setStartingPackages([])
+      return
+    }
+    setError(null)
+    setStartingPackages(contentDataOr(result, []))
   }, [])
 
-  const fetchFeatureOptionGroups = useCallback(() => {
-    fetch('/api/content/feature-option-groups').then(r => r.json()).then(d => setFeatureOptionGroups(Array.isArray(d) ? d : []))
+  const fetchFeatureOptionGroups = useCallback(async () => {
+    const result = await fetchContent<FeatureOptionGroupRow[]>('/api/content/feature-option-groups')
+    if ('error' in result) {
+      setError(result.error.message)
+      setFeatureOptionGroups([])
+      return
+    }
+    setError(null)
+    setFeatureOptionGroups(contentDataOr(result, []))
   }, [])
 
   const focusContentAdminTab = useCallback((tab: Tab) => {
@@ -1795,6 +1841,12 @@ export default function ContentAdmin() {
       <p className="mb-4 text-sm leading-6 text-neutral-500">
         Equipment items hold shared names, costs, and weights. Weapons, armor, and shields add rules to those items.
       </p>
+
+      {error && !showForm && (
+        <p className="mb-4 rounded-lg border border-rose-400/20 bg-rose-400/10 px-3 py-2 text-sm text-rose-100">
+          Content could not be loaded: {error}
+        </p>
+      )}
 
       <details className="surface-section mb-4">
         <summary className="cursor-pointer text-sm font-medium text-neutral-200">

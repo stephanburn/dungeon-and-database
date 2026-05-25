@@ -76,6 +76,7 @@ import {
   ARTIFICER_INFUSION_GROUP_KEY,
   getArtificerInfusionOptionDefinitions,
 } from '@/lib/characters/infusions'
+import { isSubclassFeatureOptionGroup } from '@/lib/characters/rule-handlers'
 import { getFixedHpGainValue } from '@/lib/characters/derived'
 import {
   buildLevelUpClassOptions,
@@ -89,6 +90,7 @@ import {
   summarizeLevelUpSpellChanges,
 } from '@/lib/characters/level-up-flow'
 import { replaceSpellOptionsStable } from '@/lib/characters/spell-options'
+import { contentDataOr, fetchContent, fetchContentErrorMessage } from '@/lib/client/fetch-content'
 
 type CharacterWithRelations = Character & {
   species: Species | null
@@ -282,6 +284,7 @@ export function LevelUpWizard({
   const [classDetailMap, setClassDetailMap] = useState<Record<string, ClassDetail>>({})
   const [subclassMap, setSubclassMap] = useState<Record<string, Subclass[]>>({})
   const [spellOptions, setSpellOptions] = useState<SpellOption[]>([])
+  const [contentLoadError, setContentLoadError] = useState<string | null>(null)
 
   const [selectedClassId, setSelectedClassId] = useState(baseLevels[0]?.class_id ?? '')
   const [selectedSubclassId, setSelectedSubclassId] = useState<string | null>(null)
@@ -340,12 +343,7 @@ export function LevelUpWizard({
   const initialSubclassFeatureOptionKeys = useMemo(
     () => new Set(
       activeInitialFeatureOptionChoices
-        .filter((choice) => (
-          choice.option_group_key === 'maneuver:battle_master:2014'
-          || choice.option_group_key.startsWith('hunter:')
-          || choice.option_group_key === 'circle_of_land:terrain:2014'
-          || choice.option_group_key === 'elemental_discipline:four_elements:2014'
-        ))
+        .filter((choice) => isSubclassFeatureOptionGroup(choice.option_group_key))
         .map((choice) => `${choice.option_group_key}:${choice.option_key}`)
     ),
     [activeInitialFeatureOptionChoices]
@@ -472,17 +470,25 @@ export function LevelUpWizard({
   useEffect(() => {
     const qs = `?campaign_id=${campaign.id}`
     Promise.all([
-      fetch(`/api/content/classes${qs}`).then((response) => response.json()),
-      fetch(`/api/content/feats${qs}`).then((response) => response.json()),
-      fetch(`/api/content/feature-options${qs}`).then((response) => response.json()),
-      fetch(`/api/content/feature-spell-grants${qs}`).then((response) => response.json()),
+      fetchContent<Class[]>(`/api/content/classes${qs}`),
+      fetchContent<Feat[]>(`/api/content/feats${qs}`),
+      fetchContent<FeatureOption[]>(`/api/content/feature-options${qs}`),
+      fetchContent<FeatureSpellGrant[]>(`/api/content/feature-spell-grants${qs}`),
     ]).then(([classes, feats, featureOptions, spellGrants]) => {
-      setClassList(Array.isArray(classes) ? classes : [])
-      setFeatList(Array.isArray(feats) ? feats : [])
-      setFeatureOptionRows(Array.isArray(featureOptions) ? featureOptions : [])
-      setFeatureSpellGrants(Array.isArray(spellGrants) ? spellGrants : [])
-      if (!selectedClassId && Array.isArray(classes) && classes.length > 0) {
-        setSelectedClassId(classes[0].id)
+      const loadError = fetchContentErrorMessage([classes, feats, featureOptions, spellGrants])
+      if (loadError) {
+        setContentLoadError(loadError)
+        return
+      }
+
+      const classRows = contentDataOr(classes, [])
+      setContentLoadError(null)
+      setClassList(classRows)
+      setFeatList(contentDataOr(feats, []))
+      setFeatureOptionRows(contentDataOr(featureOptions, []))
+      setFeatureSpellGrants(contentDataOr(spellGrants, []))
+      if (!selectedClassId && classRows.length > 0) {
+        setSelectedClassId(classRows[0].id)
       }
     })
   }, [campaign.id, selectedClassId])
@@ -495,14 +501,22 @@ export function LevelUpWizard({
     if (missingDetails.length > 0) {
       Promise.all(
         missingDetails.map((classId) =>
-          fetch(`/api/content/classes/${classId}`)
-            .then((response) => response.json())
-            .then((detail: ClassDetail) => ({ classId, detail }))
+          fetchContent<ClassDetail>(`/api/content/classes/${classId}`)
+            .then((result) => ({ classId, result }))
         )
       ).then((results) => {
+        const loadError = fetchContentErrorMessage(results.map((entry) => entry.result))
+        if (loadError) {
+          setContentLoadError(loadError)
+          return
+        }
+
+        setContentLoadError(null)
         setClassDetailMap((prev) => {
           const next = { ...prev }
-          for (const result of results) next[result.classId] = result.detail
+          for (const result of results) {
+            if ('data' in result.result) next[result.classId] = result.result.data
+          }
           return next
         })
       })
@@ -511,14 +525,20 @@ export function LevelUpWizard({
     if (missingSubclasses.length > 0) {
       Promise.all(
         missingSubclasses.map((classId) =>
-          fetch(`/api/content/classes/${classId}/subclasses?campaign_id=${campaign.id}`)
-            .then((response) => response.json())
-            .then((subclasses: Subclass[]) => ({ classId, subclasses }))
+          fetchContent<Subclass[]>(`/api/content/classes/${classId}/subclasses?campaign_id=${campaign.id}`)
+            .then((result) => ({ classId, result }))
         )
       ).then((results) => {
+        const loadError = fetchContentErrorMessage(results.map((entry) => entry.result))
+        if (loadError) {
+          setContentLoadError(loadError)
+          return
+        }
+
+        setContentLoadError(null)
         setSubclassMap((prev) => {
           const next = { ...prev }
-          for (const result of results) next[result.classId] = result.subclasses
+          for (const result of results) next[result.classId] = contentDataOr(result.result, [])
           return next
         })
       })
@@ -552,9 +572,16 @@ export function LevelUpWizard({
       params.append('expanded_class_id', expandedClassId)
     }
 
-    fetch(`/api/content/spells?${params.toString()}`)
-      .then((response) => response.json())
-      .then((data: SpellOption[]) => setSpellOptions(Array.isArray(data) ? data : []))
+    fetchContent<SpellOption[]>(`/api/content/spells?${params.toString()}`)
+      .then((result) => {
+        if ('error' in result) {
+          setContentLoadError(result.error.message)
+          return
+        }
+
+        setContentLoadError(null)
+        setSpellOptions(Array.isArray(result.data) ? result.data : [])
+      })
   }, [campaign.id, character.species_id, maverickBreakthroughClassIds, nextTargetLevel, selectedClassDetail, selectedClassId, selectedSubclassId])
 
   useEffect(() => {
@@ -723,12 +750,7 @@ export function LevelUpWizard({
       subclassFeatureOptionDefinitions.map((definition) => `${definition.optionGroupKey}:${definition.optionKey}`)
     )
     setFeatureOptionChoices((prev) => prev.filter((choice) => (
-      !(
-        choice.option_group_key === 'maneuver:battle_master:2014'
-        || choice.option_group_key.startsWith('hunter:')
-        || choice.option_group_key === 'circle_of_land:terrain:2014'
-        || choice.option_group_key === 'elemental_discipline:four_elements:2014'
-      )
+      !isSubclassFeatureOptionGroup(choice.option_group_key)
       || initialSubclassFeatureOptionKeys.has(`${choice.option_group_key}:${choice.option_key}`)
       || activeKeys.has(`${choice.option_group_key}:${choice.option_key}`)
     )))
@@ -1581,6 +1603,14 @@ export function LevelUpWizard({
                 >
                   Back to refreshed sheet
                 </Button>
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {contentLoadError && (
+            <Alert className="border-rose-400/20 bg-rose-400/10">
+              <AlertDescription className="text-rose-100">
+                Level-up options could not be loaded: {contentLoadError}
               </AlertDescription>
             </Alert>
           )}

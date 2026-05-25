@@ -49,6 +49,63 @@ import {
 import { buildLanguageNameByKeyMap } from '@/lib/content/language-content'
 import { buildToolNameByKeyMap } from '@/lib/content/tool-content'
 
+type QueryIssue = {
+  scope: string
+  message: string
+}
+
+export type CharacterBuildContextFailure = {
+  message: string
+  issues: QueryIssue[]
+}
+
+export type CharacterBuildContextResult =
+  | { status: 'success'; context: CharacterBuildContext }
+  | { status: 'not_found' }
+  | { status: 'error'; error: CharacterBuildContextFailure }
+
+export class CharacterBuildContextError extends Error {
+  readonly failure: CharacterBuildContextFailure
+
+  constructor(failure: CharacterBuildContextFailure) {
+    super(`${failure.message}: ${failure.issues.map((issue) => `${issue.scope}: ${issue.message}`).join('; ')}`)
+    this.name = 'CharacterBuildContextError'
+    this.failure = failure
+  }
+}
+
+function collectQueryIssues(
+  results: unknown[],
+  scopes: string[]
+): QueryIssue[] {
+  return results.flatMap((result, index) => {
+    const error = result && typeof result === 'object' && 'error' in result
+      ? (result as { error?: { message: string } | null }).error
+      : null
+    return error
+    ? [{
+        scope: scopes[index] ?? 'unknown',
+        message: error.message,
+      }]
+    : []
+  })
+}
+
+function throwQueryIssues(message: string, issues: QueryIssue[]): never {
+  throw new CharacterBuildContextError({ message, issues })
+}
+
+function toBuildContextResultError(error: unknown): CharacterBuildContextFailure {
+  if (error instanceof CharacterBuildContextError) return error.failure
+  return {
+    message: 'Failed to build character context',
+    issues: [{
+      scope: 'unknown',
+      message: error instanceof Error ? error.message : 'Unknown character context error',
+    }],
+  }
+}
+
 function toAbilityBonusMap(species: Species | null): Partial<Record<AbilityKey, number>> {
   const bonuses: Partial<Record<AbilityKey, number>> = {}
   for (const entry of species?.ability_score_bonuses ?? []) {
@@ -96,12 +153,18 @@ export async function buildCharacterBuildContext(
   supabase: SupabaseClient<Database>,
   characterId: string
 ): Promise<CharacterBuildContext | null> {
-  const { data: character } = await supabase
+  const { data: character, error: characterError } = await supabase
     .from('characters')
     .select('*')
     .eq('id', characterId)
     .single()
 
+  if (characterError) {
+    throwQueryIssues('Failed to load character', [{
+      scope: 'characters',
+      message: characterError.message,
+    }])
+  }
   if (!character) return null
 
   const [
@@ -146,6 +209,50 @@ export async function buildCharacterBuildContext(
     supabase.from('sources').select('key, rule_set'),
   ])
 
+  const relationIssues = collectQueryIssues(
+    [
+      campaignResult,
+      allowlistResult,
+      levelsResult,
+      statRollsResult,
+      skillsResult,
+      abilityBonusChoicesResult,
+      asiChoicesResult,
+      languageChoicesResult,
+      toolChoicesResult,
+      featureOptionChoicesResult,
+      featureOptionsResult,
+      equipmentItemsResult,
+      speciesResult,
+      backgroundResult,
+      spellSelectionsResult,
+      featSelectionsResult,
+      allSourcesResult,
+    ],
+    [
+      'campaigns',
+      'campaign_source_allowlist',
+      'character_class_levels',
+      'character_stat_rolls',
+      'character_skill_proficiencies',
+      'character_ability_bonus_choices',
+      'character_asi_choices',
+      'character_language_choices',
+      'character_tool_choices',
+      'character_feature_option_choices',
+      'feature_options',
+      'character_equipment_items',
+      'species',
+      'backgrounds',
+      'character_spell_selections',
+      'character_feat_choices',
+      'sources',
+    ]
+  )
+  if (relationIssues.length > 0) {
+    throwQueryIssues('Failed to load character relations for legality', relationIssues)
+  }
+
   const classLevels = sortCharacterClassLevels((levelsResult.data ?? []) as CharacterClassLevel[])
   const levels = aggregateCharacterLevels(classLevels)
   const background = (backgroundResult.data as Background | null) ?? null
@@ -175,8 +282,13 @@ export async function buildCharacterBuildContext(
       ? supabase.from('tools').select('key, name').in('key', toolKeys)
       : Promise.resolve({ data: [] as Array<{ key: string; name: string }>, error: null }),
   ])
-  if (languageCatalogResult.error) throw languageCatalogResult.error
-  if (toolCatalogResult.error) throw toolCatalogResult.error
+  const catalogIssues = collectQueryIssues(
+    [languageCatalogResult, toolCatalogResult],
+    ['languages', 'tools']
+  )
+  if (catalogIssues.length > 0) {
+    throwQueryIssues('Failed to load language/tool catalog rows for legality', catalogIssues)
+  }
 
   const languageNameByKey = buildLanguageNameByKeyMap(languageCatalogResult.data ?? [])
   const toolNameByKey = buildToolNameByKeyMap(toolCatalogResult.data ?? [])
@@ -257,6 +369,46 @@ export async function buildCharacterBuildContext(
       : Promise.resolve({ data: [] }),
   ])
 
+  const contentIssues = collectQueryIssues(
+    [
+      classesResult,
+      subclassesResult,
+      progressionResult,
+      classFeatureResult,
+      subclassFeatureResult,
+      spellSlotsResult,
+      multiclassSlotsResult,
+      subclassBonusSpellsResult,
+      speciesBonusSpellsResult,
+      speciesTraitsResult,
+      spellsResult,
+      featsResult,
+      equipmentCatalogResult,
+      armorResult,
+      shieldsResult,
+    ],
+    [
+      'classes',
+      'subclasses',
+      'class_feature_progression',
+      'class_features',
+      'subclass_features',
+      'spell_slot_tables',
+      'multiclass_spell_slot_table',
+      'subclass_bonus_spells',
+      'species_bonus_spells',
+      'species_traits',
+      'spells',
+      'feats',
+      'equipment_items',
+      'armor',
+      'shields',
+    ]
+  )
+  if (contentIssues.length > 0) {
+    throwQueryIssues('Failed to load character content for legality', contentIssues)
+  }
+
   const classesById = new Map<string, Class>((classesResult.data ?? []).map((row) => [row.id, row as Class]))
   const subclassesById = new Map<string, Subclass>((subclassesResult.data ?? []).map((row) => [row.id, row as Subclass]))
   const spellById = new Map<string, Spell>((spellsResult.data ?? []).map((row) => [row.id, row as Spell]))
@@ -304,6 +456,13 @@ export async function buildCharacterBuildContext(
       .from('spells')
       .select('*')
       .in('id', missingSpeciesSpellIds)
+
+    if (missingSpeciesSpellsResult.error) {
+      throwQueryIssues('Failed to load species-expanded spell rows for legality', [{
+        scope: 'spells',
+        message: missingSpeciesSpellsResult.error.message,
+      }])
+    }
 
     for (const row of (missingSpeciesSpellsResult.data ?? []) as Spell[]) {
       spellById.set(row.id, row)
@@ -635,4 +794,26 @@ export async function buildLegalityInput(
   characterId: string
 ): Promise<CharacterBuildContext | null> {
   return buildCharacterBuildContext(supabase, characterId)
+}
+
+export async function buildCharacterBuildContextResult(
+  supabase: SupabaseClient<Database>,
+  characterId: string
+): Promise<CharacterBuildContextResult> {
+  try {
+    const context = await buildCharacterBuildContext(supabase, characterId)
+    return context ? { status: 'success', context } : { status: 'not_found' }
+  } catch (error) {
+    return {
+      status: 'error',
+      error: toBuildContextResultError(error),
+    }
+  }
+}
+
+export async function buildLegalityInputResult(
+  supabase: SupabaseClient<Database>,
+  characterId: string
+): Promise<CharacterBuildContextResult> {
+  return buildCharacterBuildContextResult(supabase, characterId)
 }

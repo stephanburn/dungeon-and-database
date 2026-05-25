@@ -16,6 +16,7 @@ This roadmap now has meaningful implementation behind it.
 - Batch Eberron is now effectively complete and closed out by Slice `E7` on 2026-04-26. Slice E1 locked the audit/guardrails, Slice E2 added the missing species and lineages, Slice E3 cleaned up dragonmarked lineage metadata, stale notes, and legacy dragonmarked rows/code by deleting any characters still tied to the old rows before purging them, Slice E4 added House Agent, Revenant Blade, double-bladed scimitar support, and elf-lineage feat prerequisite checks, Slice E5 modeled the full ERftLW Artificer infusion roster as repeating feature options with minimum-level prerequisites, count legality, and sheet/wizard surfaces, Slice E6 added an automated ERftLW regression matrix covering representative creation, legality, derived sheet, source allowlist, and DM-review paths, and Slice E7 recorded `output/batch-eberron-closeout-audit.md` with the Batch 6 handoff and the remaining ERftLW gaps outside the current app domain.
 - Batch 6 is now effectively complete and closed out by Slice `6i` on 2026-04-29. Slice `6a` moved spellcasting summaries and per-source spellcasting output onto `derived.ts`. Slice `6b` moved feature-granted spells into `feature_spell_grants` rows keyed to `spells.id`. Slice `6c` made character language/tool catalog keys authoritative. Slice `6d` consolidated character route access checks and marked pre-Batch-4 null-class spell selections for explicit DM audit provenance. Slice `6e` introduced the reusable dry-run content validator. Slice `6f` and `6g` added audited admin CRUD and validation-preview coverage for the Batch 3 content families. Slice `6h` added stable bulk import dry-run/apply planning and amendment metadata. Slice `6i` recorded `output/batch-6-closeout-audit.md` with Batch 7 entry notes.
 - Batch 7 is now effectively complete and closed out by Slice `7i` on 2026-05-06. Slices `7a`-`7d` landed repeatable setup/demo QA scaffolding, route/persistence coverage, representative build regression coverage, and schema/import/migration validation. Slice `7e` recorded `output/batch-7-visual-qa.md`, including exact routes/states, authenticated QA blockers, and product frictions assigned to Slice `7f`. `7UserTest1` repaired the sheet/save loop class and the level-up entry loop; `7UserTest2` repaired the HP-only duplicate-choice level-up blocker, locked player-facing raw class-level edits behind DM repair access, and source-labeled duplicate subclass names. Slice `7f` delivered bounded usability repairs for content-admin keyboard/delete/key stability, stat-block clipboard feedback, focus treatment, denser campaign selection, step-focus movement, source wording, legality review noise, skill labels, level-up class ordering, and campaign settings return navigation. Slice `7f.5` delivered the novice-player comprehension pass across creation, sheet, shared choice cards, and level-up copy. Slice `7g` split the build-context, feature-grants, and legality engine modules behind stable public surfaces. Slice `7h` kept the Path B skill-provenance model because no authenticated DM-review finding triggered a new audit table. Slice `7i` recorded `output/batch-7-closeout-audit.md`; the post-7i review folds additional Batch 8 entry notes into this roadmap for fail-closed source/loading/snapshot errors, custom rule-handler modularity, the Maverick Breakthrough legality key mismatch, remaining behavior-preserving module splits, authenticated screenshot smoke, and magic-link email branding provider configuration.
+- Batch 8 is in progress. Slices `8a`-`8c` are delivered as of 2026-05-25: `8a` aligned doctor/setup around Node 24.x with credential-only handoffs, `8b` made source allowlists, legality/build-context loading, snapshots, and client content fetches fail explicitly, and `8c` moved existing custom option/spell handling into the rule-handler registry while repairing Maverick Arcane Breakthrough legality. The next slice is `8d`, authenticated screenshot smoke.
 - A post-Batch-4 production hotfix shipped on 2026-04-23 to stop the character sheet from entering a React update loop when loading class-scoped spell options for newly created characters.
 - A Batch 4 senior-review pass on 2026-04-23 found several level-up data-integrity bugs that the additive save path makes reachable in normal play (silent spell/feat swap loss, skill PK collision on multiclass overlap, feature-option value-change collision, preserved-spell level misattribution, and a concurrency window in the per-level sync trigger). Batch 4.5 is scheduled before Batch 5 to close these.
 - Batch 4 delivered the end-to-end guided builder workflows that were blocking real character creation:
@@ -2020,7 +2021,7 @@ A novice-player comprehension pass is now explicitly scheduled after the bounded
 4. Add a small registry for existing custom rule handlers before adding more one-off feature-option or feature-spell code.
 5. Repair Maverick Arcane Breakthrough legality for active `feature_spell:maverick:arcane_breakthrough:*` source keys.
 6. Review magic-link email branding provider configuration with Supabase/auth settings access.
-7. Rerun `npm run doctor` under Node 20.x with Supabase CLI authentication available.
+7. Rerun `npm run doctor` under Node 24.x with Vercel and Supabase CLI authentication available.
 8. Make a targeted dashboard and campaign-selection warmth pass without changing rules behavior.
 9. Continue content-admin table ergonomics after screenshot smoke coverage exists, including strict source-route validation.
 
@@ -2069,15 +2070,36 @@ A novice-player comprehension pass is now explicitly scheduled after the bounded
 
 Turn the Batch 7 closeout residuals into a short, concrete follow-up batch: stabilize local verification, add repeatable authenticated screenshot smoke, close the code-review findings that would otherwise be hidden under the remaining refactors, finish the two remaining behavior-preserving module splits, and pick up the narrow provider/UX follow-ups that were deliberately deferred from user review.
 
+### Pre-Batch-8 Audit (2026-05-06)
+
+A focused review on the morning of 2026-05-06 verified each Batch 7 closeout residual against the actual code on `main` and folded a short list of additional findings into this section. The results below are cited by file/line so each slice can start cold.
+
+Confirmed against code:
+
+- `src/lib/content-helpers.ts:14-20` ignores Supabase errors loading the campaign source allowlist; a failed query silently disables filtering. Source filtering must fail closed (Slice 8b).
+- `src/lib/legality/build-input.ts:107-258` defaults every relation query to `[]`/`null` on error, so legality and derived output can be produced from silently partial data — including on the submit path, where a missing `character_spell_selections` or `character_feat_choices` query would let an over-cap or missing-required character pass `shouldBlockCharacterSubmit`. The aggregation must mirror `loadCharacterState`'s typed `error | warnings` outcome (Slice 8b).
+- `src/lib/snapshots.ts:32-58` ignores per-query errors *and* the final insert result; `captureSnapshot` returns `void`. Save/submit/approve routes (`[id]/route.ts:443`, `[id]/submit/route.ts:44`, `[id]/approve/route.ts:33`) have no failure signal (Slice 8b).
+- `src/lib/characters/class-levels.ts:15-39` flattens each per-class series back to the most-recent `character_class_levels` row, so `CharacterAggregateClass` only ever exposes one `hpRoll` per class. `derived.ts:1357` still carries the "stores at most one per-class HP roll" comment and treats it as one level's gain. The per-level rows exist on disk but derivation cannot see them (Slice 8e).
+- `getMaverickFeatureSpellChoiceDefinitions` emits `feature_spell:maverick:arcane_breakthrough:${level}` source keys (`feature-grants-spells.ts:124`), but `checkMaverickBreakthroughSelections` in `spell-checks.ts:76` only matches `MAVERICK_BREAKTHROUGH_SOURCE_FEATURE_KEY` (`maverick.ts:11`) and `MAVERICK_ARCANE_BREAKTHROUGH_SOURCE_KEY` (`feature-grants-types.ts:39`). The active path is silently uncheckable. The two stale constants also disagree with each other (one uses `maverick_arcane_breakthroughs`, the other `maverick:arcane_breakthroughs`); only one survives Slice 8c (Slice 8c).
+- Custom feature-option filtering is duplicated across `CharacterSheet.tsx:739-890`, `LevelUpWizard.tsx:295-347,715-730`, and `CharacterNewForm.tsx:188,1020-1044`, with the same `maneuver:battle_master:2014 || circle_of_land:terrain:2014 || elemental_discipline:four_elements:2014` triple inlined repeatedly. The registry/adapter from Slice 8c is the consolidation point.
+- `src/app/api/content/sources/route.ts:23,55-57` uses manual `if (!body.key || !body.full_name)` validation while every other admin content route uses zod schemas in `src/lib/content/admin-schemas.ts`. `feature_options.prerequisites` / `effects` remain broadly `Record<string, unknown>` (Slice 8i).
+- Client content fetches in `CharacterSheet.tsx:761-783`, `CharacterNewForm.tsx:492-526`, `LevelUpWizard.tsx:475-478`, and `ContentAdmin.tsx:1590-1602` chain `.then(r => r.json())` with no `response.ok` check and coerce non-array results to `[]`. The original Batch 8 entry note only named the sheet; the same fail-silent pattern lives in three other surfaces (Slice 8b).
+
+Additional issues surfaced by the audit:
+
+- `character_hp_rolls` (the Slice 3m HP-history fallback) is read only by `snapshots.ts`, never by derivation. Slice 8e must decide deliberately whether to wire it in or delete it; do not leave it dead from derivation's perspective.
+- `derived.ts:1349` carries an implicit "first recorded class is the starting class, so its first level used max HP" heuristic. With per-level rows now available, the actual starting level is identifiable from `taken_at`-min across `character_class_levels`. Slice 8e replaces the heuristic.
+- The Batch 7 closeout audit references `src/lib/character-creation/...` paths, but the actual paths are `src/lib/characters/...`. Doc-only drift; correct it during Slice 8j.
+
 ### Scope
 
 In:
 
 - local setup alignment needed for `npm run doctor`
 - authenticated screenshot smoke for the same setup, creation, sheet, DM review, and content-admin surfaces covered in Batch 7 QA
-- review-found fail-closed error handling around source allowlists, build-context/legality loading, and snapshot capture
+- review-found fail-closed error handling around source allowlists, build-context/legality loading, snapshot capture, and **client-side content fetches across creation, level-up, sheet, and content-admin surfaces**
 - a small rule-handler registry for existing custom feature-option and feature-spell behavior so new rules do not require matching one-off edits in every surface
-- behavior-preserving module splits for `derived.ts` and `CharacterSheet.tsx`
+- behavior-preserving module splits for `derived.ts` and `CharacterSheet.tsx`, including consuming `character_class_levels` directly for HP history
 - magic-link email branding provider configuration review
 - targeted dashboard/campaign-selection warmth pass
 - content-admin table ergonomics and the remaining source/admin validation gap after visual smoke coverage exists
@@ -2088,20 +2110,8 @@ Out:
 - new content families or broad schema expansion
 - broad redesign of the application shell
 - adding `character_skill_proficiency_sources` unless a new authenticated DM-review gap proves the need
+- splitting `CharacterNewForm.tsx` or `LevelUpWizard.tsx`; their custom-rule consolidation in 8c is the only structural change they receive in Batch 8 — further wizard splits are explicit Batch 9 carry-ins
 - turning Batch 8 into a new sourcebook/content-completion batch; repairing existing rule handling is in scope, adding new option families is not
-
-### Code Review Findings Folded Into Batch 8
-
-The post-Batch-7 review found several issues that are easiest to fix before or during the planned Batch 8 splits:
-
-1. `src/lib/content-helpers.ts` currently ignores Supabase errors while loading campaign source allowlists. If the allowlist query fails, content routes can behave as though no filter applies. Batch 8 should make source filtering fail closed and test the error path.
-2. `src/lib/legality/build-input.ts` still defaults most failed relation queries to empty arrays. `loadCharacterState` has hard-failure aggregation, but the legality/build-context path can still produce false-clear derived output after RLS, schema, or network failures. Batch 8 should share or mirror the typed relation-error aggregation.
-3. `src/lib/snapshots.ts` ignores per-query errors and the final insert result. Saves, submits, and approvals can therefore appear successful while the audit snapshot is incomplete or missing. Batch 8 should make snapshot capture return a typed result and decide which write paths must fail if capture fails.
-4. The per-level class history cutover exists, but `src/lib/characters/derived.ts` still receives only one aggregate `hpRoll` per class through `CharacterAggregateClass`. HP estimates and recorded-roll display should consume `character_class_levels` directly during the `derived.ts` split.
-5. Maverick Arcane Breakthrough spell legality checks legacy/canonical subclass source keys but misses the active `feature_spell:maverick:arcane_breakthrough:*` keys produced by `getMaverickFeatureSpellChoiceDefinitions`. Batch 8 should repair that existing check before adding any new custom spell handlers.
-6. Custom feature-option behavior is scattered across `CharacterNewForm.tsx`, `LevelUpWizard.tsx`, `CharacterSheet.tsx`, `feature-grants-*`, `build-context-combat.ts`, and `legality/feature-option-checks.ts`. Batch 8 should introduce a small registry/adapter layer for existing handlers (fighting style, Battle Master, Hunter, Circle of the Land, Four Elements, Artificer infusions, Dragonborn ancestry, High Elf/Maverick feature spells) so future rules add one handler rather than multiple string-key audits.
-7. `src/app/api/content/sources/route.ts` still uses manual required-field checks instead of the strict admin schema style used by the other content routes, and `feature_options.prerequisites` / `effects` remain broadly `Record<string, unknown>`. Batch 8 should either validate sources through `sourceUpdateSchema`/matching create schema or explicitly document why sources stay special, and should add typed guard helpers for known feature-option prerequisite/effect shapes.
-8. `CharacterSheet.tsx` content fetches silently coerce failed responses into empty arrays. The `CharacterSheet.tsx` split should separate content loading from rendering and provide a visible retry/error state for missing class/species/spell/feature-option catalogs.
 
 ### Execution Slices
 
@@ -2109,7 +2119,7 @@ The post-Batch-7 review found several issues that are easiest to fix before or d
 
 - Goal: make the local setup gate actionable again after the 7i doctor run found environment drift.
 - Deliver:
-  - confirm the repo runs under Node 20.x from `.nvmrc`
+  - reconcile `.nvmrc` and the doctor's expected Node version. The Batch 7 closeout audit had a stale Node target, but `.nvmrc` is `24`. The intended target is **Node 24.x**; align `scripts/doctor.sh`, setup docs, and any other reference to the same value before rerunning doctor.
   - authenticate Supabase CLI locally or document the exact credential handoff needed
   - rerun `npm run doctor`
   - update setup notes if the failure path was unclear
@@ -2118,10 +2128,71 @@ The post-Batch-7 review found several issues that are easiest to fix before or d
   - `npm test` if setup docs or scripts change
 - Acceptance:
   - doctor either passes locally or has a documented credential-only blocker with owner/date/reason
+  - `.nvmrc`, doctor's expected Node version, and setup docs all agree on Node 24.x
+- Progress:
+  - Slice 8a reran `npm run doctor` on 2026-05-06 under Node 24.x. The Node, env, seed-script, and Supabase project-ref checks passed.
+  - The remaining doctor failures are credential-only local CLI auth checks for Vercel and Supabase. The handoff is recorded in `README.md` and `SETUP.md` with owner/date/reason.
+  - `scripts/doctor.sh` now names the exact commands for those auth failures: `vercel login` and `supabase login`.
 
-**Slice 8b — Authenticated screenshot smoke**
+**Slice 8b — Fail-closed source, loader, snapshot, and client-fetch errors**
 
-- Goal: turn the Batch 7 visual QA notes into a repeatable screenshot smoke path.
+- Goal: close the review-found error-handling seams *across server and client* before more UI or derivation code is built on top of partial data. Runs before screenshot smoke (Slice 8d) so smoke captures the corrected error states rather than baking silent-empty UI into the baseline.
+- Server side:
+  - `getAllowedSources` returns a typed `{ sources: Set<string> } | { error }` and every caller in content API routes propagates the error; `applySourceFilter` (or its successor) consumes the typed shape.
+  - add typed relation-error aggregation to `buildCharacterBuildContext` / `buildLegalityInput` mirroring `loadCharacterState`. Submit, approve, request-changes, and `/api/legality/check` must surface the error rather than running checks against silently empty arrays. This closes the correctness gap where a failed `character_spell_selections` or `character_feat_choices` query could let a should-block character pass `shouldBlockCharacterSubmit`.
+  - `captureSnapshot` returns `{ ok: true } | { ok: false, error }` and inspects the final `.insert(...)` result. Each caller decides per-route policy: PUT/save returns 5xx with a documented code on snapshot failure; submit and approve fail the request rather than confirming an audit-incomplete state change.
+  - preserve `loadCharacterState` warnings for genuinely missing optional relations while keeping query errors hard failures.
+- Client side:
+  - add a shared `fetchContent<T>(...)` helper that checks `response.ok`, parses JSON, and returns `{ data } | { error }`.
+  - migrate the parallel content-fetch blocks in `CharacterSheet.tsx:761`, `CharacterNewForm.tsx:492`, `LevelUpWizard.tsx:475`, and `ContentAdmin.tsx:1590` onto it. Empty UI must distinguish "loaded zero" from "failed to load".
+- Verification:
+  - new focused tests for allowlist query failure, build-context relation failure, snapshot insert failure, and submit-blocking when relation queries fail
+  - character route error-mapping tests
+  - static guard test that no `fetch('/api/content/...')` call sits in `then(r => r.json())` without going through the helper
+  - existing route/persistence and Batch 7 regression matrix tests
+- Acceptance:
+  - source filtering never broadens because an allowlist query failed
+  - legality/derived output is not produced from silently partial relation data
+  - submit cannot succeed when its legality input is incomplete
+  - snapshot failure is observable to the route caller and surfaced according to the route's documented policy
+  - client content failures show a visible retry/error state rather than empty pickers
+- Progress:
+  - Slice 8b delivered `test/fail-closed-8b.test.ts`, covering allowlist query failure, build-context relation failure, snapshot query/insert failure, character route error mapping, and the client content-fetch guard.
+  - `getAllowedSources` now returns a typed `{ sources } | { error }`, and source-filter callers propagate the error before widening filters.
+  - `buildCharacterBuildContext` / `buildLegalityInput` now aggregate relation/content query errors and expose `buildLegalityInputResult` for routes that need typed error mapping.
+  - `captureSnapshot` now returns `{ ok: true } | { ok: false, error }` and checks both source-query errors and the final snapshot insert result.
+  - Character save, submit, approve, request-changes, and `/api/legality/check` now map relation or snapshot failures to explicit 5xx responses with stable codes.
+  - `fetchContent` now gates content API reads on `response.ok`; sheet, creation, level-up, spell-card, and content-admin loaders surface load errors instead of replacing failures with empty arrays.
+  - Verified on 2026-05-25 with `node --import tsx --test test/fail-closed-8b.test.ts test/slice-8c-rule-handlers.test.ts test/maverick-8c.test.ts`, `node --import tsx --test test/feature-grants.test.ts test/legality-engine.test.ts test/level-up-flow.test.ts test/creation-step-selections.test.ts test/fail-closed-8b.test.ts test/slice-8c-rule-handlers.test.ts test/maverick-8c.test.ts`, `npm test`, and `node node_modules/next/dist/bin/next build`.
+
+**Slice 8c — Rule-handler registry and existing custom-rule repair**
+
+- Goal: make existing custom rule handling modular enough that the next unusual rules feature has one integration point instead of scattered string-key edits, and repair the Maverick legality regression that the registry would otherwise hide.
+- Deliver:
+  - introduce a small registry/adapter layer in `src/lib/characters/rule-handlers/` covering fighting styles, Battle Master maneuvers, Hunter choices, Circle of the Land terrain, Four Elements disciplines, Artificer infusions, Dragonborn ancestry, High Elf cantrip, feat spells, and Maverick feature spells. The registry owns the `option_group_key` constants and `source_feature_key` constants and exports typed predicates (`isCustomOptionGroup`, `isCustomFeatureSpellSource`, `getActiveOptionGroupsForBuild`).
+  - replace every duplicated string-key triple in `CharacterNewForm.tsx`, `LevelUpWizard.tsx`, and `CharacterSheet.tsx` with registry helpers; do not split or restructure those wizard/sheet components beyond the string-key consolidation.
+  - repair `checkMaverickBreakthroughSelections` to recognize `feature_spell:maverick:arcane_breakthrough:*` source keys (the active path) while still tolerating both legacy constants for historical rows; pin with a regression test against the actual `getMaverickFeatureSpellChoiceDefinitions` output.
+  - delete whichever of `MAVERICK_BREAKTHROUGH_SOURCE_FEATURE_KEY` / `MAVERICK_ARCANE_BREAKTHROUGH_SOURCE_KEY` is dead after the repair.
+  - add typed helper guards for known `feature_options.prerequisites` and `effects` shapes rather than reading arbitrary records inline.
+- Verification:
+  - feature-grants tests for registry output parity
+  - legality test pinning Maverick caps and level allowlists for the active source keys against a fixture build
+  - creation and level-up flow tests covering active custom-option cleanup
+  - static test that the duplicated `maneuver:battle_master:2014 || circle_of_land:terrain:2014 || elemental_discipline:four_elements:2014` triple no longer appears in any UI file
+- Acceptance:
+  - existing custom feature options and feature spells behave unchanged except for the Maverick legality bug fix
+  - exactly one Maverick source-key constant survives, and the legality engine matches the active feature-spell rows produced today
+  - adding a future custom option family requires a new handler plus tests, not audits across creation, level-up, sheet save, derived combat, and legality files
+- Progress:
+  - Slice 8c delivered `src/lib/characters/rule-handlers/` as the shared registry for known custom option groups, feature-spell source predicates, Maverick Arcane Breakthrough source-key helpers, and typed `feature_options.prerequisites` / `effects` metadata guards.
+  - `CharacterSheet`, `CharacterNewForm`, and `LevelUpWizard` now use registry predicates for custom-option cleanup instead of repeating the Battle Master / Land / Four Elements string-key triple.
+  - Maverick legality now recognizes active `feature_spell:maverick:arcane_breakthrough:*` source keys while still tolerating both historical source-key spell rows; the older `MAVERICK_BREAKTHROUGH_SOURCE_FEATURE_KEY` constant was removed, and `MAVERICK_ARCANE_BREAKTHROUGH_SOURCE_KEY` is owned by the rule-handler registry.
+  - Feature option definition, infusion, combat derivation, spell route, and legality code now consume the registry helpers where they previously read raw custom-rule metadata or source keys inline.
+  - Verified on 2026-05-25 with `node --import tsx --test test/fail-closed-8b.test.ts test/slice-8c-rule-handlers.test.ts test/maverick-8c.test.ts`, `node --import tsx --test test/feature-grants.test.ts test/legality-engine.test.ts test/level-up-flow.test.ts test/creation-step-selections.test.ts test/fail-closed-8b.test.ts test/slice-8c-rule-handlers.test.ts test/maverick-8c.test.ts`, `npm test`, and `node node_modules/next/dist/bin/next build`.
+
+**Slice 8d — Authenticated screenshot smoke**
+
+- Goal: turn the Batch 7 visual QA notes into a repeatable screenshot smoke path, on top of the corrected error states from Slices 8b/8c.
 - Deliver:
   - screenshot smoke coverage for setup/login, character creation, character sheet, level-up entry, DM review, and content admin
   - stable fixture state using the Batch 7 demo seed path
@@ -2132,65 +2203,35 @@ The post-Batch-7 review found several issues that are easiest to fix before or d
   - existing `test/ui-polish-conventions.test.ts`
 - Acceptance:
   - Authenticated screenshot smoke can be rerun without manual route-by-route reconstruction
+  - smoke captures the corrected error/empty distinctions from Slice 8b rather than baseline silent-empty pickers
 
-**Slice 8c — Fail-closed source, loader, and snapshot errors**
+**Slice 8e — Behavior-preserving module split: `derived.ts`, with HP history fix**
 
-- Goal: close the review-found error-handling seams before more UI or derivation code is built on top of partial data.
-- Deliver:
-  - make campaign source allowlist loading fail closed when Supabase returns an error, including content API routes that call `getAllowedSources`
-  - add relation-error aggregation to `buildCharacterBuildContext` / `buildLegalityInput` equivalent to `loadCharacterState`, so legality and derived output do not silently treat failed relation queries as empty data
-  - make `captureSnapshot` return a typed success/failure result, check the final insert error, and update save/submit/approve routes to handle snapshot failures deliberately
-  - preserve `loadCharacterState` warnings for genuinely missing optional relations while keeping query errors hard failures
-- Verification:
-  - new focused tests for allowlist query failure, build-context relation failure, and snapshot insert failure
-  - character route error-mapping tests
-  - existing route/persistence and Batch 7 regression matrix tests
-- Acceptance:
-  - source filtering never broadens because an allowlist query failed
-  - legality/derived output is not produced from silently partial relation data
-  - snapshot failure either blocks the write response or is returned as an explicit warning according to the route's documented policy
-
-**Slice 8d — Rule-handler registry and existing custom-rule repair**
-
-- Goal: make existing custom rule handling modular enough that the next unusual rules feature has one integration point instead of scattered string-key edits.
-- Deliver:
-  - introduce a small registry/adapter layer for existing feature-option and feature-spell handlers, starting with fighting styles, Battle Master maneuvers, Hunter choices, Circle of the Land terrain, Four Elements disciplines, Artificer infusions, Dragonborn ancestry, High Elf cantrip, feat spells, and Maverick feature spells
-  - move repeated "active custom option group" filtering out of `CharacterNewForm.tsx`, `LevelUpWizard.tsx`, and `CharacterSheet.tsx` into shared helpers
-  - repair Maverick Arcane Breakthrough legality so it recognizes `feature_spell:maverick:arcane_breakthrough:*` rows and still tolerates legacy source keys where existing characters need it
-  - add typed helper guards for known `feature_options.prerequisites` and `effects` shapes rather than reading arbitrary records inline
-- Verification:
-  - feature-grants tests for registry output parity
-  - legality tests proving Maverick Breakthrough spell levels/counts are checked for the active `feature_spell:maverick:arcane_breakthrough:*` source keys
-  - creation and level-up flow tests covering active custom-option cleanup
-- Acceptance:
-  - existing custom feature options and feature spells behave unchanged except for the Maverick legality bug fix
-  - adding a future custom option family requires a new handler plus tests, not audits across creation, level-up, sheet save, derived combat, and legality files
-
-**Slice 8e — Finish remaining behavior-preserving module splits: `derived.ts`**
-
-- Goal: split `src/lib/characters/derived.ts` without changing derived character behavior.
+- Goal: split `src/lib/characters/derived.ts` and route HP history through the per-level rows the schema already has.
 - Deliver:
   - focused helper modules for ability/AC, spellcasting, equipment, history, features, and presentation-ready summaries where the existing code naturally allows it
-  - move HP estimation and recorded-roll display onto per-level `character_class_levels` data rather than one aggregate `hpRoll` per class
+  - HP estimation and recorded-roll display now consume `character_class_levels` directly. Replace the implicit "index === 0 → starting class → max HP" heuristic with `taken_at`-min identification across all class-level rows.
+  - decide deliberately whether `character_hp_rolls` (Slice 3m fallback) stays wired in or is deleted; do not leave it dead from derivation's perspective.
   - keep static proficiency rules and AC alternatives behind focused helper modules so future class/species/feat rules do not inflate the core derived file
   - stable public exports for callers
   - structural regression test mirroring the Slice 7g split tests
 - Verification:
   - derived-character tests
-  - HP history tests using at least one multiclass build with multiple same-class levels
+  - HP history tests against multi-level same-class and multiclass fixtures with multiple recorded rolls
   - legality tests that consume derived output
   - Batch 7 regression matrix
 - Acceptance:
-  - no user-facing behavior changes; the module becomes easier to edit because responsibilities are separated
+  - no user-facing behavior changes; HP estimation accumulates across same-class levels rather than inferring all-but-one; the module becomes easier to edit because responsibilities are separated
+  - the `character_hp_rolls` decision is recorded and acted on, not deferred again
 
-**Slice 8f — Finish remaining behavior-preserving module splits: `CharacterSheet.tsx`**
+**Slice 8f — Behavior-preserving module split: `CharacterSheet.tsx`**
 
 - Goal: split `src/components/character-sheet/CharacterSheet.tsx` without changing the sheet UI contract.
 - Deliver:
-  - extracted content-loading hook or helper with typed loading/error states for species, backgrounds, classes, feats, language/tool catalogs, armor/shields, feature options, and feature-spell grants
+  - extracted content-loading hook consuming the Slice 8b `fetchContent` helper, with typed loading/error states for species, backgrounds, classes, feats, language/tool catalogs, armor/shields, feature options, and feature-spell grants
   - visible retry/error state for failed content fetches rather than silently rendering empty pickers
   - extracted save-payload builder for the sheet so feature-option, spell, feat, language/tool, and provenance serialization can be tested outside the component
-  - extracted sheet sections or view helpers for the largest repeated blocks
+  - extracted sheet sections or view helpers along existing rendered card boundaries (no UI redesign)
   - stable focus/collapse behavior and no nested-card regression
   - structural regression test for the split surface
 - Verification:
@@ -2219,7 +2260,7 @@ The post-Batch-7 review found several issues that are easiest to fix before or d
 - Deliver:
   - small visual/content refinements on dashboard and campaign-selection surfaces
   - no new hero/marketing treatment
-  - screenshots or smoke notes from Slice 8b updated if visuals change
+  - screenshots or smoke notes from Slice 8d updated if visuals change
 - Verification:
   - UI polish convention tests
   - authenticated screenshot smoke
@@ -2232,8 +2273,8 @@ The post-Batch-7 review found several issues that are easiest to fix before or d
 - Deliver:
   - table/responsive improvements for `/dm/content`
   - preserve keyboard tab behavior, shared delete confirmation, stable keys, and import-preview copy from 7f
-  - move `src/app/api/content/sources/route.ts` onto strict create/update/delete schemas consistent with the other admin content routes, or document a deliberate exception with tests
-  - add user-facing validation copy for known feature-option prerequisite/effect shapes so admins can tell when custom handler metadata is malformed
+  - move `src/app/api/content/sources/route.ts` onto strict create/update/delete zod schemas in `src/lib/content/admin-schemas.ts`, consistent with the other admin content routes; reject unknown keys
+  - add user-facing validation copy for known feature-option `prerequisites` / `effects` shapes (typed guards from Slice 8c) so admins can tell when custom handler metadata is malformed
 - Verification:
   - `test/batch-7-usability-copy.test.ts`
   - `test/ui-polish-conventions.test.ts`
@@ -2248,9 +2289,10 @@ The post-Batch-7 review found several issues that are easiest to fix before or d
 - Goal: close the post-Batch-7 residual batch and decide whether the next work should be rules/content expansion or deeper UI/product polish.
 - Deliver:
   - `output/batch-8-closeout-audit.md`
-  - updated `Current Status`
+  - updated `Current Status` and Batch 9 entry notes in this roadmap
   - verification summary
   - residuals with owner/date/reason
+  - correct the lingering `src/lib/character-creation/...` path references in the Batch 7 closeout audit and any other doc that still names that path
 - Verification:
   - `npm test`
   - `npm run build`
@@ -2262,10 +2304,10 @@ The post-Batch-7 review found several issues that are easiest to fix before or d
 ### Suggested Order
 
 1. 8a: doctor and local environment alignment.
-2. 8b: authenticated screenshot smoke.
-3. 8c: fail-closed source, loader, and snapshot errors.
-4. 8d: rule-handler registry and existing custom-rule repair.
-5. 8e: split `derived.ts`.
+2. 8b: fail-closed source, loader, snapshot, and client-fetch errors.
+3. 8c: rule-handler registry and existing custom-rule repair.
+4. 8d: authenticated screenshot smoke.
+5. 8e: split `derived.ts` with HP history fix.
 6. 8f: split `CharacterSheet.tsx`.
 7. 8g: magic-link email branding provider configuration.
 8. 8h: dashboard and campaign-selection warmth pass.
@@ -2274,14 +2316,119 @@ The post-Batch-7 review found several issues that are easiest to fix before or d
 
 ### Exit Criteria
 
-- `npm run doctor` is either passing or has only a credential/provider blocker recorded with owner/date/reason.
-- Authenticated screenshot smoke exists for the Batch 7 QA surfaces.
-- Source allowlist, build-context/legality loading, and snapshot capture fail explicitly instead of silently widening filters or producing partial derived output.
-- Existing custom rule handling has a registry/adapter seam, and Maverick Arcane Breakthrough spell legality recognizes the active feature-spell source keys.
-- `derived.ts` and `CharacterSheet.tsx` have behavior-preserving splits guarded by tests, including HP history coverage over per-level class rows and sheet content-fetch error states.
+- `npm run doctor` is either passing or has only a credential/provider blocker recorded with owner/date/reason; `.nvmrc`, doctor, and setup docs all agree on Node 24.x.
+- Authenticated screenshot smoke exists for the Batch 7 QA surfaces and reflects the corrected error states from Slice 8b.
+- Source allowlist, build-context/legality loading, snapshot capture, and client-side content fetches fail explicitly instead of silently widening filters, producing partial derived output, masking missing audit snapshots, or rendering empty pickers.
+- Existing custom rule handling has a registry/adapter seam, Maverick Arcane Breakthrough spell legality recognizes the active feature-spell source keys, and exactly one Maverick source-key constant survives.
+- `derived.ts` and `CharacterSheet.tsx` have behavior-preserving splits guarded by tests, including HP history coverage over per-level class rows and sheet content-fetch error states. The `character_hp_rolls` decision is recorded.
 - The magic-link email branding finding is resolved or handed off to the exact provider configuration owner.
 - Dashboard/campaign and content-admin deferred UX findings are either fixed or deliberately re-scoped with evidence.
 - Source admin writes and known feature-option metadata shapes are validated or have explicit documented exceptions.
+
+## Batch 9: Direction Decision and Wizard-Side Hardening (initial outline)
+
+### Status
+
+Provisional. This outline exists so Batch 8 can hand off cleanly; the slice list will firm up after the Batch 8 closeout (Slice 8j) records the actual residuals and after a short direction-decision pass at the start of Batch 9.
+
+### Objective
+
+Pick the next product direction deliberately rather than letting it drift, and use the same batch to harden the remaining wizard-side load-bearing components — which Batch 8 explicitly deferred — under the discipline of behavior-preserving splits already proven by Slice 7g and Slices 8e/8f.
+
+### Why
+
+By the end of Batch 8 the app has:
+
+- a trustworthy derivation/legality pipeline with fail-closed error handling
+- behavior-preserving splits across every load-bearing service module and the character sheet
+- repeatable authenticated screenshot smoke and a stable demo path
+- a registry/adapter seam for custom rule handling
+
+Three load-bearing surfaces remain that Batch 8 deliberately did not split: `CharacterNewForm.tsx` (~3050 lines), `LevelUpWizard.tsx` (~2100 lines), and the broader question of what the app should become next. The first two are easier to split now that Slice 8c has consolidated the custom-rule string-keys they share. The third has been implicit in the roadmap since Batch 7 closed and should be made explicit before slice work begins, so Batch 9 does not collapse into another "general hardening" loop.
+
+### Direction Decision
+
+Batch 9's first task is to choose between (or deliberately combine) the candidate directions below. Each is a real next step the current codebase supports; the purpose of the decision is to avoid building toward all three at once.
+
+1. **Real-play feature surface.** Party view, DM live sheet view, encounter / initiative tracker, condition tracking, simple combat-time helpers for the trait/feature mechanics already surfaced descriptively (Vigilant Guardian, Fury of the Small, Battle Master maneuvers, etc.). The natural follow-on to Batch 5/5.5/7 making the sheet usable: now make the *table* usable. Best when the immediate goal is to actually run a game with the app.
+2. **2024 ruleset support.** The schema already tags `rule_set: '2014' | '2024'` and the legality engine accepts a ruleset, but no 2024 mechanics path has been built. This would be the largest scope of the three: new species/class/background/spell content, new ability-bonus and feat-slot rules, new subclass timing, and a campaign-side ruleset switch with regression coverage. Best when the goal is broader rules coverage rather than table-time use.
+3. **Content expansion (Tasha's, Xanathar's, MotM).** Batch 6 made content maintainable; Batch Eberron proved the import/regression-matrix model works. This direction leverages the importer to add another sourcebook without expanding the rules engine. Best when the goal is more characters that build correctly, not new app surfaces.
+
+A short Slice 9-direction note (`output/batch-9-direction-decision.md`) should record which direction is chosen, what was rejected, and why. The wizard-side splits below are common to all three and stay in scope regardless.
+
+### Carry-ins from Batch 8
+
+These are the explicit residuals Batch 8 hands forward:
+
+- behavior-preserving split for `src/app/characters/new/CharacterNewForm.tsx`
+- behavior-preserving split for `src/app/characters/[id]/LevelUpWizard.tsx`
+- any unresolved direction-decision items recorded in the Batch 8 closeout
+- any content-admin or dashboard polish items not closed by Slices 8h/8i
+- the `character_hp_rolls` decision if Slice 8e deferred it instead of acting
+
+The Batch 8 closeout audit may add to this list; treat that as authoritative when Batch 9 actually opens.
+
+### Provisional Scope
+
+In:
+
+- direction-decision pass and the chosen direction's first vertical slice
+- wizard-side module splits (carry-in)
+- Batch 8 closeout residuals (carry-in)
+- regression coverage equivalent to the Slice 7g/8e/8f structural-test pattern for any newly split surface
+
+Out (until the direction is chosen):
+
+- new content families before the chosen direction calls for them
+- combat-time automation outside the chosen direction's scope
+- broad app-shell redesign
+- any new schema work that the direction decision does not justify
+
+### Provisional Slices
+
+These are placeholders. They will be rewritten after Slice 9a's direction decision lands, except for 9b/9c which apply regardless.
+
+**Slice 9a — Direction decision and Batch 9 entry plan**
+
+- pick the primary direction, record the rejected alternatives, and rewrite the rest of the Batch 9 slice list against the choice
+- carry the Batch 8 closeout residual list into Batch 9 explicitly
+- acceptance: `output/batch-9-direction-decision.md` exists, this section's Provisional Slices below are replaced with concrete slices, and the rest of Batch 9 is no longer provisional
+
+**Slice 9b — Behavior-preserving module split: `CharacterNewForm.tsx`**
+
+- split the creation wizard along step boundaries and shared primitives, consuming the Slice 8c registry and the Slice 8b `fetchContent` helper
+- preserve resumable-draft behavior, step-completion logic, and stat-roll/abort safety from Batch 4.5
+- acceptance: structural regression tests in the Slice 7g/8e/8f style; no creation flow behavior change; the file is small enough that the next feature edit lands safely
+
+**Slice 9c — Behavior-preserving module split: `LevelUpWizard.tsx`**
+
+- split the level-up wizard along step boundaries, consuming the Slice 8c registry and any newly stable build-context primitives from 8e
+- preserve additive save semantics, optimistic-lock token handling, and inline stale-state recovery from Batches 4.5 / 7UserTest1 / 7UserTest2
+- acceptance: structural regression tests; no level-up behavior change
+
+**Slice 9d+ — direction-specific work**
+
+- to be written after Slice 9a; will likely include a real-play surface, a 2024-ruleset vertical slice, or an additional sourcebook import depending on the decision
+
+**Slice 9z — Batch 9 closeout gate**
+
+- `output/batch-9-closeout-audit.md`, updated Current Status, residuals with owner/date/reason
+- acceptance: the chosen direction's first vertical slice is in production-ready shape and the wizard splits are pinned by tests
+
+### Risks
+
+- Skipping Slice 9a and starting on the wizard splits will produce a batch with no narrative; the splits are necessary but not sufficient to call Batch 9 a coherent step forward.
+- Choosing direction (1) without screenshot smoke for the new play-time surfaces will repeat the Batch 7 trust-evidence problem.
+- Choosing direction (2) without a 2014/2024 fixture-based regression matrix will let the existing 2014 builds drift silently as 2024 logic lands.
+- Choosing direction (3) without carrying forward Batch Eberron's "audit → add → regression matrix" rhythm will reintroduce the partial-content drift Batch 6 closed.
+- The wizard splits have the same hidden-state risk as the Slice 7g splits did; rely on the regression matrix and structural tests rather than visual judgment.
+
+### Provisional Exit Criteria
+
+- A direction-decision artifact exists and the rest of Batch 9 is shaped against it.
+- `CharacterNewForm.tsx` and `LevelUpWizard.tsx` have behavior-preserving splits with structural regression tests.
+- The chosen direction's first vertical slice is shipped with regression coverage proportionate to the Slice 7g / Batch 8 standard.
+- Batch 8 residuals are closed or have explicit owner/date/reason.
 
 ## Implementation Strategy for Codex
 
