@@ -33,6 +33,10 @@ test('character edit clients send the current updated_at token on PUT', () => {
     path.join(process.cwd(), 'src/components/character-sheet/CharacterSheet.tsx'),
     'utf8'
   )
+  const sheetPayloadSource = fs.readFileSync(
+    path.join(process.cwd(), 'src/components/character-sheet/sheet-save-payload.ts'),
+    'utf8'
+  )
   const levelUpSource = fs.readFileSync(
     path.join(process.cwd(), 'src/app/characters/[id]/LevelUpWizard.tsx'),
     'utf8'
@@ -42,7 +46,8 @@ test('character edit clients send the current updated_at token on PUT', () => {
     'utf8'
   )
 
-  assert.match(sheetSource, /expected_updated_at: updatedAt/)
+  assert.match(sheetSource, /expectedUpdatedAt: updatedAt/)
+  assert.match(sheetPayloadSource, /expected_updated_at: args\.expectedUpdatedAt/)
   assert.match(levelUpSource, /expected_updated_at: character\.updated_at/)
   assert.match(newFormSource, /expected_updated_at: characterUpdatedAt/)
 })

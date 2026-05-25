@@ -1,6 +1,6 @@
 'use client'
 
-import { Children, Fragment, useState, useEffect, useCallback, type KeyboardEvent } from 'react'
+import { useState, useEffect, useCallback, type KeyboardEvent, type ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
@@ -545,44 +545,125 @@ function resolvePackagePreviewRows(
 // ── Table column helpers ───────────────────────────────────
 
 function renderTableHead(tab: string) {
-  if (tab === 'backgrounds') return <><TableHead>Name</TableHead><TableHead>Skills</TableHead><TableHead>Source</TableHead></>
-  if (tab === 'species') return <><TableHead>Name</TableHead><TableHead>Variant</TableHead><TableHead>Lineage</TableHead><TableHead>Source</TableHead></>
-  if (tab === 'classes') return <><TableHead>Name</TableHead><TableHead>Hit Die</TableHead><TableHead>Spellcaster</TableHead><TableHead>Source</TableHead></>
-  if (tab === 'subclasses') return <><TableHead>Name</TableHead><TableHead>Class</TableHead><TableHead>Level</TableHead><TableHead>Source</TableHead></>
-  if (tab === 'spells') return <><TableHead>Name</TableHead><TableHead>Level</TableHead><TableHead>School</TableHead><TableHead>Source</TableHead></>
-  if (tab === 'feats') return <><TableHead>Name</TableHead><TableHead>Source</TableHead></>
-  if (tab === 'sources') return <><TableHead>Key</TableHead><TableHead>Full Name</TableHead><TableHead>Rule Set</TableHead></>
-  if (tab === 'languages' || tab === 'tools') return <><TableHead>Name</TableHead><TableHead>Key</TableHead><TableHead>Order</TableHead><TableHead>Source</TableHead></>
-  if (tab === 'feature-option-groups') return <><TableHead>Name</TableHead><TableHead>Family</TableHead><TableHead>Limit</TableHead><TableHead>Source</TableHead></>
-  if (tab === 'feature-options') return <><TableHead>Name</TableHead><TableHead>Group</TableHead><TableHead>Order</TableHead><TableHead>Source</TableHead></>
-  if (tab === 'equipment-items') return <><TableHead>Name</TableHead><TableHead>Category</TableHead><TableHead>Cost</TableHead><TableHead>Source</TableHead></>
-  if (tab === 'weapons') return <><TableHead>Name</TableHead><TableHead>Category</TableHead><TableHead>Damage</TableHead><TableHead>Properties</TableHead></>
-  if (tab === 'armor') return <><TableHead>Name</TableHead><TableHead>Category</TableHead><TableHead>AC</TableHead><TableHead>Source</TableHead></>
-  if (tab === 'shields') return <><TableHead>Name</TableHead><TableHead>AC Bonus</TableHead><TableHead>Weight</TableHead><TableHead>Source</TableHead></>
-  if (tab === 'starting-equipment-packages') return <><TableHead>Name</TableHead><TableHead>Items</TableHead><TableHead>Source</TableHead></>
+  if (tab === 'backgrounds') return [headCell('name', 'Name'), headCell('skills', 'Skills'), headCell('source', 'Source')]
+  if (tab === 'species') return [headCell('name', 'Name'), headCell('variant', 'Variant'), headCell('lineage', 'Lineage'), headCell('source', 'Source')]
+  if (tab === 'classes') return [headCell('name', 'Name'), headCell('hit-die', 'Hit Die'), headCell('spellcaster', 'Spellcaster'), headCell('source', 'Source')]
+  if (tab === 'subclasses') return [headCell('name', 'Name'), headCell('class', 'Class'), headCell('level', 'Level'), headCell('source', 'Source')]
+  if (tab === 'spells') return [headCell('name', 'Name'), headCell('level', 'Level'), headCell('school', 'School'), headCell('source', 'Source')]
+  if (tab === 'feats') return [headCell('name', 'Name'), headCell('source', 'Source')]
+  if (tab === 'sources') return [headCell('key', 'Key'), headCell('full-name', 'Full Name'), headCell('rule-set', 'Rule Set')]
+  if (tab === 'languages' || tab === 'tools') return [headCell('name', 'Name'), headCell('key', 'Key'), headCell('order', 'Order'), headCell('source', 'Source')]
+  if (tab === 'feature-option-groups') return [headCell('name', 'Name'), headCell('family', 'Family'), headCell('limit', 'Limit'), headCell('source', 'Source')]
+  if (tab === 'feature-options') return [headCell('name', 'Name'), headCell('group', 'Group'), headCell('order', 'Order'), headCell('source', 'Source')]
+  if (tab === 'equipment-items') return [headCell('name', 'Name'), headCell('category', 'Category'), headCell('cost', 'Cost'), headCell('source', 'Source')]
+  if (tab === 'weapons') return [headCell('name', 'Name'), headCell('category', 'Category'), headCell('damage', 'Damage'), headCell('properties', 'Properties')]
+  if (tab === 'armor') return [headCell('name', 'Name'), headCell('category', 'Category'), headCell('ac', 'AC'), headCell('source', 'Source')]
+  if (tab === 'shields') return [headCell('name', 'Name'), headCell('ac-bonus', 'AC Bonus'), headCell('weight', 'Weight'), headCell('source', 'Source')]
+  if (tab === 'starting-equipment-packages') return [headCell('name', 'Name'), headCell('items', 'Items'), headCell('source', 'Source')]
   return null
 }
 
+function headCell(key: string, children: ReactNode) {
+  return <TableHead key={key}>{children}</TableHead>
+}
+
 function renderTableCells(tab: string, item: ContentItem, classes: ClassRow[]) {
-  if (tab === 'backgrounds') return <><TableCell className="font-medium">{item.name as string}</TableCell><TableCell className="text-neutral-400 text-sm">{((item.skill_proficiencies as string[]) ?? []).join(', ') || '—'}</TableCell><TableCell className="text-neutral-400 text-sm">{item.source as string}</TableCell></>
-  if (tab === 'species') return <><TableCell className="font-medium">{item.name as string}</TableCell><TableCell className="text-neutral-400 text-sm capitalize">{((item.variant_type as string) || 'base').replaceAll('_', ' ')}</TableCell><TableCell className="text-neutral-400 text-sm">{(item.lineage_key as string) || '—'}</TableCell><TableCell className="text-neutral-400 text-sm">{item.source as string}</TableCell></>
-  if (tab === 'classes') { const st = item.spellcasting_type as string | null; return <><TableCell className="font-medium">{item.name as string}</TableCell><TableCell className="text-neutral-400 text-sm">d{item.hit_die as number}</TableCell><TableCell className="text-neutral-400 text-sm">{st && st !== 'none' ? st : '—'}</TableCell><TableCell className="text-neutral-400 text-sm">{item.source as string}</TableCell></> }
+  if (tab === 'backgrounds') return [
+    contentCell('name', item.name as string, 'font-medium'),
+    contentCell('skills', ((item.skill_proficiencies as string[]) ?? []).join(', ') || '—'),
+    contentCell('source', item.source as string),
+  ]
+  if (tab === 'species') return [
+    contentCell('name', item.name as string, 'font-medium'),
+    contentCell('variant', ((item.variant_type as string) || 'base').replaceAll('_', ' '), 'text-neutral-400 text-sm capitalize'),
+    contentCell('lineage', (item.lineage_key as string) || '—'),
+    contentCell('source', item.source as string),
+  ]
+  if (tab === 'classes') {
+    const st = item.spellcasting_type as string | null
+    return [
+      contentCell('name', item.name as string, 'font-medium'),
+      contentCell('hit-die', `d${item.hit_die as number}`),
+      contentCell('spellcaster', st && st !== 'none' ? st : '—'),
+      contentCell('source', item.source as string),
+    ]
+  }
   if (tab === 'subclasses') {
     const cls = classes.find(c => c.id === item.class_id)
-    return <><TableCell className="font-medium">{item.name as string}</TableCell><TableCell className="text-neutral-400 text-sm">{cls?.name ?? '—'}</TableCell><TableCell className="text-neutral-400 text-sm">{cls?.subclass_choice_level ?? '—'}</TableCell><TableCell className="text-neutral-400 text-sm">{item.source as string}</TableCell></>
+    return [
+      contentCell('name', item.name as string, 'font-medium'),
+      contentCell('class', cls?.name ?? '—'),
+      contentCell('level', cls?.subclass_choice_level ?? '—'),
+      contentCell('source', item.source as string),
+    ]
   }
-  if (tab === 'spells') return <><TableCell className="font-medium">{item.name as string}</TableCell><TableCell className="text-neutral-400 text-sm">{LEVEL_LABELS[item.level as number]}</TableCell><TableCell className="text-neutral-400 text-sm">{item.school as string}</TableCell><TableCell className="text-neutral-400 text-sm">{item.source as string}</TableCell></>
-  if (tab === 'feats') return <><TableCell className="font-medium">{item.name as string}</TableCell><TableCell className="text-neutral-400 text-sm">{item.source as string}</TableCell></>
-  if (tab === 'sources') return <><TableCell className="font-medium font-mono">{item.key as string}</TableCell><TableCell className="text-neutral-400 text-sm">{item.full_name as string}</TableCell><TableCell className="text-neutral-400 text-sm">{item.rule_set as string}</TableCell></>
-  if (tab === 'languages' || tab === 'tools') return <><TableCell className="font-medium">{item.name as string}</TableCell><TableCell className="text-neutral-400 text-sm font-mono">{item.key as string}</TableCell><TableCell className="text-neutral-400 text-sm">{item.sort_order as number}</TableCell><TableCell className="text-neutral-400 text-sm">{item.source as string}</TableCell></>
-  if (tab === 'feature-option-groups') return <><TableCell className="font-medium">{item.name as string}</TableCell><TableCell className="text-neutral-400 text-sm">{item.option_family as string}</TableCell><TableCell className="text-neutral-400 text-sm">{item.selection_limit as number}</TableCell><TableCell className="text-neutral-400 text-sm">{item.source as string}</TableCell></>
-  if (tab === 'feature-options') return <><TableCell className="font-medium">{item.name as string}</TableCell><TableCell className="text-neutral-400 text-sm font-mono">{item.group_key as string}</TableCell><TableCell className="text-neutral-400 text-sm">{item.option_order as number}</TableCell><TableCell className="text-neutral-400 text-sm">{item.source as string}</TableCell></>
-  if (tab === 'equipment-items') return <><TableCell className="font-medium">{item.name as string}</TableCell><TableCell className="text-neutral-400 text-sm capitalize">{String(item.item_category ?? '—')}</TableCell><TableCell className="text-neutral-400 text-sm">{item.cost_quantity as number} {item.cost_unit as string}</TableCell><TableCell className="text-neutral-400 text-sm">{item.source as string}</TableCell></>
-  if (tab === 'weapons') return <><TableCell className="font-medium">{item.name as string}</TableCell><TableCell className="text-neutral-400 text-sm capitalize">{item.weapon_category as string} {item.weapon_kind as string}</TableCell><TableCell className="text-neutral-400 text-sm">{item.damage_dice as string} {(item.damage_type as string) === 'none' ? '' : item.damage_type as string}</TableCell><TableCell className="text-neutral-400 text-sm">{((item.properties as string[]) ?? []).join(', ') || '—'}</TableCell></>
-  if (tab === 'armor') return <><TableCell className="font-medium">{item.name as string}</TableCell><TableCell className="text-neutral-400 text-sm capitalize">{item.armor_category as string}</TableCell><TableCell className="text-neutral-400 text-sm">{item.base_ac as number}{item.dex_bonus_cap == null ? ' + DEX' : item.dex_bonus_cap === 0 ? '' : ` + DEX (max ${item.dex_bonus_cap as number})`}</TableCell><TableCell className="text-neutral-400 text-sm">{item.source as string}</TableCell></>
-  if (tab === 'shields') return <><TableCell className="font-medium">{item.name as string}</TableCell><TableCell className="text-neutral-400 text-sm">+{item.armor_class_bonus as number}</TableCell><TableCell className="text-neutral-400 text-sm">{item.weight_lb as number} lb</TableCell><TableCell className="text-neutral-400 text-sm">{item.source as string}</TableCell></>
-  if (tab === 'starting-equipment-packages') return <><TableCell className="font-medium">{item.name as string}</TableCell><TableCell className="text-neutral-400 text-sm">{((item.items as Array<{ item_name: string; quantity: number }> | undefined) ?? []).map((entry) => `${entry.quantity}x ${entry.item_name}`).join(', ') || '—'}</TableCell><TableCell className="text-neutral-400 text-sm">{item.source as string}</TableCell></>
+  if (tab === 'spells') return [
+    contentCell('name', item.name as string, 'font-medium'),
+    contentCell('level', LEVEL_LABELS[item.level as number]),
+    contentCell('school', item.school as string),
+    contentCell('source', item.source as string),
+  ]
+  if (tab === 'feats') return [
+    contentCell('name', item.name as string, 'font-medium'),
+    contentCell('source', item.source as string),
+  ]
+  if (tab === 'sources') return [
+    contentCell('key', item.key as string, 'font-medium font-mono'),
+    contentCell('full-name', item.full_name as string),
+    contentCell('rule-set', item.rule_set as string),
+  ]
+  if (tab === 'languages' || tab === 'tools') return [
+    contentCell('name', item.name as string, 'font-medium'),
+    contentCell('key', item.key as string, 'text-neutral-400 text-sm font-mono'),
+    contentCell('order', item.sort_order as number),
+    contentCell('source', item.source as string),
+  ]
+  if (tab === 'feature-option-groups') return [
+    contentCell('name', item.name as string, 'font-medium'),
+    contentCell('family', item.option_family as string),
+    contentCell('limit', item.selection_limit as number),
+    contentCell('source', item.source as string),
+  ]
+  if (tab === 'feature-options') return [
+    contentCell('name', item.name as string, 'font-medium'),
+    contentCell('group', item.group_key as string, 'text-neutral-400 text-sm font-mono'),
+    contentCell('order', item.option_order as number),
+    contentCell('source', item.source as string),
+  ]
+  if (tab === 'equipment-items') return [
+    contentCell('name', item.name as string, 'font-medium'),
+    contentCell('category', String(item.item_category ?? '—'), 'text-neutral-400 text-sm capitalize'),
+    contentCell('cost', `${item.cost_quantity as number} ${item.cost_unit as string}`),
+    contentCell('source', item.source as string),
+  ]
+  if (tab === 'weapons') return [
+    contentCell('name', item.name as string, 'font-medium'),
+    contentCell('category', `${item.weapon_category as string} ${item.weapon_kind as string}`, 'text-neutral-400 text-sm capitalize'),
+    contentCell('damage', `${item.damage_dice as string} ${(item.damage_type as string) === 'none' ? '' : item.damage_type as string}`),
+    contentCell('properties', ((item.properties as string[]) ?? []).join(', ') || '—'),
+  ]
+  if (tab === 'armor') return [
+    contentCell('name', item.name as string, 'font-medium'),
+    contentCell('category', item.armor_category as string, 'text-neutral-400 text-sm capitalize'),
+    contentCell('ac', <>{item.base_ac as number}{item.dex_bonus_cap == null ? ' + DEX' : item.dex_bonus_cap === 0 ? '' : ` + DEX (max ${item.dex_bonus_cap as number})`}</>),
+    contentCell('source', item.source as string),
+  ]
+  if (tab === 'shields') return [
+    contentCell('name', item.name as string, 'font-medium'),
+    contentCell('ac-bonus', `+${item.armor_class_bonus as number}`),
+    contentCell('weight', `${item.weight_lb as number} lb`),
+    contentCell('source', item.source as string),
+  ]
+  if (tab === 'starting-equipment-packages') return [
+    contentCell('name', item.name as string, 'font-medium'),
+    contentCell('items', ((item.items as Array<{ item_name: string; quantity: number }> | undefined) ?? []).map((entry) => `${entry.quantity}x ${entry.item_name}`).join(', ') || '—'),
+    contentCell('source', item.source as string),
+  ]
   return null
+}
+
+function contentCell(key: string, children: ReactNode, className = 'text-neutral-400 text-sm') {
+  return <TableCell key={key} className={className}>{children}</TableCell>
 }
 
 // ── Form renderer ──────────────────────────────────────────
@@ -1908,103 +1989,105 @@ export default function ContentAdmin() {
 
       {TABS.map(tab => (
         <TabsContent key={tab} value={tab} className="mt-0 space-y-4">
-          {showForm && activeTab === tab && (
-            <div className="rounded-lg border border-white/10 bg-white/[0.04] p-5 space-y-4">
-              <h3 className="text-base font-semibold text-neutral-100">
-                {editingId ? 'Edit' : 'Add'} {tabLabel(tab)}
-              </h3>
-              <ContentForm
-                tab={tab}
-                form={form}
-                setField={setField}
-                classes={classes}
-                sources={sources}
-                feats={feats}
-                equipmentItems={equipmentItems}
-                startingPackages={startingPackages}
-                speciesRows={speciesRows}
-                featureOptionGroups={featureOptionGroups}
-                autoFocusFirst={!editingId}
-              />
-              {error && <p className="text-sm text-red-400">{error}</p>}
-              {validationPreview && (
-                <details className="surface-section">
-                  <summary className="cursor-pointer text-sm font-medium text-neutral-200">
-                    Validation preview
-                  </summary>
-                  {validationPreview.ok ? (
-                    <p className="mt-3 text-sm text-emerald-300">Ready to save.</p>
-                  ) : (
-                    <div className="mt-3 space-y-2">
-                      {validationPreview.errors.map((finding) => (
-                        <div key={`${finding.table}-${finding.entityKey}-${finding.code}`} className="surface-row p-3">
-                          <p className="text-sm font-medium text-neutral-100">{finding.table}: {finding.entityKey}</p>
-                          <p className="text-xs text-neutral-400">{finding.message}</p>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </details>
-              )}
-              <div className="flex gap-2">
-                <Button size="sm" variant="outline" type="button" onClick={() => previewValidation()} disabled={saving}>
-                  Preview
-                </Button>
-                <Button size="sm" onClick={save} disabled={saving}>
-                  {saving ? 'Saving…' : 'Save'}
-                </Button>
-                <Button size="sm" variant="outline" onClick={cancel}>
-                  Cancel
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {items.length === 0 ? (
-            <p className="text-neutral-500 text-sm">No {tab} yet.</p>
-          ) : (
-            <div className="overflow-hidden rounded-lg border border-white/10 bg-white/[0.03]">
-              <Table className="table-fixed">
-                <TableHeader>
-                  <TableRow className="hover:bg-transparent">
-                    {renderTableHead(tab)}
-                    {!READ_ONLY_TABS.has(tab) && <TableHead className="w-24" />}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {items.map(item => {
-                    const itemKey = getItemIdentifier(tab, item)
-                    return (
-                      <TableRow key={itemKey}>
-                        {Children.toArray(renderTableCells(tab, item, classes)).map((cell, cellIndex) => (
-                          <Fragment key={`${itemKey}:cell:${cellIndex}`}>{cell}</Fragment>
-                        ))}
-                        {!READ_ONLY_TABS.has(tab) && (
-                          <TableCell key={`${itemKey}:actions`}>
-                            <div className="flex gap-1 justify-end">
-                              <Button size="sm" variant="ghost" onClick={() => startEdit(item)} className="h-7 px-2 text-xs">
-                                Edit
-                              </Button>
-                              <ConfirmActionButton
-                                title={`Delete ${tabLabel(tab)}`}
-                                description={`Remove this ${tabLabel(tab)} from the content library. This cannot be undone.`}
-                                triggerLabel="Delete"
-                                confirmLabel="Delete item"
-                                pendingLabel="Deleting..."
-                                onConfirm={() => deleteItem(itemKey)}
-                                variant="ghost"
-                                size="sm"
-                                className="h-7 px-2 text-xs text-red-400 hover:text-red-300"
-                              />
+          {activeTab === tab && (
+            <>
+              {showForm && (
+                <div className="rounded-lg border border-white/10 bg-white/[0.04] p-5 space-y-4">
+                  <h3 className="text-base font-semibold text-neutral-100">
+                    {editingId ? 'Edit' : 'Add'} {tabLabel(tab)}
+                  </h3>
+                  <ContentForm
+                    tab={tab}
+                    form={form}
+                    setField={setField}
+                    classes={classes}
+                    sources={sources}
+                    feats={feats}
+                    equipmentItems={equipmentItems}
+                    startingPackages={startingPackages}
+                    speciesRows={speciesRows}
+                    featureOptionGroups={featureOptionGroups}
+                    autoFocusFirst={!editingId}
+                  />
+                  {error && <p className="text-sm text-red-400">{error}</p>}
+                  {validationPreview && (
+                    <details className="surface-section">
+                      <summary className="cursor-pointer text-sm font-medium text-neutral-200">
+                        Validation preview
+                      </summary>
+                      {validationPreview.ok ? (
+                        <p className="mt-3 text-sm text-emerald-300">Ready to save.</p>
+                      ) : (
+                        <div className="mt-3 space-y-2">
+                          {validationPreview.errors.map((finding) => (
+                            <div key={`${finding.table}-${finding.entityKey}-${finding.code}`} className="surface-row p-3">
+                              <p className="text-sm font-medium text-neutral-100">{finding.table}: {finding.entityKey}</p>
+                              <p className="text-xs text-neutral-400">{finding.message}</p>
                             </div>
-                          </TableCell>
-                        )}
+                          ))}
+                        </div>
+                      )}
+                    </details>
+                  )}
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="outline" type="button" onClick={() => previewValidation()} disabled={saving}>
+                      Preview
+                    </Button>
+                    <Button size="sm" onClick={save} disabled={saving}>
+                      {saving ? 'Saving…' : 'Save'}
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={cancel}>
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {items.length === 0 ? (
+                <p className="text-neutral-500 text-sm">No {tab} yet.</p>
+              ) : (
+                <div className="overflow-hidden rounded-lg border border-white/10 bg-white/[0.03]">
+                  <Table className="table-fixed">
+                    <TableHeader>
+                      <TableRow className="hover:bg-transparent">
+                        {renderTableHead(tab)}
+                        {!READ_ONLY_TABS.has(tab) && <TableHead key="actions" className="w-24" />}
                       </TableRow>
-                    )
-                  })}
-                </TableBody>
-              </Table>
-            </div>
+                    </TableHeader>
+                    <TableBody>
+                      {items.map(item => {
+                        const itemKey = getItemIdentifier(tab, item)
+                        return (
+                          <TableRow key={itemKey}>
+                            {renderTableCells(tab, item, classes)}
+                            {!READ_ONLY_TABS.has(tab) && (
+                              <TableCell key={`${itemKey}:actions`}>
+                                <div className="flex gap-1 justify-end">
+                                  <Button size="sm" variant="ghost" onClick={() => startEdit(item)} className="h-7 px-2 text-xs">
+                                    Edit
+                                  </Button>
+                                  <ConfirmActionButton
+                                    title={`Delete ${tabLabel(tab)}`}
+                                    description={`Remove this ${tabLabel(tab)} from the content library. This cannot be undone.`}
+                                    triggerLabel="Delete"
+                                    confirmLabel="Delete item"
+                                    pendingLabel="Deleting..."
+                                    onConfirm={() => deleteItem(itemKey)}
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 px-2 text-xs text-red-400 hover:text-red-300"
+                                  />
+                                </div>
+                              </TableCell>
+                            )}
+                          </TableRow>
+                        )
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </>
           )}
         </TabsContent>
       ))}

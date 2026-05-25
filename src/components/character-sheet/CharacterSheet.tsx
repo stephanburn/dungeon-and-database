@@ -30,14 +30,11 @@ import { FeatureOptionChoicesCard } from './FeatureOptionChoicesCard'
 import { FeatureSpellChoicesCard } from './FeatureSpellChoicesCard'
 import { CharacterSheetHeader } from './CharacterSheetHeader'
 import { LegalityBadge } from './LegalityBadge'
+import { HitPointsCard } from './HitPointsCard'
 import { SourceTag } from '@/components/shared/SourceTag'
 import { useToast } from '@/hooks/use-toast'
 import {
   buildLocalCharacterContext,
-  buildTypedAsiChoices,
-  buildTypedSpellChoices,
-  buildTypedFeatChoices,
-  buildTypedAbilityBonusChoices,
   buildTypedLanguageChoices,
   buildTypedSkillProficiencies,
   buildTypedToolChoices,
@@ -54,9 +51,13 @@ import {
   type DerivedCharacterCore,
 } from '@/lib/characters/derived'
 import {
+  type SheetContentLevelInput,
+  useSheetContent,
+} from './useSheetContent'
+import { buildSheetSavePayload } from './sheet-save-payload'
+import {
   buildFeatureOptionChoicesFromDefinitionMap,
   buildMaverickFeatureOptionChoices,
-  buildTypedFeatureSpellChoices,
   getFeatureOptionChoiceValue,
   getFightingStyleFeatureOptionDefinition,
   getMaverickArcaneBreakthroughOptionDefinitions,
@@ -69,7 +70,7 @@ import {
   isInteractiveFeatureSpellSourceFeatureKey,
   MAVERICK_ARCANE_BREAKTHROUGH_GROUP_KEY,
 } from '@/lib/characters/feature-grants'
-import { buildTypedFeatSpellChoices, getFeatSpellChoiceDefinitions } from '@/lib/characters/feat-spell-options'
+import { getFeatSpellChoiceDefinitions } from '@/lib/characters/feat-spell-options'
 import {
   ARTIFICER_CLASS_NAME,
   ARTIFICER_INFUSION_GROUP_KEY,
@@ -80,7 +81,6 @@ import type { AsiSelection } from '@/lib/characters/asi-provenance'
 import type { CharacterWithRelations } from '@/lib/characters/load-character'
 import type { FeatureOptionChoiceInput } from '@/lib/characters/choice-persistence'
 import type {
-  Species, Background,
   CharacterFeatureOptionChoice,
   CharacterFeatChoice,
   CharacterEquipmentItem,
@@ -88,18 +88,12 @@ import type {
   CharacterSkillProficiency,
   CharacterSpellSelection,
   CharacterToolChoice,
-  Class, Subclass, Feat, Alignment, StatMethod, AbilityScoreBonus,
+  Feat, Alignment, StatMethod, AbilityScoreBonus,
   Campaign,
-  FeatureOption,
-  FeatureSpellGrant,
-  Language,
-  Tool,
 } from '@/lib/types/database'
-import type { ArmorCatalogEntry, ShieldCatalogEntry } from '@/lib/content/equipment-content'
 import type { LegalityResult } from '@/lib/legality/engine'
 import type { SpellOption } from '@/lib/characters/wizard-helpers'
-import { mergeSpellOptionsStable, replaceSpellOptionsStable } from '@/lib/characters/spell-options'
-import { contentDataOr, fetchContent, fetchContentErrorMessage } from '@/lib/client/fetch-content'
+import { mergeSpellOptionsStable } from '@/lib/characters/spell-options'
 import {
   isLegacyMaverickBreakthroughOptionGroup,
   isSpeciesFeatureOptionGroup,
@@ -667,28 +661,13 @@ export function CharacterSheet({
   const [hpMax, setHpMax] = useState(initial.hp_max)
   const [speciesId, setSpeciesId] = useState<string>(initial.species_id ?? '')
   const [backgroundId, setBackgroundId] = useState<string>(initial.background_id ?? '')
-  const [levels, setLevels] = useState<Array<{ class_id: string; level: number; subclass_id: string | null; hp_roll: number | null }>>
+  const [levels, setLevels] = useState<SheetContentLevelInput[]>
     (initial.character_levels.map((l) => ({
       class_id: l.class_id,
       level: l.level,
       subclass_id: l.subclass_id,
       hp_roll: l.hp_roll,
     })))
-
-  // Content options
-  const [speciesList, setSpeciesList] = useState<Species[]>([])
-  const [backgroundList, setBackgroundList] = useState<Background[]>([])
-  const [classList, setClassList] = useState<Class[]>([])
-  const [subclassMap, setSubclassMap] = useState<Record<string, Subclass[]>>({})
-  const [featList, setFeatList] = useState<Feat[]>([])
-  const [languageList, setLanguageList] = useState<Language[]>([])
-  const [toolList, setToolList] = useState<Tool[]>([])
-  const [armorCatalog, setArmorCatalog] = useState<ArmorCatalogEntry[]>([])
-  const [shieldCatalog, setShieldCatalog] = useState<ShieldCatalogEntry[]>([])
-  const [featureOptionRows, setFeatureOptionRows] = useState<FeatureOption[]>([])
-  const [featureSpellGrants, setFeatureSpellGrants] = useState<FeatureSpellGrant[]>([])
-  const [spellOptions, setSpellOptions] = useState<SpellOption[]>(initialSelectedSpells)
-  const [contentLoadError, setContentLoadError] = useState<string | null>(null)
 
   const [skillProficiencies, setSkillProficiencies] = useState<string[]>(initialSkillProficiencies)
   const [abilityBonusChoices, setAbilityBonusChoices] = useState<SpeciesChoiceAbilityKey[]>(initialAbilityBonusChoices)
@@ -729,6 +708,34 @@ export function CharacterSheet({
       })
     )
   )
+  const maverickBreakthroughClassIds = useMemo(
+    () => getSelectedMaverickBreakthroughClassIds(featureOptionChoices),
+    [featureOptionChoices]
+  )
+  const {
+    speciesList,
+    backgroundList,
+    classList,
+    subclassMap,
+    featList,
+    languageList,
+    toolList,
+    armorCatalog,
+    shieldCatalog,
+    featureOptionRows,
+    featureSpellGrants,
+    spellOptions,
+    setSpellOptions,
+    contentLoadError,
+    contentLoading,
+    retryContentLoad,
+  } = useSheetContent({
+    campaignId,
+    levels,
+    speciesId,
+    initialSelectedSpells,
+    maverickBreakthroughClassIds,
+  })
 
   // UI state
   const [saving, setSaving] = useState(false)
@@ -757,70 +764,6 @@ export function CharacterSheet({
     [initialFeatureOptionChoices]
   )
 
-  // Load content options filtered by campaign allowlist
-  useEffect(() => {
-    const qs = `?campaign_id=${campaignId}`
-    Promise.all([
-      fetchContent<Species[]>(`/api/content/species${qs}`),
-      fetchContent<Background[]>(`/api/content/backgrounds${qs}`),
-      fetchContent<Class[]>(`/api/content/classes${qs}`),
-      fetchContent<Feat[]>(`/api/content/feats${qs}`),
-      fetchContent<Language[]>(`/api/content/languages${qs}`),
-      fetchContent<Tool[]>(`/api/content/tools${qs}`),
-      fetchContent<ArmorCatalogEntry[]>(`/api/content/armor${qs}`),
-      fetchContent<ShieldCatalogEntry[]>(`/api/content/shields${qs}`),
-      fetchContent<FeatureOption[]>(`/api/content/feature-options${qs}`),
-      fetchContent<FeatureSpellGrant[]>(`/api/content/feature-spell-grants${qs}`),
-    ]).then(([s, b, c, f, languages, tools, armor, shields, featureOptions, spellGrants]) => {
-      const loadError = fetchContentErrorMessage([s, b, c, f, languages, tools, armor, shields, featureOptions, spellGrants])
-      if (loadError) {
-        setContentLoadError(loadError)
-        return
-      }
-
-      setContentLoadError(null)
-      setSpeciesList(contentDataOr(s, []))
-      setBackgroundList(contentDataOr(b, []))
-      setClassList(contentDataOr(c, []))
-      setFeatList(contentDataOr(f, []))
-      setLanguageList(contentDataOr(languages, []))
-      setToolList(contentDataOr(tools, []))
-      setArmorCatalog(contentDataOr(armor, []))
-      setShieldCatalog(contentDataOr(shields, []))
-      setFeatureOptionRows(contentDataOr(featureOptions, []))
-      setFeatureSpellGrants(contentDataOr(spellGrants, []))
-    })
-  }, [campaignId])
-
-  // Load subclasses when levels change
-  useEffect(() => {
-    const classIds = Array.from(new Set(levels.map((l) => l.class_id).filter(Boolean)))
-    if (classIds.length === 0) return
-
-    const needed = classIds.filter((id) => !subclassMap[id])
-    if (needed.length === 0) return
-
-    Promise.all(
-      needed.map((id) =>
-        fetchContent<Subclass[]>(`/api/content/classes/${id}/subclasses?campaign_id=${campaignId}`)
-          .then((result) => ({ id, result }))
-      )
-    ).then((results) => {
-      const loadError = fetchContentErrorMessage(results.map((entry) => entry.result))
-      if (loadError) {
-        setContentLoadError(loadError)
-        return
-      }
-
-      setContentLoadError(null)
-      setSubclassMap((prev) => {
-        const next = { ...prev }
-        results.forEach(({ id, result }) => { next[id] = contentDataOr(result, []) })
-        return next
-      })
-    })
-  }, [levels, campaignId, subclassMap])
-
   const firstClassId = levels[0]?.class_id
   const firstClassLevel = levels[0]?.level ?? 0
   const firstClassSubclassIds = useMemo(
@@ -829,52 +772,6 @@ export function CharacterSheet({
       .map((level) => level.subclass_id as string),
     [firstClassId, levels]
   )
-  const maverickBreakthroughClassIds = useMemo(
-    () => getSelectedMaverickBreakthroughClassIds(featureOptionChoices),
-    [featureOptionChoices]
-  )
-
-  useEffect(() => {
-    const primaryClass = classList.find((cls) => cls.id === firstClassId) ?? null
-    if (!campaignId || !firstClassId || !primaryClass?.spellcasting_type || primaryClass.spellcasting_type === 'none') {
-      setSpellOptions(initialSelectedSpells)
-      return
-    }
-
-    const params = new URLSearchParams({
-      class_id: firstClassId,
-      campaign_id: campaignId,
-      class_level: String(firstClassLevel),
-    })
-    if (speciesId) params.set('species_id', speciesId)
-    for (const subclassId of firstClassSubclassIds) params.append('subclass_id', subclassId)
-    for (const expandedClassId of maverickBreakthroughClassIds.filter(Boolean)) {
-      params.append('expanded_class_id', expandedClassId)
-    }
-
-    fetchContent<SpellOption[]>(`/api/content/spells?${params.toString()}`)
-      .then((result) => {
-        if ('error' in result) {
-          setContentLoadError(result.error.message)
-          return
-        }
-
-        setContentLoadError(null)
-        const mergedById = new Map<string, SpellOption>()
-        for (const spell of initialSelectedSpells) mergedById.set(spell.id, spell)
-        for (const spell of Array.isArray(result.data) ? result.data : []) mergedById.set(spell.id, spell)
-        setSpellOptions((current) => replaceSpellOptionsStable(current, Array.from(mergedById.values())))
-      })
-  }, [
-    campaignId,
-    classList,
-    firstClassId,
-    firstClassLevel,
-    firstClassSubclassIds,
-    initialSelectedSpells,
-    maverickBreakthroughClassIds,
-    speciesId,
-  ])
 
   function handleStatChange(stat: string, value: number) {
     setStats((prev) => ({ ...prev, [stat]: value }))
@@ -939,68 +836,45 @@ export function CharacterSheet({
           definitions: maverickOptionDefinitions,
         }),
       ]
+      const payload = buildSheetSavePayload({
+        expectedUpdatedAt: updatedAt,
+        name,
+        alignment,
+        experiencePoints,
+        statMethod,
+        stats,
+        hpMax,
+        speciesId,
+        backgroundId,
+        levels,
+        skillProficiencies,
+        selectedBackground,
+        selectedClass,
+        selectedSpecies,
+        abilityBonusChoices,
+        asiChoices,
+        featSlots: derivedProgression?.featSlots,
+        featChoices,
+        languageChoices,
+        toolChoices,
+        canonicalFeatureOptionChoices,
+        spellChoices,
+        spellOptions,
+        firstClassId: firstClassId ?? null,
+        firstClassSubclassIds,
+        derivedCharacter,
+        featSpellChoices,
+        featSpellDefinitions,
+        featureSpellChoices,
+        featureSpellDefinitions,
+        isDm,
+        dmNotes,
+      })
 
       const res = await fetch(`/api/characters/${initial.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          expected_updated_at: updatedAt,
-          name,
-          alignment: alignment || null,
-          experience_points: experiencePoints,
-          stat_method: statMethod,
-          base_str: stats.str, base_dex: stats.dex, base_con: stats.con,
-          base_int: stats.int, base_wis: stats.wis, base_cha: stats.cha,
-          hp_max: hpMax,
-          species_id: speciesId || null,
-          background_id: backgroundId || null,
-          levels,
-          skill_proficiencies: buildTypedSkillProficiencies({
-            skillProficiencies,
-            background: selectedBackground,
-            selectedClass,
-            species: selectedSpecies,
-          }),
-          ability_bonus_choices: buildTypedAbilityBonusChoices(
-            selectedSpecies,
-            abilityBonusChoices
-          ),
-          asi_choices: buildTypedAsiChoices(
-            asiChoices,
-            derivedProgression?.featSlots,
-            featChoices
-          ),
-          language_choices: buildTypedLanguageChoices({
-            languageChoices,
-            background: selectedBackground,
-            species: selectedSpecies,
-          }),
-          tool_choices: buildTypedToolChoices({
-            toolChoices,
-            selectedClass,
-            species: selectedSpecies,
-          }),
-          feature_option_choices: canonicalFeatureOptionChoices,
-          spell_choices: [
-            ...buildTypedSpellChoices({
-              spellChoices,
-              spellOptions,
-              owningClassId: firstClassId ?? null,
-              activeSubclassIds: firstClassSubclassIds,
-              derived: derivedCharacter,
-            }),
-            ...buildTypedFeatSpellChoices({
-              featSpellChoices,
-              definitions: featSpellDefinitions,
-            }),
-            ...buildTypedFeatureSpellChoices({
-              selectedChoices: featureSpellChoices,
-              definitions: featureSpellDefinitions,
-            }),
-          ],
-          feat_choices: buildTypedFeatChoices(featChoices, derivedProgression?.featSlots),
-          ...(isDm ? { dm_notes: dmNotes } : {}),
-        }),
+        body: JSON.stringify(payload),
       })
 
       const json = await res.json()
@@ -1630,6 +1504,13 @@ export function CharacterSheet({
         level: level.level,
         hitDie: classDetail?.hit_die ?? null,
         hpRoll: level.hp_roll,
+        classLevels: initial.character_class_levels
+          .filter((entry) => entry.class_id === level.class_id)
+          .map((entry) => ({
+            levelNumber: entry.level_number,
+            hpRoll: entry.hp_roll,
+            takenAt: entry.taken_at,
+          })),
         savingThrowProficiencies: classDetail?.saving_throw_proficiencies ?? [],
       }
     }),
@@ -1841,7 +1722,7 @@ export function CharacterSheet({
     setSpellOptions((current) => {
       return mergeSpellOptionsStable(current, options)
     })
-  }, [])
+  }, [setSpellOptions])
 
   function jumpToCheck(key: string) {
     const sectionId = checkSectionMap[key]
@@ -1905,8 +1786,17 @@ export function CharacterSheet({
 
       {contentLoadError && (
         <Alert className="border-rose-400/20 bg-rose-400/10">
-          <AlertDescription className="text-rose-100">
-            Character content could not be loaded: {contentLoadError}
+          <AlertDescription className="flex flex-col gap-3 text-rose-100 sm:flex-row sm:items-center sm:justify-between">
+            <span>Character content could not be loaded: {contentLoadError}</span>
+            <Button
+              type="button"
+              variant="outline"
+              className="border-rose-300/30 bg-rose-300/10 text-rose-50 hover:bg-rose-300/15"
+              onClick={retryContentLoad}
+              disabled={contentLoading}
+            >
+              {contentLoading ? 'Retrying...' : 'Retry'}
+            </Button>
           </AlertDescription>
         </Alert>
       )}
@@ -2542,68 +2432,12 @@ export function CharacterSheet({
         subtitle="Durability, DM notes, and stat block output."
         highlighted={highlightedSection === 'hp-notes'}
       >
-      <div className="panel-subtle">
-        <CardHeader>
-          <CardTitle className="text-neutral-200">Hit Points</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center gap-3">
-            <Label className="text-neutral-300 w-16">HP Max</Label>
-            {canEdit ? (
-              <Input
-                type="number" min={0} value={hpMax}
-                onChange={(e) => setHpMax(parseInt(e.target.value, 10) || 0)}
-                className="w-24"
-              />
-            ) : (
-              <span className="text-2xl font-bold text-neutral-100">{hpMax}</span>
-            )}
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
-              <p className="text-[11px] uppercase tracking-[0.12em] text-neutral-500">Stored Max</p>
-              <p className="mt-2 text-lg font-semibold text-neutral-100">{derivedCore.hitPoints.max}</p>
-            </div>
-            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
-              <p className="text-[11px] uppercase tracking-[0.12em] text-neutral-500">Estimated From Levels</p>
-              <p className="mt-2 text-lg font-semibold text-neutral-100">
-                {derivedCore.hitPoints.estimatedFromLevels ?? '—'}
-              </p>
-            </div>
-            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
-              <p className="text-[11px] uppercase tracking-[0.12em] text-neutral-500">Possible Range</p>
-              <p className="mt-2 text-lg font-semibold text-neutral-100">
-                {derivedCore.hitPoints.minimumPossible !== null && derivedCore.hitPoints.maximumPossible !== null
-                  ? `${derivedCore.hitPoints.minimumPossible}-${derivedCore.hitPoints.maximumPossible}`
-                  : '—'}
-              </p>
-            </div>
-            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
-              <p className="text-[11px] uppercase tracking-[0.12em] text-neutral-500">CON Per Level</p>
-              <p className="mt-2 text-lg font-semibold text-neutral-100">
-                {formatModifier(derivedCore.hitPoints.constitutionModifier)}
-              </p>
-            </div>
-          </div>
-
-          <div className="space-y-2 text-sm text-neutral-400">
-            <p>
-              Hit dice: {derivedCore.hitPoints.hitDice.length > 0
-                ? derivedCore.hitPoints.hitDice
-                    .map((entry) => `${entry.level}d${entry.dieSize ?? '?'} ${entry.className}`)
-                    .join(' · ')
-                : '—'}
-            </p>
-            {derivedCore.hitPoints.usesInferredLevels && (
-              <p>
-                HP estimate infers {derivedCore.hitPoints.inferredLevelCount} level
-                {derivedCore.hitPoints.inferredLevelCount === 1 ? '' : 's'} using fixed average because the current schema only stores one HP roll per class.
-              </p>
-            )}
-          </div>
-        </CardContent>
-      </div>
+      <HitPointsCard
+        derivedCore={derivedCore}
+        hpMax={hpMax}
+        canEdit={canEdit}
+        onHpMaxChange={setHpMax}
+      />
 
       {/* DM Notes (read-only for players, editable display only) */}
       {isDm && (

@@ -12,6 +12,42 @@ import {
   resolveLeveledSpellSelectionCap,
   resolvePreparedSpellCap,
 } from '@/lib/characters/spell-selection'
+import {
+  abilityBonusMapToContributors,
+  abilityModifier,
+  deriveAbilityScores,
+  formatModifier,
+  sumAbilityContributors,
+  type DerivedAbilityScore,
+  type DerivedAbilityScoreContributor,
+} from '@/lib/characters/derived-abilities'
+import {
+  deriveHitPoints,
+  type CharacterAggregateClassLevel,
+  type DerivedHitPointSummary,
+} from '@/lib/characters/derived-hit-points'
+
+export {
+  abilityBonusMapToContributors,
+  abilityModifier,
+  deriveAbilityScores,
+  formatModifier,
+  sumAbilityContributors,
+} from '@/lib/characters/derived-abilities'
+export type {
+  DerivedAbilityScore,
+  DerivedAbilityScoreContributor,
+} from '@/lib/characters/derived-abilities'
+export {
+  deriveHitPoints,
+  getFixedHpGainValue,
+  hitPointGainFromRoll,
+} from '@/lib/characters/derived-hit-points'
+export type {
+  CharacterAggregateClassLevel,
+  DerivedHitPointRoll,
+  DerivedHitPointSummary,
+} from '@/lib/characters/derived-hit-points'
 
 export interface CharacterAggregateClass {
   classId: string
@@ -20,6 +56,7 @@ export interface CharacterAggregateClass {
   level: number
   hitDie: number | null
   hpRoll: number | null
+  classLevels?: CharacterAggregateClassLevel[]
   savingThrowProficiencies?: string[]
 }
 
@@ -52,14 +89,6 @@ export interface CharacterAggregate {
   } | null
 }
 
-export interface DerivedAbilityScore {
-  base: number
-  bonus: number
-  adjusted: number
-  modifier: number
-  contributors: DerivedAbilityScoreContributor[]
-}
-
 export interface DerivedCharacterCore {
   totalLevel: number
   proficiencyBonus: number
@@ -75,26 +104,7 @@ export interface DerivedCharacterCore {
   senses: Sense[]
   damageResistances: string[]
   conditionImmunities: string[]
-  hitPoints: {
-    max: number
-    constitutionModifier: number
-    estimatedFromLevels: number | null
-    minimumPossible: number | null
-    maximumPossible: number | null
-    inferredLevelCount: number
-    usesInferredLevels: boolean
-    hitDice: Array<{
-      classId: string
-      className: string
-      dieSize: number | null
-      level: number
-    }>
-    recordedRolls: Array<{
-      classId: string
-      className: string
-      value: number | null
-    }>
-  }
+  hitPoints: DerivedHitPointSummary
 }
 
 export interface DerivedSheetSavingThrow {
@@ -355,14 +365,6 @@ export type DerivedCharacter = DerivedCharacterCore & {
   warnings: DerivedIssueSummary[]
 }
 
-export interface DerivedAbilityScoreContributor {
-  ability: AbilityKey
-  bonus: number
-  label: string
-  sourceType: 'species' | 'species_choice' | 'asi' | 'feat' | 'other'
-  sourceFeatureKey?: string | null
-}
-
 export interface LanguageChoiceSourceRowLike {
   language: string
   source_category: string
@@ -446,39 +448,8 @@ const STATIC_FEAT_PROFICIENCY_RULES: StaticProficiencyRule[] = [
   },
 ]
 
-export function abilityModifier(score: number): number {
-  return Math.floor((score - 10) / 2)
-}
-
-export function formatModifier(modifier: number): string {
-  return modifier >= 0 ? `+${modifier}` : `${modifier}`
-}
-
-export function hitPointGainFromRoll(hitDie: number, constitutionModifier: number, roll: number): number {
-  return Math.max(1, roll + constitutionModifier)
-}
-
-export function getFixedHpGainValue(hitDie: number): number {
-  return Math.floor(hitDie / 2) + 1
-}
-
 export function proficiencyBonusFromLevel(totalLevel: number): number {
   return Math.floor((Math.max(totalLevel, 1) - 1) / 4) + 2
-}
-
-export function deriveAbilityScores(
-  baseStats: Record<AbilityKey, number>,
-  bonuses: Partial<Record<AbilityKey, number>>,
-  contributors: DerivedAbilityScoreContributor[] = abilityBonusMapToContributors(bonuses, 'Ability bonus')
-): Record<AbilityKey, DerivedAbilityScore> {
-  return {
-    str: buildDerivedAbilityScore('str', baseStats.str, bonuses.str ?? 0, contributors),
-    dex: buildDerivedAbilityScore('dex', baseStats.dex, bonuses.dex ?? 0, contributors),
-    con: buildDerivedAbilityScore('con', baseStats.con, bonuses.con ?? 0, contributors),
-    int: buildDerivedAbilityScore('int', baseStats.int, bonuses.int ?? 0, contributors),
-    wis: buildDerivedAbilityScore('wis', baseStats.wis, bonuses.wis ?? 0, contributors),
-    cha: buildDerivedAbilityScore('cha', baseStats.cha, bonuses.cha ?? 0, contributors),
-  }
 }
 
 export function deriveCharacterCore(aggregate: CharacterAggregate): DerivedCharacterCore {
@@ -492,7 +463,7 @@ export function deriveCharacterCore(aggregate: CharacterAggregate): DerivedChara
     sumAbilityContributors(contributors),
     contributors
   )
-  const hitPointEstimate = deriveHitPointEstimate(aggregate.classes, abilities.con.modifier)
+  const hitPoints = deriveHitPoints(aggregate.classes, abilities.con.modifier, aggregate.persistedHpMax)
   const proficiencyBonus = proficiencyBonusFromLevel(totalLevel)
   const skills = deriveSheetSkills({
     abilities,
@@ -543,26 +514,7 @@ export function deriveCharacterCore(aggregate: CharacterAggregate): DerivedChara
     senses: aggregate.species?.senses ?? [],
     damageResistances: aggregate.species?.damageResistances ?? [],
     conditionImmunities: aggregate.species?.conditionImmunities ?? [],
-    hitPoints: {
-      max: aggregate.persistedHpMax,
-      constitutionModifier: abilities.con.modifier,
-      estimatedFromLevels: hitPointEstimate?.estimated ?? null,
-      minimumPossible: hitPointEstimate?.minimum ?? null,
-      maximumPossible: hitPointEstimate?.maximum ?? null,
-      inferredLevelCount: hitPointEstimate?.inferredLevelCount ?? 0,
-      usesInferredLevels: (hitPointEstimate?.inferredLevelCount ?? 0) > 0,
-      hitDice: aggregate.classes.map((cls) => ({
-        classId: cls.classId,
-        className: cls.className,
-        dieSize: cls.hitDie,
-        level: cls.level,
-      })),
-      recordedRolls: aggregate.classes.map((cls) => ({
-        classId: cls.classId,
-        className: cls.className,
-        value: cls.hpRoll,
-      })),
-    },
+    hitPoints,
   }
 }
 
@@ -1087,31 +1039,6 @@ function dedupeArmorClassAlternatives(
   return Array.from(deduped.values())
 }
 
-export function abilityBonusMapToContributors(
-  bonuses: Partial<Record<AbilityKey, number>>,
-  label: string,
-  sourceType: DerivedAbilityScoreContributor['sourceType'] = 'other'
-): DerivedAbilityScoreContributor[] {
-  return (Object.entries(bonuses) as Array<[AbilityKey, number]>)
-    .filter(([, bonus]) => bonus !== 0)
-    .map(([ability, bonus]) => ({
-      ability,
-      bonus,
-      label,
-      sourceType,
-      sourceFeatureKey: null,
-    }))
-}
-
-export function sumAbilityContributors(
-  contributors: DerivedAbilityScoreContributor[]
-): Partial<Record<AbilityKey, number>> {
-  return contributors.reduce<Partial<Record<AbilityKey, number>>>((acc, contributor) => {
-    acc[contributor.ability] = (acc[contributor.ability] ?? 0) + contributor.bonus
-    return acc
-  }, {})
-}
-
 export function buildSavingThrowSourceMap(
   classes: Array<{
     className: string
@@ -1307,75 +1234,6 @@ export function deriveGrantedNonSkillProficiencies(args: {
     tools: sortGrantedProficiencies(tools),
     languages: sortGrantedProficiencies(languages),
   }
-}
-
-function buildDerivedAbilityScore(
-  ability: AbilityKey,
-  base: number,
-  bonus: number,
-  allContributors: DerivedAbilityScoreContributor[]
-): DerivedAbilityScore {
-  const adjusted = base + bonus
-
-  return {
-    base,
-    bonus,
-    adjusted,
-    modifier: abilityModifier(adjusted),
-    contributors: allContributors.filter((contributor) => contributor.ability === ability),
-  }
-}
-
-function deriveHitPointEstimate(
-  classes: CharacterAggregateClass[],
-  constitutionModifier: number
-): { estimated: number; minimum: number; maximum: number; inferredLevelCount: number } | null {
-  if (classes.length === 0) return { estimated: 0, minimum: 0, maximum: 0, inferredLevelCount: 0 }
-  if (classes.some((cls) => cls.hitDie === null)) return null
-
-  let estimated = 0
-  let minimum = 0
-  let maximum = 0
-  let inferredLevelCount = 0
-
-  classes.forEach((cls, index) => {
-    const hitDie = cls.hitDie
-    if (!hitDie || cls.level <= 0) return
-
-    let trackedLevels = 0
-
-    // Assume the first recorded class was the character's starting class,
-    // so its first level used maximum hit points.
-    if (index === 0) {
-      const startingGain = hitPointGainFromRoll(hitDie, constitutionModifier, hitDie)
-      estimated += startingGain
-      minimum += startingGain
-      maximum += startingGain
-      trackedLevels += 1
-    }
-
-    // The current schema stores at most one per-class HP roll, so we treat it
-    // as the most recent gain for that class when there is room for one.
-    const recordedRoll = cls.hpRoll
-    const canUseRecordedRoll = recordedRoll !== null && trackedLevels < cls.level
-    if (canUseRecordedRoll) {
-      const recordedGain = hitPointGainFromRoll(hitDie, constitutionModifier, recordedRoll)
-      estimated += recordedGain
-      minimum += recordedGain
-      maximum += recordedGain
-      trackedLevels += 1
-    }
-
-    const remainingLevels = Math.max(0, cls.level - trackedLevels)
-    if (remainingLevels === 0) return
-
-    inferredLevelCount += remainingLevels
-    estimated += hitPointGainFromRoll(hitDie, constitutionModifier, getFixedHpGainValue(hitDie)) * remainingLevels
-    minimum += hitPointGainFromRoll(hitDie, constitutionModifier, 1) * remainingLevels
-    maximum += hitPointGainFromRoll(hitDie, constitutionModifier, hitDie) * remainingLevels
-  })
-
-  return { estimated, minimum, maximum, inferredLevelCount }
 }
 
 function normalizeGrantedProficiencyKey(value: string) {

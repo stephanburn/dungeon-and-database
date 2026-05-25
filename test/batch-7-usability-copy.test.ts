@@ -9,8 +9,10 @@ test('content admin replaces native confirm with shared dialog and stable table 
 
   assert.match(source, /ConfirmActionButton/)
   assert.doesNotMatch(source, /confirm\(/)
-  assert.match(source, /Children\.toArray\(renderTableCells/)
-  assert.match(source, /key=\{`\$\{itemKey\}:cell:\$\{cellIndex\}`\}/)
+  assert.match(source, /activeTab === tab/)
+  assert.match(source, /function headCell/)
+  assert.match(source, /function contentCell/)
+  assert.match(source, /<TableRow key=\{itemKey\}>/)
   assert.match(source, /title=\{`Delete \$\{tabLabel\(tab\)\}`\}/)
 })
 

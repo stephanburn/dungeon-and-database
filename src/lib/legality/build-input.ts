@@ -758,6 +758,7 @@ export async function buildCharacterBuildContext(
       classId: row.class_id,
       className: classLabelById.get(row.class_id) ?? 'Unknown Class',
       levelNumber: row.level_number,
+      hpRoll: row.hp_roll,
       takenAt: row.taken_at,
     })),
     sourceCollections,

@@ -91,6 +91,13 @@ export function toCharacterAggregate(context: CharacterBuildContext): CharacterA
       level: cls.level,
       hitDie: cls.hitDie,
       hpRoll: cls.hpRoll,
+      classLevels: context.classLevelAnchors
+        .filter((level) => level.classId === cls.classId)
+        .map((level) => ({
+          levelNumber: level.levelNumber,
+          hpRoll: level.hpRoll ?? null,
+          takenAt: level.takenAt,
+        })),
       savingThrowProficiencies: cls.savingThrowProficiencies,
     })),
   }

@@ -202,14 +202,15 @@ test('slice 8b character routes map relation and snapshot failures explicitly', 
 })
 
 test('slice 8b content clients use fetchContent instead of unchecked response.json chains', () => {
-  for (const file of [
-    'src/components/character-sheet/CharacterSheet.tsx',
-    'src/app/characters/new/CharacterNewForm.tsx',
-    'src/app/characters/[id]/LevelUpWizard.tsx',
-    'src/components/dm/ContentAdmin.tsx',
+  for (const { file, pattern } of [
+    { file: 'src/components/character-sheet/CharacterSheet.tsx', pattern: /useSheetContent/ },
+    { file: 'src/components/character-sheet/useSheetContent.ts', pattern: /fetchContent/ },
+    { file: 'src/app/characters/new/CharacterNewForm.tsx', pattern: /fetchContent/ },
+    { file: 'src/app/characters/[id]/LevelUpWizard.tsx', pattern: /fetchContent/ },
+    { file: 'src/components/dm/ContentAdmin.tsx', pattern: /fetchContent/ },
   ]) {
     const source = read(file)
-    assert.match(source, /fetchContent/)
+    assert.match(source, pattern)
     assert.doesNotMatch(
       source,
       /fetch\(\s*`?['"]?\/api\/content[\s\S]{0,120}\.then\(\s*\(?r\)?\s*=>\s*r\.json\(\)/,

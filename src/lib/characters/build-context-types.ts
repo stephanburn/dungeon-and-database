@@ -159,6 +159,7 @@ export interface CharacterBuildContext {
     classId: string
     className: string
     levelNumber: number
+    hpRoll?: number | null
     takenAt: string | null
   }>
   sourceCollections: {
