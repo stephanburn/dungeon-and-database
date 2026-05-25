@@ -1,6 +1,6 @@
 # Batch 8d Authenticated Browser Smoke
 
-Date: 2026-05-25T14:18:16.363Z
+Date: 2026-05-25T15:33:01.157Z
 Base URL: http://localhost:3000
 Command: `npm run smoke:auth`
 Server: Started Next dev server on http://localhost:3000.
@@ -33,6 +33,7 @@ Server: Started Next dev server on http://localhost:3000.
 | dm-submitted-review | dm | dm | passed | /characters/d0ca1537-35fb-4d4a-9cf0-2a6ee2a994d3 | output/playwright/batch-8d/dm-submitted-review.png |  |
 | admin-content-library | admin | admin | passed | /dm/content | output/playwright/batch-8d/admin-content-library.png |  |
 | admin-content-import-preview | admin | admin | passed | /dm/content | output/playwright/batch-8d/admin-content-import-preview.png |  |
+| admin-content-impact-preview | admin | admin | passed | /dm/content | output/playwright/batch-8d/admin-content-impact-preview.png |  |
 | content-load-error-state | player | error-state | passed | /characters/new | output/playwright/batch-8d/content-load-error-state.png |  |
 
 ## Console and Network Findings

@@ -74,10 +74,10 @@ Slice 7g proved the high-risk service split can stay behavior-preserving under t
 
 | Module | Batch 7 result | Remaining |
 | --- | --- | --- |
-| `src/lib/character-creation/build-context.ts` | Reduced to a coordinator with focused helper modules for feature assembly, grant bucketing, and sheet materialization | Watch future edits for orchestration bloat |
-| `src/lib/character-creation/feature-grants.ts` | Converted into a barrel over smaller grant/copy/proficiency/source helpers | Keep grant-source naming consistent |
-| `src/lib/character-creation/legality/engine.ts` | Split into a small orchestration layer over focused legality checks | Add new checks in dedicated modules |
-| `src/lib/character-creation/derived.ts` | Not split in Batch 7 | Finish remaining behavior-preserving module splits in Batch 8 |
+| `src/lib/characters/build-context.ts` | Reduced to a coordinator with focused helper modules for feature assembly, grant bucketing, and sheet materialization | Watch future edits for orchestration bloat |
+| `src/lib/characters/feature-grants.ts` | Converted into a barrel over smaller grant/copy/proficiency/source helpers | Keep grant-source naming consistent |
+| `src/lib/characters/legality/engine.ts` | Split into a small orchestration layer over focused legality checks | Add new checks in dedicated modules |
+| `src/lib/characters/derived.ts` | Not split in Batch 7 | Finish remaining behavior-preserving module splits in Batch 8 |
 | `src/components/character-sheet/CharacterSheet.tsx` | Not split in Batch 7 | Finish remaining behavior-preserving module splits in Batch 8 |
 
 ## Slice 7h Decision
@@ -93,7 +93,7 @@ No `character_skill_proficiency_sources` migration was added. There was no authe
 | Finish remaining behavior-preserving module splits for `derived.ts` and `CharacterSheet.tsx` | Codex | 2026-05-15 | Slice 7g safely split three high-risk modules; these two are still large enough to deserve isolated follow-up. |
 | Authenticated screenshot smoke | Codex | 2026-05-15 | Batch 7 has visual QA notes, but a stable automated screenshot smoke gate still needs setup. |
 | Magic-link email branding provider configuration | Stephan + Codex | 2026-05-15 | The issue appears to live in auth/provider configuration rather than the local application surface. |
-| Local doctor environment alignment | Stephan + Codex | 2026-05-15 | Slice 8a confirms Node 24.x alignment. The remaining blocker is credential-only Vercel and Supabase CLI authentication in this local session. |
+| Local doctor environment alignment | Stephan + Codex | 2026-05-15 | Slice 8a confirmed Node 24.x alignment, and Slice 8j later reran `npm run doctor` fully green with Vercel and Supabase CLI authentication available. |
 | Dashboard/campaign visual warmth | Codex | 2026-05-15 | User review called the experience stark; Batch 7 only took the trust/blocker fixes. |
 | Content-admin table ergonomics | Codex | 2026-05-15 | The immediate horizontal-scroll problem was reduced, but deeper responsive IA remains. |
 

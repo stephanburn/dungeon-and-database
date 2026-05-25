@@ -716,10 +716,12 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
     () => campaigns.map((entry) => ({
       id: entry.id,
       label: entry.name,
-      description: `Ruleset ${entry.rule_set} • ${entry.settings.stat_method.replace(/_/g, ' ')} • max level ${entry.settings.max_level}`,
+      description: `This campaign uses ${entry.rule_set} rules, ${entry.settings.stat_method.replace(/_/g, ' ')}, and max level ${entry.settings.max_level}.`,
     })),
     [campaigns]
   )
+  const selectedCampaignOption = campaignChoiceOptions.find((option) => option.id === campaignId)
+  const campaignAllowedSourceCount = campaignContext?.allowedSources.length ?? null
   const campaignEmptyMessage = campaignLoadState === 'loading'
     ? 'Loading your campaigns...'
     : campaignLoadState === 'error'
@@ -2343,9 +2345,17 @@ export function CharacterNewForm({ isDm }: CharacterNewFormProps) {
                         </SelectContent>
                       </Select>
                       {campaignId && (
-                        <p className="text-sm leading-6 text-neutral-500">
-                          {campaignChoiceOptions.find((option) => option.id === campaignId)?.description}
-                        </p>
+                        <div className="surface-row px-3 py-3">
+                          <p className="text-metadata">Campaign guide</p>
+                          <p className="mt-1 text-sm leading-6 text-neutral-300">
+                            {selectedCampaignOption?.description}
+                          </p>
+                          <p className="mt-1 text-xs text-neutral-500">
+                            {campaignAllowedSourceCount === null
+                              ? 'Loading allowed source details.'
+                              : `${campaignAllowedSourceCount} allowed source${campaignAllowedSourceCount === 1 ? '' : 's'}`}
+                          </p>
+                        </div>
                       )}
                     </>
                   ) : (

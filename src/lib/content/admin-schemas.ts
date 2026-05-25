@@ -449,10 +449,19 @@ export const featureOptionDeleteSchema = z.object({
   id: z.string().uuid(),
 }).strict()
 
-export const sourceUpdateSchema = z.object({
-  original_key: z.string().min(1),
+const sourceKeySchema = z.string().min(1)
+
+export const sourceCreateSchema = z.object({
   key: z.string().min(1),
   full_name: z.string().min(1),
   is_srd: z.boolean().optional(),
   rule_set: ruleSetSchema.optional(),
+}).strict()
+
+export const sourceUpdateSchema = sourceCreateSchema.extend({
+  original_key: sourceKeySchema,
+}).strict()
+
+export const sourceDeleteSchema = z.object({
+  key: sourceKeySchema,
 }).strict()

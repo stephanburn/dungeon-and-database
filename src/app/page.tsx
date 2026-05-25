@@ -43,6 +43,14 @@ export default async function DashboardPage() {
     .order('created_at', { ascending: false })
 
   const typedCharacters = (characters ?? []) as unknown as CharacterWithCampaign[]
+  const displayName = profile?.display_name?.trim() || 'adventurer'
+  const approvedCount = typedCharacters.filter((char) => char.status === 'approved').length
+  const needsAttentionCount = typedCharacters.filter((char) => char.status === 'changes_requested').length
+  const campaignCount = new Set(
+    typedCharacters
+      .map((char) => char.campaign_id)
+      .filter((id): id is string => Boolean(id))
+  ).size
 
   return (
     <div className="page-shell">
@@ -51,7 +59,7 @@ export default async function DashboardPage() {
           <div>
             <h1 className="page-title">My Characters</h1>
             <p className="page-subtitle">
-              Welcome back, {profile?.display_name}. Continue a character or start a new one.
+              Ready for the next session, {displayName}. Continue a character or start a new one.
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -65,6 +73,24 @@ export default async function DashboardPage() {
             </form>
           </div>
         </div>
+
+        {typedCharacters.length > 0 && (
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="surface-row px-4 py-3">
+              <p className="text-metadata">Roster</p>
+              <p className="mt-1 text-lg font-semibold text-neutral-100">{typedCharacters.length}</p>
+            </div>
+            <div className="surface-row px-4 py-3">
+              <p className="text-metadata">Table-ready</p>
+              <p className="mt-1 text-lg font-semibold text-emerald-100">{approvedCount}</p>
+            </div>
+            <div className="surface-row px-4 py-3">
+              <p className="text-metadata">Needs changes</p>
+              <p className="mt-1 text-lg font-semibold text-amber-100">{needsAttentionCount}</p>
+              <p className="mt-1 text-xs text-neutral-500">{campaignCount} campaign{campaignCount === 1 ? '' : 's'}</p>
+            </div>
+          </div>
+        )}
 
         {typedCharacters.length === 0 ? (
           <Card className="surface-primary">

@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import {
   classCreateSchema,
   classUpdateSchema,
@@ -9,7 +10,12 @@ import {
   speciesUpdateSchema,
   spellUpdateSchema,
   equipmentItemUpdateSchema,
+  sourceCreateSchema,
+  sourceUpdateSchema,
+  sourceDeleteSchema,
 } from '@/lib/content/admin-schemas'
+
+const read = (path: string) => readFileSync(path, 'utf8')
 
 test('class create schema rejects unknown keys', () => {
   const parsed = classCreateSchema.safeParse({
@@ -20,6 +26,48 @@ test('class create schema rejects unknown keys', () => {
   })
 
   assert.equal(parsed.success, false)
+})
+
+test('source write schemas are strict for create update and delete', () => {
+  const validCreate = sourceCreateSchema.safeParse({
+    key: 'XGtE',
+    full_name: "Xanathar's Guide to Everything",
+    rule_set: '2014',
+    is_srd: false,
+  })
+  assert.equal(validCreate.success, true)
+
+  const createWithUnknown = sourceCreateSchema.safeParse({
+    key: 'XGtE',
+    full_name: "Xanathar's Guide to Everything",
+    rule_set: '2014',
+    extra: true,
+  })
+  assert.equal(createWithUnknown.success, false)
+
+  const updateWithUnknown = sourceUpdateSchema.safeParse({
+    original_key: 'XGtE',
+    key: 'XGtE',
+    full_name: "Xanathar's Guide to Everything",
+    future_flag: true,
+  })
+  assert.equal(updateWithUnknown.success, false)
+
+  const deleteWithUnknown = sourceDeleteSchema.safeParse({
+    key: 'XGtE',
+    future_flag: true,
+  })
+  assert.equal(deleteWithUnknown.success, false)
+})
+
+test('sources route uses source schemas instead of manual body validation', () => {
+  const route = read('src/app/api/content/sources/route.ts')
+
+  assert.match(route, /sourceCreateSchema/)
+  assert.match(route, /sourceUpdateSchema/)
+  assert.match(route, /sourceDeleteSchema/)
+  assert.doesNotMatch(route, /key and full_name are required/)
+  assert.doesNotMatch(route, /original_key, key, and full_name are required/)
 })
 
 test('content update schemas reject unknown keys across slice 3n routes', () => {

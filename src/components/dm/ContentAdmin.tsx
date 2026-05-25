@@ -30,6 +30,7 @@ import {
   type ContentImportSnapshot,
 } from '../../../scripts/content-import/import-workflow'
 import { contentDataOr, fetchContent } from '@/lib/client/fetch-content'
+import type { ContentImpactSummary } from '@/lib/characters/stale-provenance'
 
 // ── Types ──────────────────────────────────────────────────
 
@@ -1228,6 +1229,9 @@ function ContentForm({ tab, form, setField, classes, sources, feats, equipmentIt
             onChange={event => setField('prerequisites', event.target.value)}
             rows={5}
           />
+          <p className="mt-2 text-xs leading-5 text-neutral-500">
+            Known prerequisites shapes include minimum_class_level, required_class_id, required_feature_key, and required_choice_key.
+          </p>
         </div>
         <div>
           <Label className="text-neutral-400 text-xs mb-1 block">Effects (JSON)</Label>
@@ -1236,6 +1240,9 @@ function ContentForm({ tab, form, setField, classes, sources, feats, equipmentIt
             onChange={event => setField('effects', event.target.value)}
             rows={5}
           />
+          <p className="mt-2 text-xs leading-5 text-neutral-500">
+            Known effects shapes include grants, bonus_spell_ids, skill_proficiencies, tool_proficiencies, languages, and armor_class_bonus.
+          </p>
         </div>
       </div>
       {sourceSelect}
@@ -1637,6 +1644,32 @@ function buildContentImportSnapshot(
   }
 }
 
+function ImpactSummaryList({ summary }: { summary: ContentImpactSummary }) {
+  if (summary.count === 0) {
+    return <p className="text-sm text-neutral-500">No saved character choices reference this content.</p>
+  }
+
+  return (
+    <div className="space-y-3">
+      <p className="text-sm leading-6 text-neutral-400">
+        {summary.count} saved {summary.count === 1 ? 'choice' : 'choices'} across {summary.campaignCount} {summary.campaignCount === 1 ? 'campaign' : 'campaigns'} reference this content.
+      </p>
+      <div className="space-y-2">
+        {summary.examples.map((entry) => (
+          <div key={`${entry.characterId}-${entry.choiceLabel}`} className="surface-row p-3">
+            <p className="text-sm font-medium text-neutral-100">{entry.characterName}</p>
+            <p className="text-xs text-neutral-400">{entry.campaignName} / {entry.choiceLabel}</p>
+            <p className="text-xs text-neutral-500">{entry.sourceLabel}</p>
+          </div>
+        ))}
+      </div>
+      {summary.remainingCount > 0 && (
+        <p className="text-xs text-neutral-500">Plus {summary.remainingCount} more references.</p>
+      )}
+    </div>
+  )
+}
+
 export default function ContentAdmin() {
   const [activeTab, setActiveTab] = useState<Tab>('backgrounds')
   const [items, setItems] = useState<ContentItem[]>([])
@@ -1655,6 +1688,11 @@ export default function ContentAdmin() {
   const [contentImportText, setContentImportText] = useState('')
   const [contentImportPreview, setContentImportPreview] = useState<ContentImportPlan | null>(null)
   const [contentImportError, setContentImportError] = useState<string | null>(null)
+  const [catalogLoadErrors, setCatalogLoadErrors] = useState<string[]>([])
+  const [contentImpact, setContentImpact] = useState<ContentImpactSummary | null>(null)
+  const [contentImpactTarget, setContentImpactTarget] = useState<{ tab: Tab; itemKey: string } | null>(null)
+  const [contentImpactAcknowledged, setContentImpactAcknowledged] = useState(false)
+  const [staleReferenceImpact, setStaleReferenceImpact] = useState<ContentImpactSummary | null>(null)
 
   const apiUrl = useCallback((tab: Tab) =>
     tab === 'subclasses' ? '/api/content/subclasses' : `/api/content/${tab}`
@@ -1662,81 +1700,133 @@ export default function ContentAdmin() {
 
   const speciesRows = (activeTab === 'species' ? items : []) as unknown as SpeciesRow[]
 
+  const recordCatalogLoadError = useCallback((label: string, message: string | null) => {
+    setCatalogLoadErrors((current) => {
+      const prefix = `${label}: `
+      const rest = current.filter((entry) => !entry.startsWith(prefix))
+      return message ? [...rest, `${prefix}${message}`] : rest
+    })
+  }, [])
+
   const fetchItems = useCallback(async (tab: Tab) => {
     const result = await fetchContent<ContentItem[]>(apiUrl(tab))
     if ('error' in result) {
       setError(result.error.message)
       setItems([])
+      recordCatalogLoadError(tab, result.error.message)
       return
     }
     setError(null)
     setItems(contentDataOr(result, []))
-  }, [apiUrl])
+    recordCatalogLoadError(tab, null)
+  }, [apiUrl, recordCatalogLoadError])
 
   const fetchClasses = useCallback(async () => {
     const result = await fetchContent<ClassRow[]>('/api/content/classes')
     if ('error' in result) {
       setError(result.error.message)
       setClasses([])
+      recordCatalogLoadError('classes', result.error.message)
       return
     }
     setError(null)
     setClasses(contentDataOr(result, []))
-  }, [])
+    recordCatalogLoadError('classes', null)
+  }, [recordCatalogLoadError])
 
   const fetchSources = useCallback(async () => {
     const result = await fetchContent<SourceRow[]>('/api/content/sources')
     if ('error' in result) {
       setError(result.error.message)
       setSources([])
+      recordCatalogLoadError('sources', result.error.message)
       return
     }
     setError(null)
     setSources(contentDataOr(result, []))
-  }, [])
+    recordCatalogLoadError('sources', null)
+  }, [recordCatalogLoadError])
 
   const fetchFeats = useCallback(async () => {
     const result = await fetchContent<FeatRow[]>('/api/content/feats')
     if ('error' in result) {
       setError(result.error.message)
       setFeats([])
+      recordCatalogLoadError('feats', result.error.message)
       return
     }
     setError(null)
     setFeats(contentDataOr(result, []))
-  }, [])
+    recordCatalogLoadError('feats', null)
+  }, [recordCatalogLoadError])
 
   const fetchEquipmentItems = useCallback(async () => {
     const result = await fetchContent<EquipmentItemRow[]>('/api/content/equipment-items')
     if ('error' in result) {
       setError(result.error.message)
       setEquipmentItems([])
+      recordCatalogLoadError('equipment-items', result.error.message)
       return
     }
     setError(null)
     setEquipmentItems(contentDataOr(result, []))
-  }, [])
+    recordCatalogLoadError('equipment-items', null)
+  }, [recordCatalogLoadError])
 
   const fetchStartingPackages = useCallback(async () => {
     const result = await fetchContent<StartingEquipmentPackageRow[]>('/api/content/starting-equipment-packages')
     if ('error' in result) {
       setError(result.error.message)
       setStartingPackages([])
+      recordCatalogLoadError('starting-equipment-packages', result.error.message)
       return
     }
     setError(null)
     setStartingPackages(contentDataOr(result, []))
-  }, [])
+    recordCatalogLoadError('starting-equipment-packages', null)
+  }, [recordCatalogLoadError])
 
   const fetchFeatureOptionGroups = useCallback(async () => {
     const result = await fetchContent<FeatureOptionGroupRow[]>('/api/content/feature-option-groups')
     if ('error' in result) {
       setError(result.error.message)
       setFeatureOptionGroups([])
+      recordCatalogLoadError('feature-option-groups', result.error.message)
       return
     }
     setError(null)
     setFeatureOptionGroups(contentDataOr(result, []))
+    recordCatalogLoadError('feature-option-groups', null)
+  }, [recordCatalogLoadError])
+
+  const fetchContentImpact = useCallback(async (
+    tab: Tab,
+    itemKey: string,
+    options: { resetAcknowledgement?: boolean } = {}
+  ) => {
+    if (options.resetAcknowledgement ?? true) {
+      setContentImpactAcknowledged(false)
+    }
+    setContentImpactTarget({ tab, itemKey })
+    const result = await fetchContent<ContentImpactSummary>(
+      `/api/content/impact?tab=${encodeURIComponent(tab)}&id=${encodeURIComponent(itemKey)}`
+    )
+    if ('error' in result) {
+      setError(result.error.message)
+      setContentImpact(null)
+      return null
+    }
+    setContentImpact(result.data)
+    return result.data
+  }, [])
+
+  const fetchStaleReferenceImpact = useCallback(async () => {
+    const result = await fetchContent<ContentImpactSummary>('/api/content/stale-provenance')
+    if ('error' in result) {
+      setStaleReferenceImpact(null)
+      return
+    }
+    setStaleReferenceImpact(result.data)
   }, [])
 
   const focusContentAdminTab = useCallback((tab: Tab) => {
@@ -1769,7 +1859,8 @@ export default function ContentAdmin() {
     fetchEquipmentItems()
     fetchStartingPackages()
     fetchFeatureOptionGroups()
-  }, [fetchClasses, fetchSources, fetchFeats, fetchEquipmentItems, fetchStartingPackages, fetchFeatureOptionGroups])
+    fetchStaleReferenceImpact()
+  }, [fetchClasses, fetchSources, fetchFeats, fetchEquipmentItems, fetchStartingPackages, fetchFeatureOptionGroups, fetchStaleReferenceImpact])
 
   useEffect(() => {
     fetchItems(activeTab)
@@ -1777,6 +1868,9 @@ export default function ContentAdmin() {
     setEditingId(null)
     setError(null)
     setValidationPreview(null)
+    setContentImpact(null)
+    setContentImpactTarget(null)
+    setContentImpactAcknowledged(false)
   }, [activeTab, fetchItems])
 
   function setField(key: string, value: FormValue) {
@@ -1789,14 +1883,19 @@ export default function ContentAdmin() {
     setShowForm(true)
     setError(null)
     setValidationPreview(null)
+    setContentImpact(null)
+    setContentImpactTarget(null)
+    setContentImpactAcknowledged(false)
   }
 
   function startEdit(item: ContentItem) {
-    setEditingId(getItemIdentifier(activeTab, item))
+    const itemKey = getItemIdentifier(activeTab, item)
+    setEditingId(itemKey)
     setForm(itemToForm(activeTab, item))
     setShowForm(true)
     setError(null)
     setValidationPreview(null)
+    void fetchContentImpact(activeTab, itemKey)
   }
 
   function cancel() {
@@ -1804,6 +1903,9 @@ export default function ContentAdmin() {
     setEditingId(null)
     setError(null)
     setValidationPreview(null)
+    setContentImpact(null)
+    setContentImpactTarget(null)
+    setContentImpactAcknowledged(false)
   }
 
   function previewValidation(payload = formToPayload(activeTab, form, classes)) {
@@ -1814,6 +1916,11 @@ export default function ContentAdmin() {
 
   function previewContentImport() {
     setContentImportError(null)
+    if (catalogLoadErrors.length > 0) {
+      setContentImportPreview(null)
+      setContentImportError(`Catalog loads failed: ${catalogLoadErrors.join('; ')}`)
+      return null
+    }
     try {
       const bundle = JSON.parse(contentImportText || '{}') as ContentImportBundle
       const preview = planContentImport(
@@ -1837,6 +1944,15 @@ export default function ContentAdmin() {
       const payload = formToPayload(activeTab, form, classes)
       const preview = previewValidation(payload)
       if (!preview.ok) throw new Error('Resolve validation findings before saving.')
+      if (editingId) {
+        const currentImpact = contentImpactTarget?.tab === activeTab && contentImpactTarget.itemKey === editingId
+          ? contentImpact
+          : await fetchContentImpact(activeTab, editingId)
+        if (!currentImpact) throw new Error('Content impact could not be loaded before saving.')
+        if (currentImpact.count > 0 && !contentImpactAcknowledged) {
+          throw new Error('Acknowledge impact before saving this content edit.')
+        }
+      }
       const url = apiUrl(activeTab)
       if (editingId) {
         if (activeTab === 'sources') {
@@ -1859,6 +1975,7 @@ export default function ContentAdmin() {
       if (activeTab === 'equipment-items') fetchEquipmentItems()
       if (activeTab === 'starting-equipment-packages') fetchStartingPackages()
       if (activeTab === 'feature-option-groups') fetchFeatureOptionGroups()
+      fetchStaleReferenceImpact()
       cancel()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Save failed')
@@ -1868,6 +1985,15 @@ export default function ContentAdmin() {
   }
 
   async function deleteItem(itemKey: string) {
+    const currentImpact = contentImpactTarget?.tab === activeTab && contentImpactTarget.itemKey === itemKey
+      ? contentImpact
+      : await fetchContentImpact(activeTab, itemKey)
+    if (!currentImpact) return false
+    if (currentImpact?.count && !contentImpactAcknowledged) {
+      setError('Acknowledge impact before deleting this content item.')
+      return false
+    }
+
     const param = getDeleteParam(activeTab, itemKey)
     const res = await fetch(`${apiUrl(activeTab)}?${param}`, { method: 'DELETE' })
     if (res.ok) {
@@ -1877,7 +2003,11 @@ export default function ContentAdmin() {
       if (activeTab === 'feats') fetchFeats()
       if (activeTab === 'equipment-items') fetchEquipmentItems()
       if (activeTab === 'starting-equipment-packages') fetchStartingPackages()
+      fetchStaleReferenceImpact()
       if (editingId === itemKey) cancel()
+      setContentImpact(null)
+      setContentImpactTarget(null)
+      setContentImpactAcknowledged(false)
       return true
     } else {
       const json = await res.json().catch(() => ({}))
@@ -1885,6 +2015,32 @@ export default function ContentAdmin() {
       return false
     }
   }
+
+  const contentImpactPanel = contentImpact ? (
+    <div className="surface-section">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h3 className="text-sm font-semibold text-neutral-100">Content impact preview</h3>
+          <p className="mt-1 text-xs leading-5 text-neutral-500">
+            Review saved character choices that currently point at this content before changing or removing it.
+          </p>
+        </div>
+        {contentImpact.count > 0 && (
+          <Button
+            size="sm"
+            variant={contentImpactAcknowledged ? 'secondary' : 'outline'}
+            type="button"
+            onClick={() => setContentImpactAcknowledged(true)}
+          >
+            {contentImpactAcknowledged ? 'Impact acknowledged' : 'Acknowledge impact'}
+          </Button>
+        )}
+      </div>
+      <div className="mt-3">
+        <ImpactSummaryList summary={contentImpact} />
+      </div>
+    </div>
+  ) : null
 
   return (
     <Tabs value={activeTab} onValueChange={v => setActiveTab(v as Tab)}>
@@ -1927,6 +2083,17 @@ export default function ContentAdmin() {
         <p className="mb-4 rounded-lg border border-rose-400/20 bg-rose-400/10 px-3 py-2 text-sm text-rose-100">
           Content could not be loaded: {error}
         </p>
+      )}
+
+      {catalogLoadErrors.length > 0 && (
+        <div className="mb-4 rounded-lg border border-amber-400/20 bg-amber-400/10 px-3 py-2">
+          <p className="text-sm font-medium text-amber-100">Catalog loads failed</p>
+          <ul className="mt-2 space-y-1 text-xs text-amber-50/80">
+            {catalogLoadErrors.map((entry) => (
+              <li key={entry}>{entry}</li>
+            ))}
+          </ul>
+        </div>
       )}
 
       <details className="surface-section mb-4">
@@ -1987,6 +2154,28 @@ export default function ContentAdmin() {
         </div>
       </details>
 
+      <details className="surface-section mb-4">
+        <summary className="cursor-pointer text-sm font-medium text-neutral-200">
+          Stale references across content
+        </summary>
+        <div className="mt-3 space-y-3">
+          <p className="text-sm leading-6 text-neutral-500">
+            This is what past content edits left behind: saved character choices whose original content source no longer exists.
+          </p>
+          {staleReferenceImpact ? (
+            <ImpactSummaryList summary={staleReferenceImpact} />
+          ) : (
+            <p className="text-sm text-neutral-500">Checking saved character references…</p>
+          )}
+        </div>
+      </details>
+
+      {!showForm && contentImpactPanel && (
+        <div className="mb-4">
+          {contentImpactPanel}
+        </div>
+      )}
+
       {TABS.map(tab => (
         <TabsContent key={tab} value={tab} className="mt-0 space-y-4">
           {activeTab === tab && (
@@ -2009,6 +2198,7 @@ export default function ContentAdmin() {
                     featureOptionGroups={featureOptionGroups}
                     autoFocusFirst={!editingId}
                   />
+                  {contentImpactPanel}
                   {error && <p className="text-sm text-red-400">{error}</p>}
                   {validationPreview && (
                     <details className="surface-section">
@@ -2047,7 +2237,7 @@ export default function ContentAdmin() {
                 <p className="text-neutral-500 text-sm">No {tab} yet.</p>
               ) : (
                 <div className="overflow-hidden rounded-lg border border-white/10 bg-white/[0.03]">
-                  <Table className="table-fixed">
+                  <Table className="min-w-[760px] table-fixed">
                     <TableHeader>
                       <TableRow className="hover:bg-transparent">
                         {renderTableHead(tab)}

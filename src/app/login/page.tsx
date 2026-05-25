@@ -70,12 +70,17 @@ export default function LoginPage() {
               ? 'Sign in with a one-time link sent to your email.'
               : 'Sign in with your email and password.'}
           </p>
+          {mode === 'magic' && (
+            <p className="text-xs leading-5 text-neutral-500">
+              A branded Dungeon & Database email will arrive with a link that only works once.
+            </p>
+          )}
         </div>
         <div className="mt-6 space-y-5">
           {state === 'sent' && (
             <div role="status" aria-live="polite" className="surface-section px-4 py-3">
               <p className="text-sm leading-6 text-neutral-200">
-                Magic link sent to <strong>{email}</strong>. Check your inbox to continue.
+                Magic link sent to <strong>{email}</strong>. Check your inbox for the branded Dungeon & Database email.
               </p>
             </div>
           )}

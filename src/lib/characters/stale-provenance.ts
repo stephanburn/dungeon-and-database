@@ -41,6 +41,26 @@ export type ProvenanceRow = {
   source_feature_key: string | null
 }
 
+export type ContentImpactRow = ProvenanceRow & {
+  character_name: string
+  campaign_id: string
+  campaign_name: string
+}
+
+export type ContentImpactSummary = {
+  count: number
+  campaignCount: number
+  examples: Array<{
+    characterId: string
+    characterName: string
+    campaignId: string
+    campaignName: string
+    choiceLabel: string
+    sourceLabel: string
+  }>
+  remainingCount: number
+}
+
 // Pure in-memory equivalent of the character_stale_provenance SQL view.
 // Used in tests and anywhere a live DB round-trip isn't available.
 export function detectStaleProvenance(
@@ -103,4 +123,27 @@ export function sourceCategoryLabel(category: string): string {
     feature: 'feature option',
   }
   return labels[category] ?? category
+}
+
+export function summarizeContentImpact(
+  rows: ContentImpactRow[],
+  options: { exampleLimit?: number } = {}
+): ContentImpactSummary {
+  const exampleLimit = options.exampleLimit ?? 5
+  const campaignIds = new Set(rows.map((row) => row.campaign_id))
+  const examples = rows.slice(0, exampleLimit).map((row) => ({
+    characterId: row.character_id,
+    characterName: row.character_name,
+    campaignId: row.campaign_id,
+    campaignName: row.campaign_name,
+    choiceLabel: `${choiceTableLabel(row.choice_table)}: ${row.choice_key}`,
+    sourceLabel: sourceCategoryLabel(row.source_category),
+  }))
+
+  return {
+    count: rows.length,
+    campaignCount: campaignIds.size,
+    examples,
+    remainingCount: Math.max(0, rows.length - examples.length),
+  }
 }

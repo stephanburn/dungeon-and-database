@@ -30,6 +30,8 @@ test('base form controls and buttons use the shared focus-ring convention', () =
   assert.match(button, /focus-ring/)
   assert.match(input, /focus-ring/)
   assert.match(textarea, /focus-ring/)
+  assert.match(input, /suppressHydrationWarning/)
+  assert.match(textarea, /suppressHydrationWarning/)
   assert.match(checkbox, /focus-ring/)
   assert.match(select, /focus-ring/)
   assert.match(tabs, /focus-ring/)
@@ -126,6 +128,50 @@ test('login feedback is reassuring without alert-heavy success states', () => {
   assert.match(login, /role="status"/)
   assert.match(login, /variant="ghost"/)
   assert.match(login, /surface-section/)
+})
+
+test('slice 8gh configures branded Supabase transactional email templates', () => {
+  const config = read('supabase/config.toml')
+  const handoff = read('output/slice-8gh-first-touch-polish.md')
+  const templates = [
+    ['confirmation', 'confirmation.html', 'Confirm your Dungeon & Database email'],
+    ['magic_link', 'magic-link.html', 'Your Dungeon & Database sign-in link'],
+    ['recovery', 'recovery.html', 'Reset your Dungeon & Database password'],
+    ['email_change', 'email-change.html', 'Confirm your Dungeon & Database email change'],
+  ] as const
+
+  for (const [key, file, subject] of templates) {
+    assert.match(config, new RegExp(`\\[auth\\.email\\.template\\.${key}\\][\\s\\S]*subject = "${subject}"`))
+    assert.match(config, new RegExp(`\\[auth\\.email\\.template\\.${key}\\][\\s\\S]*content_path = "\\./supabase/templates/${file}"`))
+
+    const template = read(`supabase/templates/${file}`)
+    assert.match(template, /Dungeon &amp; Database/)
+    assert.match(template, /{{ \.ConfirmationURL }}/)
+    assert.doesNotMatch(template, /Supabase/)
+  }
+
+  assert.match(read('supabase/templates/email-change.html'), /{{ \.NewEmail }}/)
+  assert.match(handoff, /Hosted Supabase owner: Stephan/)
+  assert.match(handoff, /Authentication > Email Templates/)
+  assert.match(handoff, /mailer_templates_magic_link_content/)
+})
+
+test('slice 8gh entry funnel adds trust copy and warmer campaign context without redesigning the flow', () => {
+  const login = read('src/app/login/page.tsx')
+  const playerDashboard = read('src/app/page.tsx')
+  const dmDashboard = read('src/app/dm/dashboard/page.tsx')
+  const wizard = read('src/app/characters/new/CharacterNewForm.tsx')
+
+  assert.match(login, /branded Dungeon & Database email/)
+  assert.match(login, /only works once/)
+  assert.match(playerDashboard, /Ready for the next session/)
+  assert.match(dmDashboard, /Campaign pulse/)
+  assert.match(dmDashboard, /campaignSummaryById/)
+  assert.match(wizard, /Campaign guide/)
+  assert.match(wizard, /This campaign uses/)
+  assert.match(wizard, /allowed source/)
+
+  assert.doesNotMatch([login, playerDashboard, dmDashboard].join('\n'), /rounded-2xl/)
 })
 
 test('dashboard character selection keeps the whole row as the affordance', () => {

@@ -82,6 +82,18 @@ export default async function DmDashboardPage() {
   const rosterCharacters = characters.filter((c) => c.character_type !== 'test')
   const submitted = rosterCharacters.filter((c) => c.status === 'submitted')
   const recentSubmitted = submitted.slice(0, 5)
+  const campaignSummaryById = Object.fromEntries(
+    campaigns.map((campaign) => {
+      const campaignRoster = rosterCharacters.filter((char) => char.campaign_id === campaign.id)
+      return [
+        campaign.id,
+        {
+          activeCount: campaignRoster.length,
+          submittedCount: campaignRoster.filter((char) => char.status === 'submitted').length,
+        },
+      ]
+    })
+  )
 
   return (
     <div className="page-shell">
@@ -102,7 +114,7 @@ export default async function DmDashboardPage() {
               <summary className="list-none cursor-pointer rounded-xl px-3 py-2 text-sm text-neutral-400 transition-colors hover:bg-white/[0.04] hover:text-neutral-200">
                 Account
               </summary>
-              <div className="absolute right-0 mt-2 hidden w-48 rounded-2xl border border-white/10 bg-neutral-900 p-2 shadow-2xl shadow-black/30 group-open:block">
+              <div className="absolute right-0 mt-2 hidden w-48 rounded-lg border border-white/10 bg-neutral-900 p-2 shadow-2xl shadow-black/30 group-open:block">
                 <div className="border-b border-white/10 px-3 py-2">
                   <p className="text-sm font-medium text-neutral-100">{profile.display_name}</p>
                   <p className="text-xs text-neutral-500">{isAdminRole(profile.role) ? 'Admin account' : 'DM account'}</p>
@@ -148,7 +160,7 @@ export default async function DmDashboardPage() {
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                 {recentSubmitted.map((char) => (
                   <Link key={char.id} href={`/characters/${char.id}`}>
-                    <div className="rounded-2xl border border-white/10 bg-black/10 p-4 transition-colors hover:border-blue-300/30 hover:bg-black/15">
+                    <div className="rounded-lg border border-white/10 bg-black/10 p-4 transition-colors hover:border-blue-300/30 hover:bg-black/15">
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <p className="font-medium text-neutral-100">{char.name}</p>
@@ -184,24 +196,38 @@ export default async function DmDashboardPage() {
         {/* Campaigns */}
         <div>
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-neutral-200">Campaigns</h2>
+            <div>
+              <p className="text-metadata">Campaign pulse</p>
+              <h2 className="mt-1 text-lg font-semibold text-neutral-200">Campaigns</h2>
+            </div>
           </div>
           {campaigns.length === 0 ? (
             <p className="text-neutral-500 text-sm">No campaigns yet. Create one from the settings page.</p>
           ) : (
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              {campaigns.map((campaign) => (
-                <Link key={campaign.id} href={`/dm/campaigns/${campaign.id}/settings`}>
-                  <Card className="h-full border-white/10 bg-white/[0.03] transition-colors hover:border-white/20 hover:bg-white/[0.05]">
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-neutral-200 text-base">{campaign.name}</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <p className="text-sm text-neutral-500">Open campaign settings</p>
-                    </CardContent>
-                  </Card>
-                </Link>
-              ))}
+              {campaigns.map((campaign) => {
+                const summary = campaignSummaryById[campaign.id] ?? { activeCount: 0, submittedCount: 0 }
+                return (
+                  <Link key={campaign.id} href={`/dm/campaigns/${campaign.id}/settings`}>
+                    <Card className="h-full border-white/10 bg-white/[0.03] transition-colors hover:border-white/20 hover:bg-white/[0.05]">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-neutral-200 text-base">{campaign.name}</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        <p className="text-sm text-neutral-500">Open campaign settings</p>
+                        <div className="flex flex-wrap gap-2 text-xs">
+                          <span className="rounded-md border border-emerald-400/15 bg-emerald-400/5 px-2 py-1 text-emerald-100">
+                            {summary.activeCount} active
+                          </span>
+                          <span className="rounded-md border border-blue-400/15 bg-blue-400/5 px-2 py-1 text-blue-100">
+                            {summary.submittedCount} submitted for review
+                          </span>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </Link>
+                )
+              })}
             </div>
           )}
         </div>

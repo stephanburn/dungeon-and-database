@@ -28,6 +28,7 @@ export type SmokeScenarioId =
   | 'dm-submitted-review'
   | 'admin-content-library'
   | 'admin-content-import-preview'
+  | 'admin-content-impact-preview'
   | 'content-load-error-state'
 
 export type SmokeScenario = {
@@ -143,6 +144,16 @@ export const smokeScenarios: SmokeScenario[] = [
     routeKey: 'contentAdmin',
     expectedText: 'Validation findings',
     screenshotName: 'admin-content-import-preview.png',
+    viewport: DESKTOP_VIEWPORT,
+  },
+  {
+    id: 'admin-content-impact-preview',
+    label: 'Admin content impact preview',
+    role: 'admin',
+    kind: 'admin',
+    routeKey: 'contentAdmin',
+    expectedText: 'Stale references across content',
+    screenshotName: 'admin-content-impact-preview.png',
     viewport: DESKTOP_VIEWPORT,
   },
   {

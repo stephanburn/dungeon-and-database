@@ -4,8 +4,10 @@ import { readFileSync } from 'node:fs'
 import {
   detectStaleProvenance,
   choiceTableLabel,
+  summarizeContentImpact,
   sourceCategoryLabel,
   type KnownEntityIds,
+  type ContentImpactRow,
   type ProvenanceRow,
 } from '@/lib/characters/stale-provenance'
 
@@ -162,4 +164,63 @@ test('character page wires stale provenance for DM only', () => {
   assert.match(page, /character_stale_provenance/)
   assert.match(page, /StaleProvenancePanel/)
   assert.match(page, /isDm/)
+})
+
+test('summarizeContentImpact counts references and keeps top character campaign examples', () => {
+  const rows: ContentImpactRow[] = [
+    {
+      character_id: 'char-1',
+      character_name: 'Ada',
+      campaign_id: 'campaign-1',
+      campaign_name: 'Thursday Table',
+      choice_table: 'character_skill_proficiencies',
+      choice_key: 'arcana',
+      source_category: 'class_choice',
+      source_entity_id: 'class-wizard',
+      source_feature_key: null,
+    },
+    {
+      character_id: 'char-2',
+      character_name: 'Bryn',
+      campaign_id: 'campaign-1',
+      campaign_name: 'Thursday Table',
+      choice_table: 'character_language_choices',
+      choice_key: 'elvish',
+      source_category: 'class_choice',
+      source_entity_id: 'class-wizard',
+      source_feature_key: null,
+    },
+    {
+      character_id: 'char-3',
+      character_name: 'Cato',
+      campaign_id: 'campaign-2',
+      campaign_name: 'Sunday Game',
+      choice_table: 'character_tool_choices',
+      choice_key: 'herbalism',
+      source_category: 'class_choice',
+      source_entity_id: 'class-wizard',
+      source_feature_key: null,
+    },
+  ]
+
+  const summary = summarizeContentImpact(rows, { exampleLimit: 2 })
+
+  assert.equal(summary.count, 3)
+  assert.equal(summary.campaignCount, 2)
+  assert.deepEqual(summary.examples.map((entry) => entry.characterName), ['Ada', 'Bryn'])
+  assert.equal(summary.examples[0].choiceLabel, 'Skill proficiency: arcana')
+  assert.equal(summary.remainingCount, 1)
+})
+
+test('content admin exposes aggregate stale provenance and impact acknowledgement contract', () => {
+  const admin = readFileSync('src/components/dm/ContentAdmin.tsx', 'utf8')
+  const scenario = readFileSync('scripts/auth-smoke/scenarios.ts', 'utf8')
+
+  assert.match(admin, /contentImpact/)
+  assert.match(admin, /fetchContentImpact/)
+  assert.match(admin, /Acknowledge impact/)
+  assert.match(admin, /Stale references across content/)
+  assert.match(admin, /This is what past content edits left behind/)
+  assert.match(admin, /Catalog loads failed/)
+  assert.match(scenario, /admin-content-impact-preview/)
 })
