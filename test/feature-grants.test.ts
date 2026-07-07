@@ -31,8 +31,6 @@ const campaign: Campaign = {
 function featureSpellGrant(overrides: Partial<FeatureSpellGrant> & Pick<FeatureSpellGrant, 'source_feature_key' | 'source_category' | 'spell_id'>): FeatureSpellGrant {
   return {
     id: `grant-${overrides.source_feature_key}`,
-    source_feature_key: overrides.source_feature_key,
-    source_category: overrides.source_category,
     source_entity_id: null,
     acquisition_mode: 'granted',
     counts_against_selection_limit: false,
@@ -40,7 +38,6 @@ function featureSpellGrant(overrides: Partial<FeatureSpellGrant> & Pick<FeatureS
     minimum_class_level: null,
     owning_class_id: null,
     granting_subclass_id: null,
-    spell_id: overrides.spell_id,
     metadata: {},
     created_at: '',
     ...overrides,

@@ -34,8 +34,8 @@ test('Slice 7d migration list includes each normalized schema frontier and curre
   const fixtures = buildBatch7SchemaValidationFixtures()
   const migrationFiles = listMigrationFiles()
 
-  assert.equal(migrationFiles.at(-1), '079_explicit_data_api_grants.sql')
-  assert.equal(migrationFiles.length, 79)
+  assert.equal(migrationFiles.at(-1), '080_security_hardening.sql')
+  assert.equal(migrationFiles.length, 80)
   assert.ok(migrationFiles.includes('078_restore_new_user_email_trigger.sql'))
   for (const migration of fixtures.requiredMigrationFiles) {
     assert.ok(migrationFiles.includes(migration), `Expected migration ${migration}`)

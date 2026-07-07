@@ -44,7 +44,7 @@ test('slice 8c Maverick legality validates active generated Arcane Breakthrough 
         sourceFeatureKey: activeLevelOneKey,
       },
     ],
-  } as LegalityInput)
+  } as unknown as LegalityInput)
 
   assert.equal(result.passed, false)
   assert.match(result.message, /Too many Breakthrough spells selected for level 1/)

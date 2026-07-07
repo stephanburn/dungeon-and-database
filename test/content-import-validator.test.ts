@@ -7,7 +7,7 @@ import {
   type ContentImportValidationError,
 } from '../scripts/content-import/validator'
 
-function validBundle(): ContentImportBundle {
+function validBundle(): Required<ContentImportBundle> {
   return {
     sources: [{ key: 'PHB', name: 'Player Handbook' }],
     classes: [

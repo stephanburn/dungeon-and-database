@@ -39,6 +39,9 @@ function createContext(overrides: Partial<CharacterBuildContext> = {}): Characte
     speciesConditionImmunities: [],
     background: null,
     backgroundFeat: null,
+    equipmentItems: [],
+    armorCatalog: [],
+    shieldCatalog: [],
     classes: [{
       classId: 'wizard',
       name: 'Wizard',

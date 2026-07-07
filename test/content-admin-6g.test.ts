@@ -107,7 +107,7 @@ test('slice 6g content routes use admin schemas for audited equipment CRUD', () 
     ['src/app/api/content/starting-equipment-packages/route.ts', ['startingEquipmentPackageCreateSchema', 'startingEquipmentPackageUpdateSchema', 'startingEquipmentPackageDeleteSchema']],
   ])
 
-  for (const [route, schemaNames] of routeSchemas) {
+  for (const [route, schemaNames] of Array.from(routeSchemas)) {
     const source = read(route)
 
     assert.match(source, /requireAdmin/)
@@ -199,7 +199,7 @@ test('slice 6g armor and shield payload shape still derives AC correctly', () =>
       name: 'Plate',
       armorCategory: armor.armor_category,
       baseAc: armor.base_ac,
-      dexBonusCap: armor.dex_bonus_cap,
+      dexBonusCap: armor.dex_bonus_cap ?? null,
     }],
     shieldCatalog: [{
       itemId: shield.item_id,
