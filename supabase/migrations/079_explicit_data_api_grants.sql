@@ -1,0 +1,108 @@
+-- Supabase Data API exposure must be explicit. Do not rely on project-level
+-- default privileges for public schema tables.
+
+GRANT USAGE ON SCHEMA public TO authenticated;
+GRANT USAGE ON SCHEMA public TO service_role;
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.armor TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.armor TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.audit_logs TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.audit_logs TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.backgrounds TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.backgrounds TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.campaign_members TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.campaign_members TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.campaign_source_allowlist TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.campaign_source_allowlist TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.campaigns TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.campaigns TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.character_ability_bonus_choices TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.character_ability_bonus_choices TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.character_asi_choices TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.character_asi_choices TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.character_choices TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.character_choices TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.character_class_levels TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.character_class_levels TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.character_equipment_items TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.character_equipment_items TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.character_feat_choices TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.character_feat_choices TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.character_feature_option_choices TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.character_feature_option_choices TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.character_hp_rolls TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.character_hp_rolls TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.character_language_choices TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.character_language_choices TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.character_levels TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.character_levels TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.character_skill_proficiencies TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.character_skill_proficiencies TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.character_snapshots TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.character_snapshots TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.character_spell_selections TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.character_spell_selections TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.character_stat_rolls TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.character_stat_rolls TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.character_tool_choices TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.character_tool_choices TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.characters TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.characters TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.class_feature_progression TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.class_feature_progression TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.class_features TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.class_features TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.classes TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.classes TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.equipment_items TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.equipment_items TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.feats TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.feats TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.feature_option_groups TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.feature_option_groups TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.feature_options TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.feature_options TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.feature_spell_grants TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.feature_spell_grants TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.languages TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.languages TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.multiclass_spell_slot_table TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.multiclass_spell_slot_table TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.shields TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.shields TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.sources TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.sources TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.species TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.species TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.species_bonus_spells TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.species_bonus_spells TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.species_traits TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.species_traits TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.spell_slot_tables TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.spell_slot_tables TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.spells TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.spells TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.starting_equipment_package_items TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.starting_equipment_package_items TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.starting_equipment_packages TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.starting_equipment_packages TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.subclass_bonus_spells TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.subclass_bonus_spells TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.subclass_features TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.subclass_features TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.subclasses TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.subclasses TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.tools TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.tools TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.users TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.users TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.weapons TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.weapons TO service_role;
+
+GRANT SELECT ON TABLE public.character_stale_provenance TO authenticated;
+GRANT SELECT ON TABLE public.character_stale_provenance TO service_role;
+
+GRANT EXECUTE ON FUNCTION
+  public.save_character_atomic(uuid, jsonb),
+  public.save_character_level_up_atomic(uuid, jsonb)
+TO authenticated, service_role;

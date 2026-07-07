@@ -30,12 +30,13 @@ test('Slice 7d schema validation fixture names every required contract group', (
   )
 })
 
-test('Slice 7d migration list reaches 078 and includes each normalized schema frontier', () => {
+test('Slice 7d migration list includes each normalized schema frontier and current grants migration', () => {
   const fixtures = buildBatch7SchemaValidationFixtures()
   const migrationFiles = listMigrationFiles()
 
-  assert.equal(migrationFiles.at(-1), '078_restore_new_user_email_trigger.sql')
-  assert.equal(migrationFiles.length, 78)
+  assert.equal(migrationFiles.at(-1), '079_explicit_data_api_grants.sql')
+  assert.equal(migrationFiles.length, 79)
+  assert.ok(migrationFiles.includes('078_restore_new_user_email_trigger.sql'))
   for (const migration of fixtures.requiredMigrationFiles) {
     assert.ok(migrationFiles.includes(migration), `Expected migration ${migration}`)
   }
