@@ -4,7 +4,7 @@
 -- 1. Pin search_path on the 11 functions flagged with a mutable search_path, to
 --    prevent search_path hijacking. All bodies already fully schema-qualify their
 --    references, so an empty search_path is safe.
--- 2. Revoke REST-callable EXECUTE (anon/authenticated) on the four trigger-only
+-- 2. Revoke REST-callable EXECUTE (via PUBLIC) on the four trigger-only
 --    SECURITY DEFINER functions. Trigger invocation does not require the firing
 --    role to hold EXECUTE on the trigger function, so this closes off direct
 --    `rpc/handle_new_user`-style calls without touching trigger behavior.
@@ -32,7 +32,11 @@ ALTER FUNCTION public.sync_character_class_levels_from_levels() SET search_path 
 ALTER FUNCTION public.sync_character_class_levels_from_hp_rolls() SET search_path = '';
 
 -- ── 2. Revoke REST EXECUTE on trigger-only functions ────────
-REVOKE EXECUTE ON FUNCTION public.handle_new_user() FROM anon, authenticated;
-REVOKE EXECUTE ON FUNCTION public.handle_campaign_created() FROM anon, authenticated;
-REVOKE EXECUTE ON FUNCTION public.enforce_singleton_admin() FROM anon, authenticated;
-REVOKE EXECUTE ON FUNCTION public.prevent_admin_delete() FROM anon, authenticated;
+-- Revoking from anon/authenticated alone is a no-op: every role implicitly
+-- inherits privileges granted to PUBLIC, and these functions default to
+-- PUBLIC EXECUTE at creation. Must revoke from PUBLIC itself. Trigger firing
+-- does not require the firing role to hold EXECUTE, so this is safe.
+REVOKE EXECUTE ON FUNCTION public.handle_new_user() FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.handle_campaign_created() FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.enforce_singleton_admin() FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.prevent_admin_delete() FROM PUBLIC;

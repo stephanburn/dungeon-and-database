@@ -41,9 +41,12 @@ test('migration 080 revokes REST execute only on trigger-only SECURITY DEFINER f
 
   for (const signature of revokedTriggerFunctions) {
     const escaped = signature.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    // Must revoke from PUBLIC, not just anon/authenticated: every role
+    // implicitly inherits privileges granted to PUBLIC, so revoking from a
+    // named role alone leaves the function callable via the PUBLIC grant.
     assert.match(
       migrationSql,
-      new RegExp(`REVOKE EXECUTE ON FUNCTION ${escaped} FROM anon, authenticated;`),
+      new RegExp(`REVOKE EXECUTE ON FUNCTION ${escaped} FROM PUBLIC;`),
       `missing REST execute revoke for ${signature}`
     )
   }
