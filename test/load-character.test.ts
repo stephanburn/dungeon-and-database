@@ -1,7 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { loadCharacterState } from '@/lib/characters/load-character'
-import type { Database } from '@/lib/types/database'
 
 type QueryResponse = { data: unknown; error: { message: string } | null }
 

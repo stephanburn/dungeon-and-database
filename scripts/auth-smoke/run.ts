@@ -1,6 +1,5 @@
 import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { mkdir, writeFile } from 'node:fs/promises'
-import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { createClient, type Session } from '@supabase/supabase-js'
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright'
@@ -63,7 +62,6 @@ const REPORT_PATH = join(ROOT, 'output/batch-8d-authenticated-smoke.md')
 const DEMO_PASSWORD = 'DemoPassw0rd!'
 const PLAYER_EMAIL = 'demo-player@dungeon-and-database.local'
 const DM_EMAIL = 'demo-dm@dungeon-and-database.local'
-const DEMO_ADMIN_EMAIL = 'demo-admin@dungeon-and-database.local'
 const FAILURE_TAXONOMY = [
   'environment/auth setup failure',
   'app route/render failure',
